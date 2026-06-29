@@ -1003,15 +1003,15 @@ function Clients() {
         setForm(Object.assign({}, form, { schedule: s }));
       } }, DAYS.map(function(n, di) {
         return /* @__PURE__ */ React.createElement("option", { key: di, value: di }, n);
-      }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Entrada"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "time", value: d.time_start || "09:00", onChange: function(e) {
+      }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Entrada"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 90 }), type: "text", value: d.time_start || "09:00", onChange: function(e) {
         const s = form.schedule.slice();
         s[i] = Object.assign({}, s[i], { time_start: e.target.value });
         setForm(Object.assign({}, form, { schedule: s }));
-      } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Sa\xEDda"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "time", value: d.time_end || "12:00", onChange: function(e) {
+      }, placeholder: "09:00", maxLength: 5 })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Sa\xEDda"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 90 }), type: "text", value: d.time_end || "12:00", onChange: function(e) {
         const s = form.schedule.slice();
         s[i] = Object.assign({}, s[i], { time_end: e.target.value });
         setForm(Object.assign({}, form, { schedule: s }));
-      } })), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+      }, placeholder: "12:00", maxLength: 5 })), /* @__PURE__ */ React.createElement("button", { onClick: function() {
         const s = form.schedule.filter(function(_, j) {
           return j !== i;
         });
@@ -1812,7 +1812,7 @@ function ClientPortal(props) {
     if (pin.length >= 6) return;
     const n = pin + d;
     setPin(n);
-    if (n.length === 4) {
+    if (n.length === 6) {
       setTimeout(function() {
         if (pinMode === "client") {
           const match = contacts.find(function(c) {
