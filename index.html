@@ -1951,6 +1951,16 @@ function ClientPortal(props) {
     });
     await Promise.all(promises);
     await db.update("servicos", job.id, { rated: true });
+    for (let i = 0; i < (job.team || []).length; i++) {
+      const eid = job.team[i];
+      const allAvs = await db.list("avaliacoes", "?select=stars&funcionario_id=eq." + encodeURIComponent(eid));
+      if (allAvs && allAvs.length > 0) {
+        const avg = allAvs.reduce(function(s, a) {
+          return s + (a.stars || 0);
+        }, 0) / allAvs.length;
+        await db.update("funcionarios", eid, { rating: Math.round(avg * 10) / 10 });
+      }
+    }
     setRateDone(true);
     setTimeout(function() {
       setShowRate(null);
