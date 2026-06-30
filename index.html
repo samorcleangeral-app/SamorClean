@@ -1853,6 +1853,7 @@ function ClientPortal(props) {
   const [extraSent, setExtraSent] = useState(false);
   const [teamJobs, setTeamJobs] = useState([]);
   const [loadingTeam, setLoadingTeam] = useState(false);
+  const [checkedInThisSession, setCheckedInThisSession] = useState({});
   const extras = ["Limpeza de estofos adicional", "Limpeza de vidros exteriores", "Limpeza de garagem", "Limpeza de varandas", "Desinfec\xE7\xE3o profunda", "Outro"];
   useEffect(function() {
     if (clientId) {
@@ -2051,7 +2052,7 @@ function ClientPortal(props) {
       const done = (job.done_tasks || []).length;
       const pct = cl.length ? Math.round(done / cl.length * 100) : 0;
       const checklistComplete = cl.length === 0 || done === cl.length;
-      const canCheckout = job.check_in && !job.check_out && currentEmp && job.check_in_emp === currentEmp.id;
+      const canCheckout = job.check_in && !job.check_out && currentEmp && job.check_in_emp === currentEmp.id && !checkedInThisSession[job.id];
       async function togTask(task) {
         if (!isInteractive) return;
         const dt = (job.done_tasks || []).slice();
@@ -2078,6 +2079,11 @@ function ClientPortal(props) {
             return { current: p.current.map(function(j) {
               return j.id === job.id ? updated : j;
             }), next: p.next, completed: p.completed };
+          });
+          setCheckedInThisSession(function(p) {
+            const u = Object.assign({}, p);
+            u[job.id] = true;
+            return u;
           });
         }
       }
