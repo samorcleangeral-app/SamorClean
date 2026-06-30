@@ -638,6 +638,109 @@ function Routes() {
     setShowNew(false);
   }, style: Object.assign({}, btnX, { flex: 1 }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: addJ, disabled: !nj.cn, style: Object.assign({}, btn, { flex: 2, background: nj.cn ? "#2E6DA4" : "#94A3B8", cursor: nj.cn ? "pointer" : "not-allowed" }) }, "Adicionar")))) : null);
 }
+function HistoricoVisitas(props) {
+  const cliente = props.cliente;
+  const emps = props.emps || [];
+  const [visitas, setVisitas] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [periodo, setPeriodo] = useState(30);
+  useEffect(function() {
+    setLoading(true);
+    const from = /* @__PURE__ */ new Date();
+    from.setDate(from.getDate() - periodo);
+    const fromStr = from.toISOString().split("T")[0];
+    db.list("servicos", "?select=*&client_id=eq." + encodeURIComponent(cliente.id) + "&date=gte." + fromStr + "&order=date.desc").then(function(rows) {
+      setVisitas(rows || []);
+      setLoading(false);
+    });
+  }, [cliente.id, periodo]);
+  function timeToMin(t) {
+    if (!t) return null;
+    const p = t.split(":");
+    return parseInt(p[0]) * 60 + parseInt(p[1]);
+  }
+  function diffMin(previsto, real) {
+    const p = timeToMin(previsto);
+    const r = timeToMin(real);
+    if (p === null || r === null) return null;
+    return r - p;
+  }
+  function DiffBadge(props2) {
+    const d = props2.diff;
+    if (d === null) return /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "\u2014");
+    if (d <= 0) return /* @__PURE__ */ React.createElement("span", { style: { background: "#DCFCE7", color: "#15803D", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, "Pontual");
+    if (d <= 10) return /* @__PURE__ */ React.createElement("span", { style: { background: "#FEF3C7", color: "#92400E", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, "+", d, " min");
+    return /* @__PURE__ */ React.createElement("span", { style: { background: "#FEE2E2", color: "#991B1B", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, "+", d, " min \u26A0");
+  }
+  function empName(id) {
+    const e = emps.find(function(x) {
+      return x.id === id;
+    });
+    return e ? e.name.split(" ")[0] : id;
+  }
+  function exportPDF() {
+    const rows = visitas.map(function(v) {
+      const diff = diffMin(v.t1, v.check_in);
+      const diffStr = diff === null ? "\u2014" : diff <= 0 ? "Pontual" : "+" + diff + " min" + (diff > 10 ? " \u26A0" : "");
+      const team = (v.team || []).map(empName).join(", ") || "\u2014";
+      const cl = v.cl || [];
+      const done = (v.done_tasks || []).length;
+      return "<tr style='border-bottom:1px solid #eee'><td style='padding:8px 10px'>" + (/* @__PURE__ */ new Date(v.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short", year: "numeric" }) + "</td><td style='padding:8px 10px'>" + v.t1 + " \u2014 " + v.t2 + "</td><td style='padding:8px 10px'>" + (v.check_in || "\u2014") + "</td><td style='padding:8px 10px'>" + (v.check_out || "\u2014") + "</td><td style='padding:8px 10px'>" + diffStr + "</td><td style='padding:8px 10px'>" + team + "</td><td style='padding:8px 10px'>" + done + "/" + cl.length + "</td><td style='padding:8px 10px'>" + (v.status === "completed" ? "Conclu\xEDdo" : "Pendente") + "</td></tr>";
+    }).join("");
+    const win = window.open("", "_blank");
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>Relat\xF3rio \u2014 ${cliente.name}</title>
+    <style>body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C}
+    h1{font-size:20px;margin-bottom:4px}h2{font-size:13px;color:#64748B;font-weight:normal;margin-bottom:24px}
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    th{background:#1A3A5C;color:#fff;padding:10px;text-align:left;font-size:11px}
+    tr:nth-child(even){background:#F8FAFC}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #1A3A5C}
+    .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold}
+    @media print{body{padding:15px}}
+    </style></head><body>
+    <div class="header">
+      <div>
+        <h1>Relat\xF3rio de Visitas \u2014 ${cliente.name}</h1>
+        <h2>${cliente.id} | \xDAltimos ${periodo} dias | Gerado em ${(/* @__PURE__ */ new Date()).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" })}</h2>
+      </div>
+      <div style="text-align:right;font-size:12px;color:#64748B">
+        <strong>SamorClean by Fragancelines, Lda</strong><br>
+        samorclean.geral@gmail.com<br>
+        910 637 588
+      </div>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Data</th><th>Previsto</th><th>Entrada</th><th>Sa\xEDda</th><th>Pontualidade</th><th>Equipa</th><th>Checklist</th><th>Estado</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div style="margin-top:24px;font-size:11px;color:#94A3B8;border-top:1px solid #eee;padding-top:12px">
+      \u26A0 Atraso assinalado quando a entrada \xE9 superior a 10 minutos ap\xF3s a hora prevista.
+    </div>
+    <script>window.onload=function(){window.print();}<\/script>
+    </body></html>`);
+    win.document.close();
+  }
+  const atrasados = visitas.filter(function(v) {
+    const d = diffMin(v.t1, v.check_in);
+    return d !== null && d > 10;
+  }).length;
+  if (loading) return /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8" } }, "A carregar hist\xF3rico...");
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } }, [7, 30, 90].map(function(p) {
+    return /* @__PURE__ */ React.createElement("button", { key: p, onClick: function() {
+      setPeriodo(p);
+    }, style: { padding: "6px 12px", borderRadius: 7, border: "1.5px solid " + (periodo === p ? "#2E6DA4" : "#E2EBF4"), background: periodo === p ? "#EFF6FF" : "#fff", color: periodo === p ? "#2E6DA4" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, p, " dias");
+  })), /* @__PURE__ */ React.createElement("button", { onClick: exportPDF, style: Object.assign({}, btn, { fontSize: 12, padding: "7px 14px" }) }, "Exportar PDF")), atrasados > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", border: "1px solid #FECACA", borderRadius: 8, padding: "10px 14px", marginBottom: 12, fontSize: 12, color: "#991B1B", fontWeight: 600 } }, "\u26A0 ", atrasados, " visita", atrasados !== 1 ? "s" : "", " com atraso superior a 10 minutos nos \xFAltimos ", periodo, " dias"), visitas.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: "24px 0", fontSize: 13 } }, "Sem visitas nos \xFAltimos ", periodo, " dias.") : /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { borderBottom: "2px solid #E2EBF4" } }, ["Data", "Previsto", "Entrada", "Sa\xEDda", "Pontualidade", "Equipa", "Checklist", "Estado"].map(function(h) {
+    return /* @__PURE__ */ React.createElement("th", { key: h, style: { textAlign: "left", padding: "8px 10px", fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", whiteSpace: "nowrap" } }, h);
+  }))), /* @__PURE__ */ React.createElement("tbody", null, visitas.map(function(v) {
+    const diff = diffMin(v.t1, v.check_in);
+    const cl = v.cl || [];
+    const done = (v.done_tasks || []).length;
+    return /* @__PURE__ */ React.createElement("tr", { key: v.id, style: { borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px", fontWeight: 600, color: "#1A3A5C", whiteSpace: "nowrap" } }, (/* @__PURE__ */ new Date(v.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" })), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px", color: "#64748B", whiteSpace: "nowrap" } }, v.t1, " \u2014 ", v.t2), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px", fontWeight: v.check_in ? 700 : 400, color: v.check_in ? "#1A3A5C" : "#CBD5E1", whiteSpace: "nowrap" } }, v.check_in || "\u2014"), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px", fontWeight: v.check_out ? 700 : 400, color: v.check_out ? "#1A3A5C" : "#CBD5E1", whiteSpace: "nowrap" } }, v.check_out || "\u2014"), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px" } }, /* @__PURE__ */ React.createElement(DiffBadge, { diff })), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px", color: "#334155" } }, (v.team || []).map(empName).join(", ") || "\u2014"), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: done === cl.length && cl.length > 0 ? "#16A34A" : done > 0 ? "#F59E0B" : "#94A3B8" } }, cl.length > 0 ? done + "/" + cl.length : "\u2014"), v.checklist_incomplete && /* @__PURE__ */ React.createElement("span", { style: { marginLeft: 6, fontSize: 10, color: "#EF4444", fontWeight: 700 } }, "\u26A0")), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px" } }, /* @__PURE__ */ React.createElement(Bdg, { label: v.status === "completed" ? "Conclu\xEDdo" : "Pendente", bg: v.status === "completed" ? "#DCFCE7" : "#EFF6FF", tx: v.status === "completed" ? "#15803D" : "#2E6DA4" })));
+  })))));
+}
 function NotasInternasSel(props) {
   const [nota, setNota] = useState(props.notaInterna || "");
   const [saved, setSaved] = useState(false);
@@ -935,7 +1038,7 @@ function Clients() {
           return c.id === sel.id ? Object.assign({}, c, { nota_interna: n }) : c;
         });
       });
-    } })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Notas do cliente"), /* @__PURE__ */ React.createElement(NotasCliente, { clientId: sel.id }))));
+    } })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Notas do cliente"), /* @__PURE__ */ React.createElement(NotasCliente, { clientId: sel.id })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Hist\xF3rico de visitas e picagens"), /* @__PURE__ */ React.createElement(HistoricoVisitas, { cliente: sel, emps }))));
   }
   if (view === "qr" && sel) {
     let printQR = function() {
@@ -1055,6 +1158,52 @@ function Clients() {
     } }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { style: Object.assign({}, btn, { background: form.name && form.phone ? "#2E6DA4" : "#94A3B8", cursor: form.name && form.phone ? "pointer" : "not-allowed", padding: "11px 28px" }), onClick: saveC, disabled: !form.name || !form.phone }, "Criar + QR Code"))));
   }
   return null;
+}
+function HistoricoFuncionario(props) {
+  const empId = props.empId;
+  const [visitas, setVisitas] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [periodo, setPeriodo] = useState(30);
+  useEffect(function() {
+    setLoading(true);
+    const from = /* @__PURE__ */ new Date();
+    from.setDate(from.getDate() - periodo);
+    const fromStr = from.toISOString().split("T")[0];
+    db.list("servicos", "?select=*&date=gte." + fromStr + "&order=date.desc").then(function(rows) {
+      setVisitas((rows || []).filter(function(j) {
+        return (j.team || []).indexOf(empId) !== -1;
+      }));
+      setLoading(false);
+    });
+  }, [empId, periodo]);
+  function timeToMin(t) {
+    if (!t) return null;
+    const p = t.split(":");
+    return parseInt(p[0]) * 60 + parseInt(p[1]);
+  }
+  function diffMin(p, r) {
+    const pv = timeToMin(p), rv = timeToMin(r);
+    if (pv === null || rv === null) return null;
+    return rv - pv;
+  }
+  function DiffBadge(props2) {
+    const d = props2.diff;
+    if (d === null) return /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "\u2014");
+    if (d <= 0) return /* @__PURE__ */ React.createElement("span", { style: { background: "#DCFCE7", color: "#15803D", borderRadius: 6, padding: "2px 7px", fontSize: 11, fontWeight: 700 } }, "Pontual");
+    if (d <= 10) return /* @__PURE__ */ React.createElement("span", { style: { background: "#FEF3C7", color: "#92400E", borderRadius: 6, padding: "2px 7px", fontSize: 11, fontWeight: 700 } }, "+", d, "m");
+    return /* @__PURE__ */ React.createElement("span", { style: { background: "#FEE2E2", color: "#991B1B", borderRadius: 6, padding: "2px 7px", fontSize: 11, fontWeight: 700 } }, "+", d, "m \u26A0");
+  }
+  if (loading) return /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8", padding: "16px 0" } }, "A carregar...");
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 14 } }, [7, 30, 90].map(function(p) {
+    return /* @__PURE__ */ React.createElement("button", { key: p, onClick: function() {
+      setPeriodo(p);
+    }, style: { padding: "5px 10px", borderRadius: 6, border: "1.5px solid " + (periodo === p ? "#2E6DA4" : "#E2EBF4"), background: periodo === p ? "#EFF6FF" : "#fff", color: periodo === p ? "#2E6DA4" : "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, p, " dias");
+  })), visitas.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8", textAlign: "center", padding: "20px 0" } }, "Sem visitas neste per\xEDodo.") : /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { borderBottom: "2px solid #E2EBF4" } }, ["Cliente", "Data", "Previsto", "Entrada", "Sa\xEDda", "Pontualidade"].map(function(h) {
+    return /* @__PURE__ */ React.createElement("th", { key: h, style: { textAlign: "left", padding: "6px 8px", fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", whiteSpace: "nowrap" } }, h);
+  }))), /* @__PURE__ */ React.createElement("tbody", null, visitas.map(function(v) {
+    const d = diffMin(v.t1, v.check_in);
+    return /* @__PURE__ */ React.createElement("tr", { key: v.id, style: { borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("td", { style: { padding: "8px", fontWeight: 600, color: "#1A3A5C" } }, v.cn), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px", color: "#64748B", whiteSpace: "nowrap" } }, (/* @__PURE__ */ new Date(v.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "short", day: "2-digit", month: "short" })), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px", color: "#64748B", whiteSpace: "nowrap" } }, v.t1, " \u2014 ", v.t2), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px", fontWeight: v.check_in ? 700 : 400, color: v.check_in ? "#1A3A5C" : "#CBD5E1", whiteSpace: "nowrap" } }, v.check_in || "\u2014"), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px", fontWeight: v.check_out ? 700 : 400, color: v.check_out ? "#1A3A5C" : "#CBD5E1", whiteSpace: "nowrap" } }, v.check_out || "\u2014"), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px" } }, /* @__PURE__ */ React.createElement(DiffBadge, { diff: d })));
+  })))));
 }
 function Employees() {
   const [emps, setEmps] = useState([]);
@@ -1191,7 +1340,54 @@ function Employees() {
       setEditForm(Object.assign({}, editForm, { av: e.target.value.slice(0, 2) }));
     }, placeholder: "Ex: CM", maxLength: 2 })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "PIN (6 d\xEDgitos)"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 140, fontFamily: "monospace", fontSize: 16 }), value: editForm.pin, onChange: function(e) {
       setEditForm(Object.assign({}, editForm, { pin: e.target.value.replace(/[^0-9]/g, "").slice(0, 6) }));
-    }, placeholder: "000000", maxLength: 6 })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 18 } }, /* @__PURE__ */ React.createElement("button", { onClick: saveEdit, disabled: saving, style: Object.assign({}, btn, { flex: 1, opacity: saving ? 0.6 : 1 }) }, saving ? "A guardar..." : "Guardar Alteracoes"))), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Informacao"), sel.rating ? /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: lbl }, "Avaliacao media"), /* @__PURE__ */ React.createElement(Stars, { r: sel.rating })) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8" } }, "Ainda sem avaliacoes registadas."), /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#2E6DA4", marginTop: 14, lineHeight: 1.6 } }, "O PIN e usado pelo funcionario para entrar na area de Funcionarios da app. Garante que nao se repete entre colegas."))));
+    }, placeholder: "000000", maxLength: 6 })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 18 } }, /* @__PURE__ */ React.createElement("button", { onClick: saveEdit, disabled: saving, style: Object.assign({}, btn, { flex: 1, opacity: saving ? 0.6 : 1 }) }, saving ? "A guardar..." : "Guardar Alteracoes"))), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Informa\xE7\xE3o"), sel.rating ? /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: lbl }, "Avalia\xE7\xE3o m\xE9dia"), /* @__PURE__ */ React.createElement(Stars, { r: sel.rating }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 4 } }, sel.rating, " estrelas")) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8" } }, "Ainda sem avalia\xE7\xF5es registadas."), /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#2E6DA4", marginTop: 14, lineHeight: 1.6 } }, "O PIN \xE9 usado pelo funcion\xE1rio para entrar na \xE1rea de Funcion\xE1rios da app."))), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginTop: 20 }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "Hist\xF3rico de picagens"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+      const periodo = 30;
+      const from = /* @__PURE__ */ new Date();
+      from.setDate(from.getDate() - periodo);
+      const fromStr = from.toISOString().split("T")[0];
+      db.list("servicos", "?select=*&date=gte." + fromStr + "&order=date.desc").then(function(rows) {
+        const myRows = (rows || []).filter(function(j) {
+          return (j.team || []).indexOf(sel.id) !== -1;
+        });
+        function timeToMin(t) {
+          if (!t) return null;
+          const p = t.split(":");
+          return parseInt(p[0]) * 60 + parseInt(p[1]);
+        }
+        function diffMin(p, r) {
+          const pv = timeToMin(p), rv = timeToMin(r);
+          if (pv === null || rv === null) return null;
+          return rv - pv;
+        }
+        const tableRows = myRows.map(function(v) {
+          const d = diffMin(v.t1, v.check_in);
+          const dStr = d === null ? "\u2014" : d <= 0 ? "Pontual" : "+" + d + " min" + (d > 10 ? " \u26A0" : "");
+          return "<tr style='border-bottom:1px solid #eee'><td style='padding:8px'>" + v.cn + "</td><td style='padding:8px'>" + (/* @__PURE__ */ new Date(v.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "short", day: "2-digit", month: "short" }) + "</td><td style='padding:8px'>" + v.t1 + " \u2014 " + v.t2 + "</td><td style='padding:8px'>" + (v.check_in || "\u2014") + "</td><td style='padding:8px'>" + (v.check_out || "\u2014") + "</td><td style='padding:8px'>" + dStr + "</td><td style='padding:8px'>" + (v.status === "completed" ? "Conclu\xEDdo" : "Pendente") + "</td></tr>";
+        }).join("");
+        const win = window.open("", "_blank");
+        win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+                <title>Picagens \u2014 ${sel.name}</title>
+                <style>body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C}
+                h1{font-size:18px;margin-bottom:4px}h2{font-size:12px;color:#64748B;font-weight:normal;margin-bottom:20px}
+                table{width:100%;border-collapse:collapse;font-size:12px}
+                th{background:#1A3A5C;color:#fff;padding:8px;text-align:left;font-size:11px}
+                tr:nth-child(even){background:#F8FAFC}
+                .header{display:flex;justify-content:space-between;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #1A3A5C}
+                @media print{body{padding:15px}}</style></head><body>
+                <div class="header">
+                  <div><h1>Picagens \u2014 ${sel.name}</h1>
+                  <h2>\xDAltimos ${periodo} dias | Gerado em ${(/* @__PURE__ */ new Date()).toLocaleDateString("pt-PT")}</h2></div>
+                  <div style="text-align:right;font-size:11px;color:#64748B"><strong>SamorClean by Fragancelines, Lda</strong><br>samorclean.geral@gmail.com</div>
+                </div>
+                <table><thead><tr>
+                  <th>Cliente</th><th>Data</th><th>Previsto</th><th>Entrada</th><th>Sa\xEDda</th><th>Pontualidade</th><th>Estado</th>
+                </tr></thead><tbody>${tableRows}</tbody></table>
+                <div style="margin-top:16px;font-size:10px;color:#94A3B8">\u26A0 Atraso assinalado quando entrada superior a 10 min ap\xF3s hora prevista.</div>
+                <script>window.onload=function(){window.print();}<\/script>
+                </body></html>`);
+        win.document.close();
+      });
+    }, style: Object.assign({}, btn, { fontSize: 12, padding: "7px 14px" }) }, "Exportar PDF")), /* @__PURE__ */ React.createElement(HistoricoFuncionario, { empId: sel.id })));
   }
   if (view === "new") {
     return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 24 } }, /* @__PURE__ */ React.createElement("button", { style: btnX, onClick: function() {
