@@ -232,8 +232,8 @@ function Finance() {
     const monthEnd = localDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
     const sixMonthsAgo = localDateStr(new Date(now.getFullYear(), now.getMonth() - 5, 1));
     Promise.all([
-      db.list("servi\xE7os", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd + "&status=eq.completed"),
-      db.list("servi\xE7os", "?select=*&date=gte." + sixMonthsAgo + "&status=eq.completed"),
+      db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd + "&status=eq.completed"),
+      db.list("servicos", "?select=*&date=gte." + sixMonthsAgo + "&status=eq.completed"),
       db.list("clientes", "?select=id,name,iva_type")
     ]).then(function(results) {
       setMonthJobs(results[0] || []);
@@ -331,8 +331,8 @@ function Routes() {
   const [clients, setClients] = useState([]);
   useEffect(function() {
     Promise.all([
-      db.list("servi\xE7os", "?select=*&order=date"),
-      db.list("funcion\xE1rios", "?select=*&order=id"),
+      db.list("servicos", "?select=*&order=date"),
+      db.list("funcionarios", "?select=*&order=id"),
       db.list("clientes", "?select=*&order=id")
     ]).then(function(results) {
       setJobs(results[0] || []);
@@ -400,9 +400,9 @@ function Routes() {
   async function confirmGenerate() {
     setGenerating(true);
     for (let i = 0; i < preview.length; i++) {
-      await db.insert("servi\xE7os", preview[i]);
+      await db.insert("servicos", preview[i]);
     }
-    const allJobs = await db.list("servi\xE7os", "?select=*&order=date");
+    const allJobs = await db.list("servicos", "?select=*&order=date");
     setJobs(allJobs || []);
     setShowGen(false);
     setPreview([]);
@@ -421,7 +421,7 @@ function Routes() {
   }, 0);
   async function drop(d) {
     if (!drag) return;
-    const updated = await db.update("servi\xE7os", drag.id, { date: d });
+    const updated = await db.update("servicos", drag.id, { date: d });
     if (updated) {
       setJobs(function(p) {
         return p.map(function(j) {
@@ -448,7 +448,7 @@ function Routes() {
       iva_override: selClient ? selClient.iva_type : "normal",
       paid: false
     });
-    const inserted = await db.insert("servi\xE7os", j);
+    const inserted = await db.insert("servicos", j);
     if (inserted) {
       setJobs(jobs.concat([inserted]));
       setShowNew(false);
@@ -467,7 +467,7 @@ function Routes() {
   }
   async function toggleStatus(job) {
     const newStatus = job.status === "completed" ? "pending" : "completed";
-    const updated = await db.update("servi\xE7os", job.id, { status: newStatus });
+    const updated = await db.update("servicos", job.id, { status: newStatus });
     if (updated) {
       setJobs(function(p) {
         return p.map(function(j) {
@@ -496,7 +496,7 @@ function Routes() {
     }
   }
   async function deleteJob(job) {
-    const ok = await db.remove("servi\xE7os", job.id);
+    const ok = await db.remove("servicos", job.id);
     if (ok) {
       setJobs(function(p) {
         return p.filter(function(j) {
@@ -664,7 +664,7 @@ function HistoricoVisitas(props) {
     const from = /* @__PURE__ */ new Date();
     from.setDate(from.getDate() - periodo);
     const fromStr = localDateStr(from);
-    db.list("servi\xE7os", "?select=*&client_id=eq." + encodeURIComponent(cliente.id) + "&date=gte." + fromStr + "&order=date.desc").then(function(rows) {
+    db.list("servicos", "?select=*&client_id=eq." + encodeURIComponent(cliente.id) + "&date=gte." + fromStr + "&order=date.desc").then(function(rows) {
       setVisitas(rows || []);
       setLoading(false);
     });
@@ -847,13 +847,13 @@ function Clients() {
     setDeleting(true);
     const cid = encodeURIComponent(sel.id);
     const [relatedJobs, relatedContacts, relatedNotes] = await Promise.all([
-      db.list("servi\xE7os", "?select=id&client_id=eq." + cid),
+      db.list("servicos", "?select=id&client_id=eq." + cid),
       db.list("client_contacts", "?select=id&client_id=eq." + cid),
       db.list("client_notes", "?select=id&client_id=eq." + cid)
     ]);
     const toDelete = [
       ...(relatedJobs || []).map(function(x) {
-        return { table: "servi\xE7os", id: x.id };
+        return { table: "servicos", id: x.id };
       }),
       ...(relatedContacts || []).map(function(x) {
         return { table: "client_contacts", id: x.id };
@@ -883,7 +883,7 @@ function Clients() {
   useEffect(function() {
     Promise.all([
       db.list("clientes", "?select=*&order=id"),
-      db.list("funcion\xE1rios", "?select=*&order=id")
+      db.list("funcionarios", "?select=*&order=id")
     ]).then(function(results) {
       setClients(results[0] || []);
       if (results[1] && results[1].length) setEmps(results[1]);
@@ -1226,7 +1226,7 @@ function HistoricoFuncionario(props) {
     const from = /* @__PURE__ */ new Date();
     from.setDate(from.getDate() - periodo);
     const fromStr = localDateStr(from);
-    db.list("servi\xE7os", "?select=*&date=gte." + fromStr + "&order=date.desc").then(function(rows) {
+    db.list("servicos", "?select=*&date=gte." + fromStr + "&order=date.desc").then(function(rows) {
       setVisitas((rows || []).filter(function(j) {
         return (j.team || []).indexOf(empId) !== -1;
       }));
@@ -1273,7 +1273,7 @@ function Employees() {
   const [newForm, setNewForm] = useState({ id: "", name: "", role: "T\xE9cnico", pin: "", av: "" });
   const [errMsg, setErrMsg] = useState("");
   useEffect(function() {
-    db.list("funcion\xE1rios", "?select=*&order=id").then(function(rows) {
+    db.list("funcionarios", "?select=*&order=id").then(function(rows) {
       setEmps(rows || []);
       setLoading(false);
     });
@@ -1308,7 +1308,7 @@ function Employees() {
       pin: editForm.pin,
       av: (editForm.av || editForm.name.slice(0, 2)).toUpperCase()
     };
-    const updated = await db.update("funcion\xE1rios", sel.id, patch);
+    const updated = await db.update("funcionarios", sel.id, patch);
     setSaving(false);
     if (updated) {
       setEmps(function(p) {
@@ -1359,7 +1359,7 @@ function Employees() {
       av: (newForm.av || newForm.name.slice(0, 2)).toUpperCase(),
       rating: null
     };
-    const inserted = await db.insertVerbose("funcion\xE1rios", nf);
+    const inserted = await db.insertVerbose("funcionarios", nf);
     if (inserted.ok) {
       setEmps(emps.concat([inserted.data]));
       setNewForm({ id: "", name: "", role: "T\xE9cnico", pin: "", av: "" });
@@ -1402,7 +1402,7 @@ function Employees() {
       const from = /* @__PURE__ */ new Date();
       from.setDate(from.getDate() - periodo);
       const fromStr = localDateStr(from);
-      db.list("servi\xE7os", "?select=*&date=gte." + fromStr + "&order=date.desc").then(function(rows) {
+      db.list("servicos", "?select=*&date=gte." + fromStr + "&order=date.desc").then(function(rows) {
         const myRows = (rows || []).filter(function(j) {
           return (j.team || []).indexOf(sel.id) !== -1;
         });
@@ -1469,9 +1469,9 @@ function Avaliacoes() {
   const [filtro, setFiltro] = useState("todas");
   useEffect(function() {
     Promise.all([
-      db.list("avalia\xE7\xF5es", "?select=*&order=created_at.desc"),
+      db.list("avaliacoes", "?select=*&order=created_at.desc"),
       db.list("clientes", "?select=id,name"),
-      db.list("funcion\xE1rios", "?select=id,name,av")
+      db.list("funcionarios", "?select=id,name,av")
     ]).then(function(results) {
       setAvs(results[0] || []);
       const cm = {};
@@ -1553,7 +1553,7 @@ function PedidosExtra() {
   }
   async function openSwap(p) {
     setSwapPedido(p);
-    const jobs = await db.list("servi\xE7os", "?select=*&client_id=eq." + encodeURIComponent(p.client_id) + "&status=neq.completed&order=date");
+    const jobs = await db.list("servicos", "?select=*&client_id=eq." + encodeURIComponent(p.client_id) + "&status=neq.completed&order=date");
     setClientJobs(jobs || []);
     setSelJob(null);
     setTaskOut("");
@@ -1569,7 +1569,7 @@ function PedidosExtra() {
     const newCl = (job.cl || []).filter(function(t) {
       return t !== taskOut;
     }).concat([taskIn]);
-    await db.update("servi\xE7os", selJob, { cl: newCl });
+    await db.update("servicos", selJob, { cl: newCl });
     await updateStatus(swapPedido.id, "aprovado");
     setSwapJob(null);
     setSwapPedido(null);
@@ -1638,11 +1638,11 @@ function Manager(props) {
     const monthEnd = localDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
     Promise.all([
       db.list("clientes", "?select=id,iva_type"),
-      db.list("servi\xE7os", "?select=*&order=date&date=eq." + today),
-      db.list("servi\xE7os", "?select=*&order=date&limit=4"),
-      db.list("funcion\xE1rios", "?select=*&order=id"),
+      db.list("servicos", "?select=*&order=date&date=eq." + today),
+      db.list("servicos", "?select=*&order=date&limit=4"),
+      db.list("funcionarios", "?select=*&order=id"),
       db.list("pedidos_extra", "?select=id&status=eq.pendente"),
-      db.list("servi\xE7os", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd + "&status=eq.completed")
+      db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd + "&status=eq.completed")
     ]).then(function(results) {
       setClientCount(results[0] ? results[0].length : 0);
       setTodayJobs(results[1] || []);
@@ -1677,7 +1677,7 @@ function Manager(props) {
     { k: "routes", l: "Rotas" },
     { k: "clients", l: "Clientes" },
     { k: "pedidos", l: "Pedidos Extra" },
-    { k: "avalia\xE7\xF5es", l: "Avalia\xE7\xF5es" },
+    { k: "avaliacoes", l: "Avalia\xE7\xF5es" },
     { k: "employees", l: "Funcion\xE1rios" }
   ];
   return /* @__PURE__ */ React.createElement("div", { style: { background: "#F4F8FB", minHeight: "100vh", color: "#334155" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 220, background: "#1A3A5C", minHeight: "100vh", display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "24px 20px 20px", borderBottom: "1px solid rgba(255,255,255,0.1)" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: "#fff" } }, "SamorClean"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#38B6D8", fontWeight: 600, letterSpacing: 1.5, marginTop: 2 } }, "GEST\xC3O OPERACIONAL")), /* @__PURE__ */ React.createElement("nav", { style: { flex: 1, padding: "12px" } }, navItems.map(function(item) {
@@ -1708,7 +1708,7 @@ function Manager(props) {
     return (b.rating || 0) - (a.rating || 0);
   }).map(function(e, i) {
     return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: i === 0 ? "#F59E0B" : i === 1 ? "#94A3B8" : "#CD7C54", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 11, flexShrink: 0 } }, i + 1), /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 30, color: ["#2E6DA4", "#0F766E", "#7C3AED", "#C2410C"][i] || "#64748B" }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, e.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, e.role)), /* @__PURE__ */ React.createElement(Stars, { r: e.rating }));
-  })))) : null, view === "finance" ? /* @__PURE__ */ React.createElement(Finance, null) : null, view === "routes" ? /* @__PURE__ */ React.createElement(Routes, null) : null, view === "clients" ? /* @__PURE__ */ React.createElement(Clients, null) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "avalia\xE7\xF5es" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, null) : null));
+  })))) : null, view === "finance" ? /* @__PURE__ */ React.createElement(Finance, null) : null, view === "routes" ? /* @__PURE__ */ React.createElement(Routes, null) : null, view === "clients" ? /* @__PURE__ */ React.createElement(Clients, null) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "avaliacoes" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, null) : null));
 }
 function Employee(props) {
   const onExit = props.onExit;
@@ -1733,7 +1733,7 @@ function Employee(props) {
   const [earlyLeaveEmp, setEarlyLeaveEmp] = useState(null);
   const [showEarlyLeave, setShowEarlyLeave] = useState(false);
   useEffect(function() {
-    db.list("funcion\xE1rios", "?select=*&order=id").then(function(rows) {
+    db.list("funcionarios", "?select=*&order=id").then(function(rows) {
       setEmps(rows && rows.length ? rows : EMPS);
     });
   }, []);
@@ -1747,9 +1747,9 @@ function Employee(props) {
       next14.setDate(next14.getDate() + 14);
       const next14str = next14.toISOString().split("T")[0];
       Promise.all([
-        db.list("servi\xE7os", "?select=*&date=eq." + today),
-        db.list("servi\xE7os", "?select=*&date=gte." + past7str + "&date=lt." + today + "&order=date.desc"),
-        db.list("servi\xE7os", "?select=*&date=gt." + today + "&date=lte." + next14str + "&order=date")
+        db.list("servicos", "?select=*&date=eq." + today),
+        db.list("servicos", "?select=*&date=gte." + past7str + "&date=lt." + today + "&order=date.desc"),
+        db.list("servicos", "?select=*&date=gt." + today + "&date=lte." + next14str + "&order=date")
       ]).then(function(results) {
         setJobs(results[0] || []);
         setHistJobs(results[1] || []);
@@ -1817,7 +1817,7 @@ function Employee(props) {
     } else {
       doneTasks.push(t);
     }
-    const updated = await db.update("servi\xE7os", job.id, { done_tasks: doneTasks });
+    const updated = await db.update("servicos", job.id, { done_tasks: doneTasks });
     if (updated) {
       setJobs(function(p) {
         return p.map(function(j) {
@@ -1830,7 +1830,7 @@ function Employee(props) {
   async function startJob(job) {
     const time = (/* @__PURE__ */ new Date()).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
     setCin(time);
-    const updated = await db.update("servi\xE7os", job.id, { check_in: time });
+    const updated = await db.update("servicos", job.id, { check_in: time });
     if (updated) {
       setJobs(function(p) {
         return p.map(function(j) {
@@ -1843,7 +1843,7 @@ function Employee(props) {
   async function finishJob(job) {
     const time = (/* @__PURE__ */ new Date()).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
     setCout(time);
-    const updated = await db.update("servi\xE7os", job.id, { check_out: time, status: "completed" });
+    const updated = await db.update("servicos", job.id, { check_out: time, status: "completed" });
     if (updated) {
       setJobs(function(p) {
         return p.map(function(j) {
@@ -1860,11 +1860,11 @@ function Employee(props) {
     for (let i = 0; i < todayMyJobs.length; i++) {
       const j = todayMyJobs[i];
       let newTeam = mateId ? [emp.id, mateId] : [emp.id];
-      await db.update("servi\xE7os", j.id, { team: newTeam });
+      await db.update("servicos", j.id, { team: newTeam });
     }
     setTeamConfirm(mateId);
     setPhase("dash");
-    db.list("servi\xE7os", "?select=*&date=eq." + today).then(function(rows) {
+    db.list("servicos", "?select=*&date=eq." + today).then(function(rows) {
       setJobs(rows || []);
     });
   }
@@ -1879,10 +1879,10 @@ function Employee(props) {
       const newTeam = (j.team || []).filter(function(id) {
         return id !== leaveEmpId;
       });
-      await db.update("servi\xE7os", j.id, { early_leave: earlyLeave, team: newTeam });
+      await db.update("servicos", j.id, { early_leave: earlyLeave, team: newTeam });
     }
     setShowEarlyLeave(false);
-    db.list("servi\xE7os", "?select=*&date=eq." + today).then(function(rows) {
+    db.list("servicos", "?select=*&date=eq." + today).then(function(rows) {
       setJobs(rows || []);
     });
   }
@@ -2151,7 +2151,7 @@ function ClientPortal(props) {
       Promise.all([
         db.list("clientes", "?select=*&id=eq." + encodeURIComponent(clientId)),
         db.list("client_contacts", "?select=*&client_id=eq." + encodeURIComponent(clientId)),
-        db.list("funcion\xE1rios", "?select=*&order=id")
+        db.list("funcionarios", "?select=*&order=id")
       ]).then(function(results) {
         if (results[0] && results[0].length) setClient(results[0][0]);
         setContacts(results[1] || []);
@@ -2201,7 +2201,7 @@ function ClientPortal(props) {
   }
   function loadTeamData(empId) {
     setLoadingTeam(true);
-    db.list("servi\xE7os", "?select=*&date=eq." + today + "&order=t1").then(function(rows) {
+    db.list("servicos", "?select=*&date=eq." + today + "&order=t1").then(function(rows) {
       const myJobs = (rows || []).filter(function(j) {
         return (j.team || []).indexOf(empId) !== -1;
       });
@@ -2221,7 +2221,7 @@ function ClientPortal(props) {
   function loadPortalData() {
     if (!clientId) return;
     const todayStr = localDateStr();
-    db.list("servi\xE7os", "?select=*&client_id=eq." + encodeURIComponent(clientId) + "&order=date").then(function(rows) {
+    db.list("servicos", "?select=*&client_id=eq." + encodeURIComponent(clientId) + "&order=date").then(function(rows) {
       const all = rows || [];
       setHistory(all.filter(function(j) {
         return j.status === "completed" || j.date < todayStr;
@@ -2233,7 +2233,7 @@ function ClientPortal(props) {
   }
   async function submitRate(job) {
     const promises = (job.team || []).map(function(eid) {
-      return db.insert("avalia\xE7\xF5es", {
+      return db.insert("avaliacoes", {
         servico_id: job.id,
         funcionario_id: eid,
         client_id: clientId,
@@ -2243,15 +2243,15 @@ function ClientPortal(props) {
       });
     });
     await Promise.all(promises);
-    await db.update("servi\xE7os", job.id, { rated: true });
+    await db.update("servicos", job.id, { rated: true });
     for (let i = 0; i < (job.team || []).length; i++) {
       const eid = job.team[i];
-      const allAvs = await db.list("avalia\xE7\xF5es", "?select=stars&funcion\xE1rio_id=eq." + encodeURIComponent(eid));
+      const allAvs = await db.list("avaliacoes", "?select=stars&funcion\xE1rio_id=eq." + encodeURIComponent(eid));
       if (allAvs && allAvs.length > 0) {
         const avg = allAvs.reduce(function(s, a) {
           return s + (a.stars || 0);
         }, 0) / allAvs.length;
-        await db.update("funcion\xE1rios", eid, { rating: Math.round(avg * 10) / 10 });
+        await db.update("funcionarios", eid, { rating: Math.round(avg * 10) / 10 });
       }
     }
     setRateDone(true);
@@ -2371,7 +2371,7 @@ function ClientPortal(props) {
         } else {
           dt.push(task);
         }
-        const updated = await db.update("servi\xE7os", job.id, { done_tasks: dt });
+        const updated = await db.update("servicos", job.id, { done_tasks: dt });
         if (updated) {
           setTeamJobs(function(p) {
             return { current: p.current.map(function(j) {
@@ -2382,7 +2382,7 @@ function ClientPortal(props) {
       }
       async function doCheckin() {
         const time = (/* @__PURE__ */ new Date()).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
-        const updated = await db.update("servi\xE7os", job.id, { check_in: time, check_in_emp: currentEmp ? currentEmp.id : null });
+        const updated = await db.update("servicos", job.id, { check_in: time, check_in_emp: currentEmp ? currentEmp.id : null });
         if (updated) {
           setTeamJobs(function(p) {
             return { current: p.current.map(function(j) {
@@ -2400,7 +2400,7 @@ function ClientPortal(props) {
         const time = (/* @__PURE__ */ new Date()).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
         const patch = { check_out: time, status: "completed" };
         if (!checklistComplete) patch.checklist_incomplete = true;
-        const updated = await db.update("servi\xE7os", job.id, patch);
+        const updated = await db.update("servicos", job.id, patch);
         if (updated) {
           setTeamJobs(function(p) {
             return { current: p.current.map(function(j) {
