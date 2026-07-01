@@ -629,14 +629,22 @@ function Routes() {
     setNj(Object.assign({}, nj, { cn: e.target.value, addr: c ? c.address : nj.addr, svc: c ? c.service : nj.svc }));
   } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014 Selecciona um cliente \u2014"), clients.map(function(c) {
     return /* @__PURE__ */ React.createElement("option", { key: c.id, value: c.name }, c.name);
-  }))), [["addr", "Morada", "Rua, N, Local", true], ["t1", "Hora in\xEDcio", "08:00", false], ["t2", "Hora fim", "12:00", false], ["val", "Valor (EUR)", "250", false]].map(function(f) {
+  }))), [["addr", "Morada", "Rua, N, Local", true], ["val", "Valor (EUR)", "250", false]].map(function(f) {
     const key = f[0], label = f[1], ph = f[2], full = f[3];
     return /* @__PURE__ */ React.createElement("div", { key, style: { gridColumn: full ? "1 / -1" : "auto" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, label), /* @__PURE__ */ React.createElement("input", { style: inp, value: nj[key], onChange: function(e) {
       const u = Object.assign({}, nj);
       u[key] = e.target.value;
       setNj(u);
     }, placeholder: ph }));
-  }), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Servi\xE7o"), /* @__PURE__ */ React.createElement("select", { style: inp, value: nj.svc, onChange: function(e) {
+  }), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Hora in\xEDcio"), /* @__PURE__ */ React.createElement("select", { style: inp, value: nj.t1, onChange: function(e) {
+    setNj(Object.assign({}, nj, { t1: e.target.value }));
+  } }, TIME_SLOTS.map(function(t) {
+    return /* @__PURE__ */ React.createElement("option", { key: t, value: t }, t);
+  }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Hora fim"), /* @__PURE__ */ React.createElement("select", { style: inp, value: nj.t2, onChange: function(e) {
+    setNj(Object.assign({}, nj, { t2: e.target.value }));
+  } }, TIME_SLOTS.map(function(t) {
+    return /* @__PURE__ */ React.createElement("option", { key: t, value: t }, t);
+  }))), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Servi\xE7o"), /* @__PURE__ */ React.createElement("select", { style: inp, value: nj.svc, onChange: function(e) {
     setNj(Object.assign({}, nj, { svc: e.target.value }));
   } }, SVCS.map(function(s) {
     return /* @__PURE__ */ React.createElement("option", { key: s }, s);
