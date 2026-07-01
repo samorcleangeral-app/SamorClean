@@ -82,13 +82,13 @@ const db = {
         body: JSON.stringify(patch)
       });
       if (!res.ok) {
-        console.error("db.update error", table, await res.text());
+        console.error("db.updat\xE9 error", table, await res.text());
         return null;
       }
       const data = await res.json();
       return data[0];
     } catch (err) {
-      console.error("db.update network error", table, err);
+      console.error("db.updat\xE9 network error", table, err);
       return null;
     }
   },
@@ -125,9 +125,24 @@ const db = {
 };
 const SVCS = ["Limpeza Residencial", "Limpeza Comercial", "Limpeza P\xF3s-Obra", "Limpeza Profunda", "Limpeza de Estofos", "Limpeza de Vidros"];
 const FREQS = ["Pontual", "Semanal", "Quinzenal", "Mensal", "Trimestral"];
-const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+function localDateStr(d) {
+  const dt = d || /* @__PURE__ */ new Date();
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const day = String(dt.getDate()).padStart(2, "0");
+  return y + "-" + m + "-" + day;
+}
+const today = localDateStr();
 const DAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"];
 const DAYS = ["Segunda-feira", "Ter\xE7a-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira"];
+const TIME_SLOTS = (function() {
+  const slots = [];
+  for (let h = 0; h < 24; h++) {
+    slots.push(String(h).padStart(2, "0") + ":00");
+    if (h < 23) slots.push(String(h).padStart(2, "0") + ":30");
+  }
+  return slots;
+})();
 const EC = { F001: "#2E6DA4", F002: "#0F766E", F003: "#7C3AED", F004: "#C2410C" };
 const PRICE_PER_HOUR = 13.66;
 const COST_PER_HOUR_PERSON = 8.68;
@@ -141,25 +156,25 @@ function getWeek(offset) {
   return Array.from({ length: 7 }, function(_, i) {
     const dt = new Date(d);
     dt.setDate(base + i);
-    return dt.toISOString().split("T")[0];
+    return localDateStr(dt);
   });
 }
 const EMPS = [
-  { id: "F001", name: "Carlos Mendes", role: "Tecnico Senior", pin: "1234", av: "CM", rating: 4.8 },
+  { id: "F001", name: "Carlos Mendes", role: "T\xE9cnico Senior", pin: "1234", av: "CM", rating: 4.8 },
   { id: "F002", name: "Ana Rodrigues", role: "Tecnica", pin: "5678", av: "AR", rating: 4.6 },
   { id: "F003", name: "Bruno Fonseca", role: "T\xE9cnico", pin: "9012", av: "BF", rating: 4.7 },
   { id: "F004", name: "Sara Lopes", role: "Tecnica", pin: "3456", av: "SL", rating: 4.9 }
 ];
 const PRODS = [
-  { id: "P001", name: "Desengordurante", brand: "Faren", dosage: "50ml por 1L agua", instructions: "Aplicar com pano humido. Enxaguar apos 3 minutos.", warning: "Usar luvas. Evitar contacto com olhos.", stock: 12 },
-  { id: "P002", name: "Lixivia Concentrada", brand: "Sonasol", dosage: "100ml por 5L agua", instructions: "Usar em superficies brancas. Actuar 5 minutos.", warning: "Nao misturar com outros produtos.", stock: 8 },
-  { id: "P003", name: "Limpa Vidros", brand: "Cif", dosage: "Aplicar no pano", instructions: "Pulverizar no pano. Movimentos circulares.", warning: "Nao usar sob sol direto.", stock: 15 },
-  { id: "P004", name: "Detergente Estofos", brand: "HG", dosage: "30ml por 500ml agua", instructions: "Diluir em agua morna. Aspirar apos secar.", warning: "Testar em area escondida.", stock: 5 },
-  { id: "P005", name: "Removedor de Tinta", brand: "Rubson", dosage: "Aplicar puro com pincel", instructions: "Aguardar 10 min. Raspar com espatula.", warning: "Luvas e mascara obrigatorios.", stock: 3 }
+  { id: "P001", name: "Desengordurante", brand: "Faren", dosage: "50ml por 1L agua", instructions: "Aplicar com pano humido. Enxaguar ap\xF3s 3 minutos.", warning: "Usar luvas. Evitar contacto com olhos.", stock: 12 },
+  { id: "P002", name: "Lixivia Concentrada", brand: "Sonasol", dosage: "100ml por 5L agua", instructions: "Usar em superficies brancas. Actuar 5 minutos.", warning: "N\xE3o misturar com outros produtos.", stock: 8 },
+  { id: "P003", name: "Limpa Vidros", brand: "Cif", dosage: "Aplicar no pano", instructions: "Pulverizar no pano. Movimentos circulares.", warning: "N\xE3o usar sob sol direto.", stock: 15 },
+  { id: "P004", name: "Detergente Estofos", brand: "HG", dosage: "30ml por 500ml agua", instructions: "Diluir em agua morna. Aspirar ap\xF3s secar.", warning: "Testar em area escondida.", stock: 5 },
+  { id: "P005", name: "Removedor de Tinta", brand: "Rubson", dosage: "Aplicar puro com pincel", instructions: "Aguardar 10 min. Raspar com espatula.", warning: "Luvas e mascara obrigat\xF3rios.", stock: 3 }
 ];
 const CLIENTS = [
   { id: "SC-001", name: "Construtora Ribatejo Lda", type: "Empresa", contact: "Joao Ferreira", phone: "963 111 222", email: "geral@ribatejo.pt", address: "Rua da Liberdade 45, Benavente", service: "Limpeza P\xF3s-Obra", freq: "Pontual", notes: "Portao traseiro.", checklist: ["Remocao entulho", "Pavimentos", "Vidros", "WC"], since: "2024-03-10", rating: 4.8 },
-  { id: "SC-002", name: "Clinica Saude Samora", type: "Empresa", contact: "Dra Ana Costa", phone: "910 333 444", email: "clinica@saude.pt", address: "Av. Central 12, Samora Correia", service: "Limpeza Comercial", freq: "Semanal", notes: "Esterilizacao obrigatoria.", checklist: ["Desinfeccao salas", "WC", "Aspiracao", "Secretarias"], since: "2023-11-05", rating: 4.9 },
+  { id: "SC-002", name: "Clinica Saude Samora", type: "Empresa", contact: "Dra Ana Costa", phone: "910 333 444", email: "clinica@saude.pt", address: "Av. Central 12, Samora Correia", service: "Limpeza Comercial", freq: "Semanal", notes: "Esteriliza\xE7\xE3o obrigatoria.", checklist: ["Desinfeccao salas", "WC", "Aspira\xE7\xE3o", "Secretarias"], since: "2023-11-05", rating: 4.9 },
   { id: "SC-003", name: "Familia Silva", type: "Particular", contact: "Maria Silva", phone: "926 555 666", email: "msilva@gmail.com", address: "Quinta das Flores Lote 3, Alcochete", service: "Limpeza Profunda", freq: "Trimestral", notes: "Tem cao. Sem amoniaco.", checklist: ["Limpeza geral", "Estofos", "Frigorifico", "Janelas"], since: "2024-01-20", rating: 4.6 },
   { id: "SC-004", name: "Armazens Logitrans", type: "Empresa", contact: "Pedro Nunes", phone: "962 444 555", email: "geral@logitrans.pt", address: "Zona Industrial, Benavente", service: "Limpeza Comercial", freq: "Mensal", notes: "Portao principal.", checklist: ["Pavimentos", "Escritorio", "WC"], since: "2024-05-01", rating: 4.7 },
   { id: "SC-005", name: "Escritorios Montijo Park", type: "Empresa", contact: "Sofia Barros", phone: "961 777 888", email: "admin@montijo.pt", address: "Parque Empresarial, Montijo", service: "Limpeza Comercial", freq: "Semanal", notes: "Fora de expediente.", checklist: ["Open space", "Salas", "Cozinha", "WC", "Vidros"], since: "2024-02-14", rating: 4.8 }
@@ -167,8 +182,8 @@ const CLIENTS = [
 function getJobs() {
   const w = getWeek(0);
   return [
-    { id: "J001", cn: "Construtora Ribatejo Lda", addr: "Rua da Liberdade 45, Benavente", svc: "Limpeza P\xF3s-Obra", date: w[0], t1: "08:00", t2: "13:00", team: ["F001", "F002"], status: "completed", cl: ["Entulho", "Pavimentos", "Vidros", "WC"], prods: ["P001", "P003", "P005"], notes: "Portao traseiro. Codigo: 4521.", val: 480 },
-    { id: "J002", cn: "Clinica Saude Samora", addr: "Av. Central 12, Samora Correia", svc: "Limpeza Comercial", date: w[1], t1: "14:00", t2: "17:00", team: ["F003", "F004"], status: "pending", cl: ["Desinfeccao", "WC", "Carpetes", "Secretarias"], prods: ["P001", "P002", "P003"], notes: "Esterilizacao obrigatoria.", val: 220 },
+    { id: "J001", cn: "Construtora Ribatejo Lda", addr: "Rua da Liberdade 45, Benavente", svc: "Limpeza P\xF3s-Obra", date: w[0], t1: "08:00", t2: "13:00", team: ["F001", "F002"], status: "completed", cl: ["Entulho", "Pavimentos", "Vidros", "WC"], prods: ["P001", "P003", "P005"], notes: "Portao traseiro. C\xF3digo: 4521.", val: 480 },
+    { id: "J002", cn: "Clinica Saude Samora", addr: "Av. Central 12, Samora Correia", svc: "Limpeza Comercial", date: w[1], t1: "14:00", t2: "17:00", team: ["F003", "F004"], status: "pending", cl: ["Desinfeccao", "WC", "Carpetes", "Secretarias"], prods: ["P001", "P002", "P003"], notes: "Esteriliza\xE7\xE3o obrigatoria.", val: 220 },
     { id: "J003", cn: "Familia Silva", addr: "Quinta das Flores Lote 3, Alcochete", svc: "Limpeza Profunda", date: w[1], t1: "09:00", t2: "12:00", team: ["F001", "F003"], status: "completed", cl: ["Limpeza geral", "Estofos", "Frigorifico", "Janelas"], prods: ["P001", "P003", "P004"], notes: "Sem amoniaco.", val: 180 },
     { id: "J004", cn: "Armazens Logitrans", addr: "Zona Industrial, Benavente", svc: "Limpeza Comercial", date: w[2], t1: "07:00", t2: "11:00", team: ["F002", "F004"], status: "pending", cl: ["Pavimentos", "Escritorio", "WC"], prods: ["P001", "P002"], notes: "Portao principal.", val: 320 },
     { id: "J005", cn: "Escritorios Montijo Park", addr: "Parque Empresarial, Montijo", svc: "Limpeza Comercial", date: w[3], t1: "18:00", t2: "21:00", team: ["F001", "F002"], status: "pending", cl: ["Open space", "Salas", "Cozinha", "WC"], prods: ["P001", "P003"], notes: "Fora de expediente.", val: 260 },
@@ -213,12 +228,12 @@ function Finance() {
   const [clientsMap, setClientsMap] = useState({});
   useEffect(function() {
     const now = /* @__PURE__ */ new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
-    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString().split("T")[0];
+    const monthStart = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
+    const monthEnd = localDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+    const sixMonthsAgo = localDateStr(new Date(now.getFullYear(), now.getMonth() - 5, 1));
     Promise.all([
-      db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd + "&status=eq.completed"),
-      db.list("servicos", "?select=*&date=gte." + sixMonthsAgo + "&status=eq.completed"),
+      db.list("servi\xE7os", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd + "&status=eq.completed"),
+      db.list("servi\xE7os", "?select=*&date=gte." + sixMonthsAgo + "&status=eq.completed"),
       db.list("clientes", "?select=id,name,iva_type")
     ]).then(function(results) {
       setMonthJobs(results[0] || []);
@@ -237,7 +252,7 @@ function Finance() {
     return c ? c.iva_type || "normal" : "normal";
   }
   function withIva(val, job) {
-    return ivaTypeFor(job) === "autoliquidacao" ? val : val * 1.23;
+    return ivaTypeFor(job) === "autoliquida\xE7\xE3o" ? val : val * 1.23;
   }
   const fatSemIva = monthJobs.reduce(function(s, j) {
     return s + (j.val || 0);
@@ -297,7 +312,7 @@ function Finance() {
     return /* @__PURE__ */ React.createElement("th", { key: h, style: { textAlign: "left", padding: "8px 12px", fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, h);
   }))), /* @__PURE__ */ React.createElement("tbody", null, pendingRows.map(function(j) {
     const ivaT = ivaTypeFor(j);
-    return /* @__PURE__ */ React.createElement("tr", { key: j.id, style: { borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 12px", fontWeight: 600, color: "#1A3A5C" } }, j.cn), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 12px", color: "#64748B" } }, j.svc), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 12px", color: "#64748B" } }, (/* @__PURE__ */ new Date(j.date + "T12:00:00")).toLocaleDateString("pt-PT", { day: "2-digit", month: "short" })), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 12px", fontWeight: 700 } }, fmt(j.val || 0)), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 12px", fontWeight: 700 } }, fmt(withIva(j.val || 0, j))), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 12px" } }, /* @__PURE__ */ React.createElement(Bdg, { label: ivaT === "autoliquidacao" ? "Autoliq." : "Normal", bg: ivaT === "autoliquidacao" ? "#F3E8FF" : "#EFF6FF", tx: ivaT === "autoliquidacao" ? "#7C3AED" : "#2E6DA4", sz: 10 })));
+    return /* @__PURE__ */ React.createElement("tr", { key: j.id, style: { borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 12px", fontWeight: 600, color: "#1A3A5C" } }, j.cn), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 12px", color: "#64748B" } }, j.svc), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 12px", color: "#64748B" } }, (/* @__PURE__ */ new Date(j.date + "T12:00:00")).toLocaleDateString("pt-PT", { day: "2-digit", month: "short" })), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 12px", fontWeight: 700 } }, fmt(j.val || 0)), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 12px", fontWeight: 700 } }, fmt(withIva(j.val || 0, j))), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 12px" } }, /* @__PURE__ */ React.createElement(Bdg, { label: ivaT === "autoliquida\xE7\xE3o" ? "Autoliq." : "Normal", bg: ivaT === "autoliquida\xE7\xE3o" ? "#F3E8FF" : "#EFF6FF", tx: ivaT === "autoliquida\xE7\xE3o" ? "#7C3AED" : "#2E6DA4", sz: 10 })));
   })))));
 }
 function Routes() {
@@ -316,8 +331,8 @@ function Routes() {
   const [clients, setClients] = useState([]);
   useEffect(function() {
     Promise.all([
-      db.list("servicos", "?select=*&order=date"),
-      db.list("funcionarios", "?select=*&order=id"),
+      db.list("servi\xE7os", "?select=*&order=date"),
+      db.list("funcion\xE1rios", "?select=*&order=id"),
       db.list("clientes", "?select=*&order=id")
     ]).then(function(results) {
       setJobs(results[0] || []);
@@ -334,7 +349,7 @@ function Routes() {
     return Array.from({ length: 5 }, function(_, i) {
       const dt = new Date(monday);
       dt.setDate(monday.getDate() + i);
-      return dt.toISOString().split("T")[0];
+      return localDateStr(dt);
     });
   }
   function generatePreview() {
@@ -385,9 +400,9 @@ function Routes() {
   async function confirmGenerate() {
     setGenerating(true);
     for (let i = 0; i < preview.length; i++) {
-      await db.insert("servicos", preview[i]);
+      await db.insert("servi\xE7os", preview[i]);
     }
-    const allJobs = await db.list("servicos", "?select=*&order=date");
+    const allJobs = await db.list("servi\xE7os", "?select=*&order=date");
     setJobs(allJobs || []);
     setShowGen(false);
     setPreview([]);
@@ -397,7 +412,7 @@ function Routes() {
     return EC[id] || "#64748B";
   }
   const dates = getWeek(wk);
-  const todayStr = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+  const todayStr = localDateStr();
   const wJobs = jobs.filter(function(j) {
     return dates.indexOf(j.date) !== -1;
   });
@@ -406,7 +421,7 @@ function Routes() {
   }, 0);
   async function drop(d) {
     if (!drag) return;
-    const updated = await db.update("servicos", drag.id, { date: d });
+    const updated = await db.update("servi\xE7os", drag.id, { date: d });
     if (updated) {
       setJobs(function(p) {
         return p.map(function(j) {
@@ -433,7 +448,7 @@ function Routes() {
       iva_override: selClient ? selClient.iva_type : "normal",
       paid: false
     });
-    const inserted = await db.insert("servicos", j);
+    const inserted = await db.insert("servi\xE7os", j);
     if (inserted) {
       setJobs(jobs.concat([inserted]));
       setShowNew(false);
@@ -452,7 +467,7 @@ function Routes() {
   }
   async function toggleStatus(job) {
     const newStatus = job.status === "completed" ? "pending" : "completed";
-    const updated = await db.update("servicos", job.id, { status: newStatus });
+    const updated = await db.update("servi\xE7os", job.id, { status: newStatus });
     if (updated) {
       setJobs(function(p) {
         return p.map(function(j) {
@@ -464,8 +479,8 @@ function Routes() {
   }
   async function togglePaid(job) {
     const newPaid = !job.paid;
-    const patch = newPaid ? { paid: true, paid_date: (/* @__PURE__ */ new Date()).toISOString().split("T")[0] } : { paid: false, paid_date: null };
-    const res = await fetch(SUPABASE_URL + "/rest/v1/servicos?id=eq." + encodeURIComponent(job.id), {
+    const patch = newPaid ? { paid: true, paid_date: localDateStr() } : { paid: false, paid_date: null };
+    const res = await fetch(SUPABASE_URL + "/rest/v1/servi\xE7os?id=eq." + encodeURIComponent(job.id), {
       method: "PATCH",
       headers: dbHeaders(),
       body: JSON.stringify(patch)
@@ -481,7 +496,7 @@ function Routes() {
     }
   }
   async function deleteJob(job) {
-    const ok = await db.remove("servicos", job.id);
+    const ok = await db.remove("servi\xE7os", job.id);
     if (ok) {
       setJobs(function(p) {
         return p.filter(function(j) {
@@ -508,13 +523,13 @@ function Routes() {
     setShowGen(false);
     setPreview([]);
   }, style: Object.assign({}, btnX, { flex: 1 }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: confirmGenerate, disabled: generating || preview.length === 0, style: Object.assign({}, btnG, { flex: 2, opacity: preview.length === 0 ? 0.5 : 1 }) }, generating ? "A criar servi\xE7os..." : "Confirmar e criar " + preview.length + " servi\xE7os")))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 16 } }, [
-    { l: "Total semana", v: wJobs.length + " servicos", c: "#2E6DA4" },
-    { l: "Concluidos / Pendentes", v: wJobs.filter(function(j) {
+    { l: "Total semana", v: wJobs.length + " servi\xE7os", c: "#2E6DA4" },
+    { l: "Conclu\xEDdos / Pendentes", v: wJobs.filter(function(j) {
       return j.status === "completed";
     }).length + " / " + wJobs.filter(function(j) {
       return j.status !== "completed";
     }).length, c: "#0F766E" },
-    { l: "Faturacao prevista", v: fmt(wTotal), c: "#7C3AED" }
+    { l: "Fatura\xE7\xE3o prevista", v: fmt(wTotal), c: "#7C3AED" }
   ].map(function(k) {
     return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 16 }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, k.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: k.c } }, k.v));
   })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { padding: "12px 20px", marginBottom: 14, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }) }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#64748B", fontWeight: 700, textTransform: "uppercase" } }, "Equipa:"), emps.map(function(e) {
@@ -648,8 +663,8 @@ function HistoricoVisitas(props) {
     setLoading(true);
     const from = /* @__PURE__ */ new Date();
     from.setDate(from.getDate() - periodo);
-    const fromStr = from.toISOString().split("T")[0];
-    db.list("servicos", "?select=*&client_id=eq." + encodeURIComponent(cliente.id) + "&date=gte." + fromStr + "&order=date.desc").then(function(rows) {
+    const fromStr = localDateStr(from);
+    db.list("servi\xE7os", "?select=*&client_id=eq." + encodeURIComponent(cliente.id) + "&date=gte." + fromStr + "&order=date.desc").then(function(rows) {
       setVisitas(rows || []);
       setLoading(false);
     });
@@ -832,13 +847,13 @@ function Clients() {
     setDeleting(true);
     const cid = encodeURIComponent(sel.id);
     const [relatedJobs, relatedContacts, relatedNotes] = await Promise.all([
-      db.list("servicos", "?select=id&client_id=eq." + cid),
+      db.list("servi\xE7os", "?select=id&client_id=eq." + cid),
       db.list("client_contacts", "?select=id&client_id=eq." + cid),
       db.list("client_notes", "?select=id&client_id=eq." + cid)
     ]);
     const toDelete = [
       ...(relatedJobs || []).map(function(x) {
-        return { table: "servicos", id: x.id };
+        return { table: "servi\xE7os", id: x.id };
       }),
       ...(relatedContacts || []).map(function(x) {
         return { table: "client_contacts", id: x.id };
@@ -868,7 +883,7 @@ function Clients() {
   useEffect(function() {
     Promise.all([
       db.list("clientes", "?select=*&order=id"),
-      db.list("funcionarios", "?select=*&order=id")
+      db.list("funcion\xE1rios", "?select=*&order=id")
     ]).then(function(results) {
       setClients(results[0] || []);
       if (results[1] && results[1].length) setEmps(results[1]);
@@ -1023,9 +1038,47 @@ function Clients() {
       setEditForm(Object.assign({}, editForm, { price_per_hour: parseFloat(e.target.value) || 0 }));
     } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tipo de IVA"), /* @__PURE__ */ React.createElement("select", { style: inp, value: editForm.iva_type, onChange: function(e) {
       setEditForm(Object.assign({}, editForm, { iva_type: e.target.value }));
-    } }, /* @__PURE__ */ React.createElement("option", { value: "normal" }, "Normal (23%)"), /* @__PURE__ */ React.createElement("option", { value: "autoliquidacao" }, "Autoliquida\xE7\xE3o"))), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Notas internas"), /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 60, resize: "vertical" }), value: editForm.notes, onChange: function(e) {
+    } }, /* @__PURE__ */ React.createElement("option", { value: "normal" }, "Normal (23%)"), /* @__PURE__ */ React.createElement("option", { value: "autoliquida\xE7\xE3o" }, "Autoliquida\xE7\xE3o"))), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Notas internas"), /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 60, resize: "vertical" }), value: editForm.notes, onChange: function(e) {
       setEditForm(Object.assign({}, editForm, { notes: e.target.value }));
-    } })))) : null, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 } }, /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Contacto"), [["Responsavel", sel.contact], ["Telefone", sel.phone], ["Email", sel.email], ["Morada", sel.address]].map(function(pair) {
+    } })), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Dias de visita"), (editForm.schedule || []).map(function(d, i) {
+      return /* @__PURE__ */ React.createElement("div", { key: i, style: { background: "#F8FAFC", borderRadius: 10, padding: "12px 14px", marginBottom: 10, border: "1px solid #E2EBF4" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 10, marginBottom: 10, alignItems: "flex-end" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Dia"), /* @__PURE__ */ React.createElement("select", { style: inp, value: d.day, onChange: function(e) {
+        const s = editForm.schedule.slice();
+        s[i] = Object.assign({}, s[i], { day: parseInt(e.target.value) });
+        setEditForm(Object.assign({}, editForm, { schedule: s }));
+      } }, DAYS.map(function(n, di) {
+        return /* @__PURE__ */ React.createElement("option", { key: di, value: di }, n);
+      }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Entrada"), /* @__PURE__ */ React.createElement("select", { style: inp, value: d.time_start || "09:00", onChange: function(e) {
+        const s = editForm.schedule.slice();
+        s[i] = Object.assign({}, s[i], { time_start: e.target.value });
+        setEditForm(Object.assign({}, editForm, { schedule: s }));
+      } }, TIME_SLOTS.map(function(t) {
+        return /* @__PURE__ */ React.createElement("option", { key: t, value: t }, t);
+      }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Sa\xEDda"), /* @__PURE__ */ React.createElement("select", { style: inp, value: d.time_end || "12:00", onChange: function(e) {
+        const s = editForm.schedule.slice();
+        s[i] = Object.assign({}, s[i], { time_end: e.target.value });
+        setEditForm(Object.assign({}, editForm, { schedule: s }));
+      } }, TIME_SLOTS.map(function(t) {
+        return /* @__PURE__ */ React.createElement("option", { key: t, value: t }, t);
+      }))), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+        const s = editForm.schedule.filter(function(_, j) {
+          return j !== i;
+        });
+        setEditForm(Object.assign({}, editForm, { schedule: s }));
+      }, style: Object.assign({}, btnR, { padding: "9px 12px" }) }, "X")), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Equipa"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 } }, emps.map(function(e) {
+        const selected = (d.team_ids || []).indexOf(e.id) !== -1;
+        return /* @__PURE__ */ React.createElement("div", { key: e.id, onClick: function() {
+          const s = editForm.schedule.slice();
+          const ids = s[i].team_ids || [];
+          const has = ids.indexOf(e.id) !== -1;
+          s[i] = Object.assign({}, s[i], { team_ids: has ? ids.filter(function(x) {
+            return x !== e.id;
+          }) : ids.concat([e.id]) });
+          setEditForm(Object.assign({}, editForm, { schedule: s }));
+        }, style: { display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 7, border: "1.5px solid " + (selected ? "#2E6DA4" : "#E2EBF4"), background: selected ? "#EFF6FF" : "#fff", cursor: "pointer" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 20, height: 20, borderRadius: "50%", background: selected ? EC[e.id] || "#2E6DA4" : "#CBD5E1", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 9, fontWeight: 700 } }, e.av || e.name.slice(0, 2).toUpperCase()), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: selected ? "#2E6DA4" : "#64748B" } }, e.name.split(" ")[0]));
+      }))));
+    }), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+      setEditForm(Object.assign({}, editForm, { schedule: (editForm.schedule || []).concat([{ day: 0, team_ids: [], time_start: "09:00", time_end: "12:00" }]) }));
+    }, style: Object.assign({}, btnO, { fontSize: 13, padding: "8px 16px" }) }, "+ Adicionar dia de visita")))) : null, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 } }, /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Contacto"), [["Respons\xE1vel", sel.contact], ["Telefone", sel.phone], ["Email", sel.email], ["Morada", sel.address]].map(function(pair) {
       return /* @__PURE__ */ React.createElement("div", { key: pair[0], style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: lbl }, pair[0]), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "#334155" } }, pair[1]));
     })), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Servico"), [["Tipo", sel.service], ["Frequ\xEAncia", sel.freq]].map(function(pair) {
       return /* @__PURE__ */ React.createElement("div", { key: pair[0], style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: lbl }, pair[0]), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "#334155" } }, pair[1]));
@@ -1083,7 +1136,7 @@ function Clients() {
       return /* @__PURE__ */ React.createElement("button", { key: t, onClick: function() {
         setForm(Object.assign({}, form, { type: t }));
       }, style: Object.assign({}, form.type === t ? btn : btnO, { flex: 1, padding: "9px 0", fontSize: 13 }) }, t);
-    }))), [["name", "Nome", "Ex: Construtora Silva"], ["contact", "Responsavel", "Nome do responsavel"], ["phone", "Telefone", "9XX XXX XXX"], ["email", "Email", "email@exemplo.pt"], ["address", "Morada", "Rua, N, CP, Local"]].map(function(f) {
+    }))), [["name", "Nome", "Ex: Construtora Silva"], ["contact", "Respons\xE1vel", "Nome do responsavel"], ["phone", "Telefone", "9XX XXX XXX"], ["email", "Email", "email@exemplo.pt"], ["address", "Morada", "Rua, N, CP, Local"]].map(function(f) {
       const k = f[0], la = f[1], ph = f[2];
       return /* @__PURE__ */ React.createElement("div", { key: k, style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, la), /* @__PURE__ */ React.createElement("input", { style: inp, value: form[k], onChange: function(e) {
         const u = Object.assign({}, form);
@@ -1119,22 +1172,26 @@ function Clients() {
       setForm(Object.assign({}, form, { price_per_hour: parseFloat(e.target.value) || 0 }));
     } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tipo de IVA"), /* @__PURE__ */ React.createElement("select", { style: inp, value: form.iva_type || "normal", onChange: function(e) {
       setForm(Object.assign({}, form, { iva_type: e.target.value }));
-    } }, /* @__PURE__ */ React.createElement("option", { value: "normal" }, "Normal (23%)"), /* @__PURE__ */ React.createElement("option", { value: "autoliquidacao" }, "Autoliquida\xE7\xE3o"))))), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 12 } }, "Dias de visita"), (form.schedule || []).map(function(d, i) {
+    } }, /* @__PURE__ */ React.createElement("option", { value: "normal" }, "Normal (23%)"), /* @__PURE__ */ React.createElement("option", { value: "autoliquida\xE7\xE3o" }, "Autoliquida\xE7\xE3o"))))), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 12 } }, "Dias de visita"), (form.schedule || []).map(function(d, i) {
       return /* @__PURE__ */ React.createElement("div", { key: i, style: { background: "#F8FAFC", borderRadius: 10, padding: "14px 16px", marginBottom: 12, border: "1px solid #E2EBF4" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 10, marginBottom: 12, alignItems: "flex-end" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Dia"), /* @__PURE__ */ React.createElement("select", { style: inp, value: d.day, onChange: function(e) {
         const s = form.schedule.slice();
         s[i] = Object.assign({}, s[i], { day: parseInt(e.target.value) });
         setForm(Object.assign({}, form, { schedule: s }));
       } }, DAYS.map(function(n, di) {
         return /* @__PURE__ */ React.createElement("option", { key: di, value: di }, n);
-      }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Entrada"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 90 }), type: "text", value: d.time_start || "09:00", onChange: function(e) {
+      }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Entrada"), /* @__PURE__ */ React.createElement("select", { style: inp, value: d.time_start || "09:00", onChange: function(e) {
         const s = form.schedule.slice();
         s[i] = Object.assign({}, s[i], { time_start: e.target.value });
         setForm(Object.assign({}, form, { schedule: s }));
-      }, placeholder: "09:00", maxLength: 5 })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Sa\xEDda"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 90 }), type: "text", value: d.time_end || "12:00", onChange: function(e) {
+      } }, TIME_SLOTS.map(function(t) {
+        return /* @__PURE__ */ React.createElement("option", { key: t, value: t }, t);
+      }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Sa\xEDda"), /* @__PURE__ */ React.createElement("select", { style: inp, value: d.time_end || "12:00", onChange: function(e) {
         const s = form.schedule.slice();
         s[i] = Object.assign({}, s[i], { time_end: e.target.value });
         setForm(Object.assign({}, form, { schedule: s }));
-      }, placeholder: "12:00", maxLength: 5 })), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+      } }, TIME_SLOTS.map(function(t) {
+        return /* @__PURE__ */ React.createElement("option", { key: t, value: t }, t);
+      }))), /* @__PURE__ */ React.createElement("button", { onClick: function() {
         const s = form.schedule.filter(function(_, j) {
           return j !== i;
         });
@@ -1168,8 +1225,8 @@ function HistoricoFuncionario(props) {
     setLoading(true);
     const from = /* @__PURE__ */ new Date();
     from.setDate(from.getDate() - periodo);
-    const fromStr = from.toISOString().split("T")[0];
-    db.list("servicos", "?select=*&date=gte." + fromStr + "&order=date.desc").then(function(rows) {
+    const fromStr = localDateStr(from);
+    db.list("servi\xE7os", "?select=*&date=gte." + fromStr + "&order=date.desc").then(function(rows) {
       setVisitas((rows || []).filter(function(j) {
         return (j.team || []).indexOf(empId) !== -1;
       }));
@@ -1216,7 +1273,7 @@ function Employees() {
   const [newForm, setNewForm] = useState({ id: "", name: "", role: "T\xE9cnico", pin: "", av: "" });
   const [errMsg, setErrMsg] = useState("");
   useEffect(function() {
-    db.list("funcionarios", "?select=*&order=id").then(function(rows) {
+    db.list("funcion\xE1rios", "?select=*&order=id").then(function(rows) {
       setEmps(rows || []);
       setLoading(false);
     });
@@ -1230,7 +1287,7 @@ function Employees() {
   async function saveEdit() {
     setErrMsg("");
     if (!editForm.name.trim()) {
-      setErrMsg("O nome nao pode estar vazio.");
+      setErrMsg("O nome n\xE3o pode estar vazio.");
       return;
     }
     if (!/^[0-9]{6}$/.test(editForm.pin)) {
@@ -1241,7 +1298,7 @@ function Employees() {
       return e.id !== sel.id && e.pin === editForm.pin;
     });
     if (dup) {
-      setErrMsg("Esse PIN ja esta a ser usado por " + dup.name + ".");
+      setErrMsg("Esse PIN j\xE1 est\xE1 a ser usado por " + dup.name + ".");
       return;
     }
     setSaving(true);
@@ -1251,7 +1308,7 @@ function Employees() {
       pin: editForm.pin,
       av: (editForm.av || editForm.name.slice(0, 2)).toUpperCase()
     };
-    const updated = await db.update("funcionarios", sel.id, patch);
+    const updated = await db.update("funcion\xE1rios", sel.id, patch);
     setSaving(false);
     if (updated) {
       setEmps(function(p) {
@@ -1265,13 +1322,13 @@ function Employees() {
         setSaved(false);
       }, 1500);
     } else {
-      setErrMsg("Erro ao guardar. Verifica a ligacao.");
+      setErrMsg("Erro ao guardar. Verifica a liga\xE7\xE3o.");
     }
   }
   async function saveNew() {
     setErrMsg("");
     if (!newForm.name.trim()) {
-      setErrMsg("O nome nao pode estar vazio.");
+      setErrMsg("O nome n\xE3o pode estar vazio.");
       return;
     }
     if (!/^[0-9]{6}$/.test(newForm.pin)) {
@@ -1282,7 +1339,7 @@ function Employees() {
       return e.pin === newForm.pin;
     });
     if (dup) {
-      setErrMsg("Esse PIN ja esta a ser usado por " + dup.name + ".");
+      setErrMsg("Esse PIN j\xE1 est\xE1 a ser usado por " + dup.name + ".");
       return;
     }
     const existingIds = emps.map(function(e) {
@@ -1302,7 +1359,7 @@ function Employees() {
       av: (newForm.av || newForm.name.slice(0, 2)).toUpperCase(),
       rating: null
     };
-    const inserted = await db.insertVerbose("funcionarios", nf);
+    const inserted = await db.insertVerbose("funcion\xE1rios", nf);
     if (inserted.ok) {
       setEmps(emps.concat([inserted.data]));
       setNewForm({ id: "", name: "", role: "T\xE9cnico", pin: "", av: "" });
@@ -1312,7 +1369,7 @@ function Employees() {
         setView("list");
       }, 1200);
     } else {
-      setErrMsg("Erro ao criar funcionario: " + inserted.error);
+      setErrMsg("Erro ao criar funcion\xE1rio: " + inserted.error);
     }
   }
   if (loading) {
@@ -1336,16 +1393,16 @@ function Employees() {
       setEditForm(Object.assign({}, editForm, { name: e.target.value }));
     }, placeholder: "Nome completo" })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Funcao"), /* @__PURE__ */ React.createElement("input", { style: inp, value: editForm.role, onChange: function(e) {
       setEditForm(Object.assign({}, editForm, { role: e.target.value }));
-    }, placeholder: "Ex: Tecnico Senior" })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Iniciais do avatar"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 100, textTransform: "uppercase" }), value: editForm.av, onChange: function(e) {
+    }, placeholder: "Ex: T\xE9cnico Senior" })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Iniciais do avatar"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 100, textTransform: "uppercase" }), value: editForm.av, onChange: function(e) {
       setEditForm(Object.assign({}, editForm, { av: e.target.value.slice(0, 2) }));
     }, placeholder: "Ex: CM", maxLength: 2 })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "PIN (6 d\xEDgitos)"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 140, fontFamily: "monospace", fontSize: 16 }), value: editForm.pin, onChange: function(e) {
       setEditForm(Object.assign({}, editForm, { pin: e.target.value.replace(/[^0-9]/g, "").slice(0, 6) }));
-    }, placeholder: "000000", maxLength: 6 })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 18 } }, /* @__PURE__ */ React.createElement("button", { onClick: saveEdit, disabled: saving, style: Object.assign({}, btn, { flex: 1, opacity: saving ? 0.6 : 1 }) }, saving ? "A guardar..." : "Guardar Alteracoes"))), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Informa\xE7\xE3o"), sel.rating ? /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: lbl }, "Avalia\xE7\xE3o m\xE9dia"), /* @__PURE__ */ React.createElement(Stars, { r: sel.rating }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 4 } }, sel.rating, " estrelas")) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8" } }, "Ainda sem avalia\xE7\xF5es registadas."), /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#2E6DA4", marginTop: 14, lineHeight: 1.6 } }, "O PIN \xE9 usado pelo funcion\xE1rio para entrar na \xE1rea de Funcion\xE1rios da app."))), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginTop: 20 }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "Hist\xF3rico de picagens"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    }, placeholder: "000000", maxLength: 6 })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 18 } }, /* @__PURE__ */ React.createElement("button", { onClick: saveEdit, disabled: saving, style: Object.assign({}, btn, { flex: 1, opacity: saving ? 0.6 : 1 }) }, saving ? "A guardar..." : "Guardar Altera\xE7\xF5es"))), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Informa\xE7\xE3o"), sel.rating ? /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: lbl }, "Avalia\xE7\xE3o m\xE9dia"), /* @__PURE__ */ React.createElement(Stars, { r: sel.rating }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 4 } }, sel.rating, " estrelas")) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8" } }, "Ainda sem avalia\xE7\xF5es registadas."), /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#2E6DA4", marginTop: 14, lineHeight: 1.6 } }, "O PIN \xE9 usado pelo funcion\xE1rio para entrar na \xE1rea de Funcion\xE1rios da app."))), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginTop: 20 }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "Hist\xF3rico de picagens"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
       const periodo = 30;
       const from = /* @__PURE__ */ new Date();
       from.setDate(from.getDate() - periodo);
-      const fromStr = from.toISOString().split("T")[0];
-      db.list("servicos", "?select=*&date=gte." + fromStr + "&order=date.desc").then(function(rows) {
+      const fromStr = localDateStr(from);
+      db.list("servi\xE7os", "?select=*&date=gte." + fromStr + "&order=date.desc").then(function(rows) {
         const myRows = (rows || []).filter(function(j) {
           return (j.team || []).indexOf(sel.id) !== -1;
         });
@@ -1396,7 +1453,7 @@ function Employees() {
       setNewForm(Object.assign({}, newForm, { name: e.target.value }));
     }, placeholder: "Nome completo" })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Funcao"), /* @__PURE__ */ React.createElement("input", { style: inp, value: newForm.role, onChange: function(e) {
       setNewForm(Object.assign({}, newForm, { role: e.target.value }));
-    }, placeholder: "Ex: Tecnico" })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Iniciais do avatar (opcional)"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 100, textTransform: "uppercase" }), value: newForm.av, onChange: function(e) {
+    }, placeholder: "Ex: T\xE9cnico" })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Iniciais do avatar (opcional)"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 100, textTransform: "uppercase" }), value: newForm.av, onChange: function(e) {
       setNewForm(Object.assign({}, newForm, { av: e.target.value.slice(0, 2) }));
     }, placeholder: "Ex: CM", maxLength: 2 })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "PIN (6 d\xEDgitos)"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 140, fontFamily: "monospace", fontSize: 16 }), value: newForm.pin, onChange: function(e) {
       setNewForm(Object.assign({}, newForm, { pin: e.target.value.replace(/[^0-9]/g, "").slice(0, 6) }));
@@ -1412,9 +1469,9 @@ function Avaliacoes() {
   const [filtro, setFiltro] = useState("todas");
   useEffect(function() {
     Promise.all([
-      db.list("avaliacoes", "?select=*&order=created_at.desc"),
+      db.list("avalia\xE7\xF5es", "?select=*&order=created_at.desc"),
       db.list("clientes", "?select=id,name"),
-      db.list("funcionarios", "?select=id,name,av")
+      db.list("funcion\xE1rios", "?select=id,name,av")
     ]).then(function(results) {
       setAvs(results[0] || []);
       const cm = {};
@@ -1496,7 +1553,7 @@ function PedidosExtra() {
   }
   async function openSwap(p) {
     setSwapPedido(p);
-    const jobs = await db.list("servicos", "?select=*&client_id=eq." + encodeURIComponent(p.client_id) + "&status=neq.completed&order=date");
+    const jobs = await db.list("servi\xE7os", "?select=*&client_id=eq." + encodeURIComponent(p.client_id) + "&status=neq.completed&order=date");
     setClientJobs(jobs || []);
     setSelJob(null);
     setTaskOut("");
@@ -1512,7 +1569,7 @@ function PedidosExtra() {
     const newCl = (job.cl || []).filter(function(t) {
       return t !== taskOut;
     }).concat([taskIn]);
-    await db.update("servicos", selJob, { cl: newCl });
+    await db.update("servi\xE7os", selJob, { cl: newCl });
     await updateStatus(swapPedido.id, "aprovado");
     setSwapJob(null);
     setSwapPedido(null);
@@ -1577,15 +1634,15 @@ function Manager(props) {
   const [monthDivida, setMonthDivida] = useState(0);
   useEffect(function() {
     const now = /* @__PURE__ */ new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+    const monthStart = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
+    const monthEnd = localDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
     Promise.all([
       db.list("clientes", "?select=id,iva_type"),
-      db.list("servicos", "?select=*&order=date&date=eq." + today),
-      db.list("servicos", "?select=*&order=date&limit=4"),
-      db.list("funcionarios", "?select=*&order=id"),
+      db.list("servi\xE7os", "?select=*&order=date&date=eq." + today),
+      db.list("servi\xE7os", "?select=*&order=date&limit=4"),
+      db.list("funcion\xE1rios", "?select=*&order=id"),
       db.list("pedidos_extra", "?select=id&status=eq.pendente"),
-      db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd + "&status=eq.completed")
+      db.list("servi\xE7os", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd + "&status=eq.completed")
     ]).then(function(results) {
       setClientCount(results[0] ? results[0].length : 0);
       setTodayJobs(results[1] || []);
@@ -1599,7 +1656,7 @@ function Manager(props) {
       const monthJobs = results[5] || [];
       function withIva(j) {
         const ivaT = j.iva_override || (cm[j.client_id] ? cm[j.client_id].iva_type : "normal") || "normal";
-        return ivaT === "autoliquidacao" ? j.val || 0 : (j.val || 0) * 1.23;
+        return ivaT === "autoliquida\xE7\xE3o" ? j.val || 0 : (j.val || 0) * 1.23;
       }
       const fat = monthJobs.reduce(function(s, j) {
         return s + withIva(j);
@@ -1620,7 +1677,7 @@ function Manager(props) {
     { k: "routes", l: "Rotas" },
     { k: "clients", l: "Clientes" },
     { k: "pedidos", l: "Pedidos Extra" },
-    { k: "avaliacoes", l: "Avalia\xE7\xF5es" },
+    { k: "avalia\xE7\xF5es", l: "Avalia\xE7\xF5es" },
     { k: "employees", l: "Funcion\xE1rios" }
   ];
   return /* @__PURE__ */ React.createElement("div", { style: { background: "#F4F8FB", minHeight: "100vh", color: "#334155" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 220, background: "#1A3A5C", minHeight: "100vh", display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "24px 20px 20px", borderBottom: "1px solid rgba(255,255,255,0.1)" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: "#fff" } }, "SamorClean"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#38B6D8", fontWeight: 600, letterSpacing: 1.5, marginTop: 2 } }, "GEST\xC3O OPERACIONAL")), /* @__PURE__ */ React.createElement("nav", { style: { flex: 1, padding: "12px" } }, navItems.map(function(item) {
@@ -1651,7 +1708,7 @@ function Manager(props) {
     return (b.rating || 0) - (a.rating || 0);
   }).map(function(e, i) {
     return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: i === 0 ? "#F59E0B" : i === 1 ? "#94A3B8" : "#CD7C54", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 11, flexShrink: 0 } }, i + 1), /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 30, color: ["#2E6DA4", "#0F766E", "#7C3AED", "#C2410C"][i] || "#64748B" }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, e.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, e.role)), /* @__PURE__ */ React.createElement(Stars, { r: e.rating }));
-  })))) : null, view === "finance" ? /* @__PURE__ */ React.createElement(Finance, null) : null, view === "routes" ? /* @__PURE__ */ React.createElement(Routes, null) : null, view === "clients" ? /* @__PURE__ */ React.createElement(Clients, null) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "avaliacoes" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, null) : null));
+  })))) : null, view === "finance" ? /* @__PURE__ */ React.createElement(Finance, null) : null, view === "routes" ? /* @__PURE__ */ React.createElement(Routes, null) : null, view === "clients" ? /* @__PURE__ */ React.createElement(Clients, null) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "avalia\xE7\xF5es" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, null) : null));
 }
 function Employee(props) {
   const onExit = props.onExit;
@@ -1676,7 +1733,7 @@ function Employee(props) {
   const [earlyLeaveEmp, setEarlyLeaveEmp] = useState(null);
   const [showEarlyLeave, setShowEarlyLeave] = useState(false);
   useEffect(function() {
-    db.list("funcionarios", "?select=*&order=id").then(function(rows) {
+    db.list("funcion\xE1rios", "?select=*&order=id").then(function(rows) {
       setEmps(rows && rows.length ? rows : EMPS);
     });
   }, []);
@@ -1690,9 +1747,9 @@ function Employee(props) {
       next14.setDate(next14.getDate() + 14);
       const next14str = next14.toISOString().split("T")[0];
       Promise.all([
-        db.list("servicos", "?select=*&date=eq." + today),
-        db.list("servicos", "?select=*&date=gte." + past7str + "&date=lt." + today + "&order=date.desc"),
-        db.list("servicos", "?select=*&date=gt." + today + "&date=lte." + next14str + "&order=date")
+        db.list("servi\xE7os", "?select=*&date=eq." + today),
+        db.list("servi\xE7os", "?select=*&date=gte." + past7str + "&date=lt." + today + "&order=date.desc"),
+        db.list("servi\xE7os", "?select=*&date=gt." + today + "&date=lte." + next14str + "&order=date")
       ]).then(function(results) {
         setJobs(results[0] || []);
         setHistJobs(results[1] || []);
@@ -1760,7 +1817,7 @@ function Employee(props) {
     } else {
       doneTasks.push(t);
     }
-    const updated = await db.update("servicos", job.id, { done_tasks: doneTasks });
+    const updated = await db.update("servi\xE7os", job.id, { done_tasks: doneTasks });
     if (updated) {
       setJobs(function(p) {
         return p.map(function(j) {
@@ -1773,7 +1830,7 @@ function Employee(props) {
   async function startJob(job) {
     const time = (/* @__PURE__ */ new Date()).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
     setCin(time);
-    const updated = await db.update("servicos", job.id, { check_in: time });
+    const updated = await db.update("servi\xE7os", job.id, { check_in: time });
     if (updated) {
       setJobs(function(p) {
         return p.map(function(j) {
@@ -1786,7 +1843,7 @@ function Employee(props) {
   async function finishJob(job) {
     const time = (/* @__PURE__ */ new Date()).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
     setCout(time);
-    const updated = await db.update("servicos", job.id, { check_out: time, status: "completed" });
+    const updated = await db.update("servi\xE7os", job.id, { check_out: time, status: "completed" });
     if (updated) {
       setJobs(function(p) {
         return p.map(function(j) {
@@ -1803,11 +1860,11 @@ function Employee(props) {
     for (let i = 0; i < todayMyJobs.length; i++) {
       const j = todayMyJobs[i];
       let newTeam = mateId ? [emp.id, mateId] : [emp.id];
-      await db.update("servicos", j.id, { team: newTeam });
+      await db.update("servi\xE7os", j.id, { team: newTeam });
     }
     setTeamConfirm(mateId);
     setPhase("dash");
-    db.list("servicos", "?select=*&date=eq." + today).then(function(rows) {
+    db.list("servi\xE7os", "?select=*&date=eq." + today).then(function(rows) {
       setJobs(rows || []);
     });
   }
@@ -1822,10 +1879,10 @@ function Employee(props) {
       const newTeam = (j.team || []).filter(function(id) {
         return id !== leaveEmpId;
       });
-      await db.update("servicos", j.id, { early_leave: earlyLeave, team: newTeam });
+      await db.update("servi\xE7os", j.id, { early_leave: earlyLeave, team: newTeam });
     }
     setShowEarlyLeave(false);
-    db.list("servicos", "?select=*&date=eq." + today).then(function(rows) {
+    db.list("servi\xE7os", "?select=*&date=eq." + today).then(function(rows) {
       setJobs(rows || []);
     });
   }
@@ -1964,14 +2021,14 @@ function Employee(props) {
     { l: "Avalia\xE7\xE3o", v: emp.rating ? emp.rating + "\u2605" : "--" }
   ].map(function(s) {
     return /* @__PURE__ */ React.createElement("div", { key: s.l, style: { background: "rgba(255,255,255,0.08)", borderRadius: 10, padding: "10px 8px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 18 } }, s.v), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.4)", fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginTop: 2 } }, s.l));
-  }))), /* @__PURE__ */ React.createElement("div", { style: { padding: "16px 16px 32px" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 18 } }, ["hoje", "historico", "semana", "assiduidade"].map(function(t) {
+  }))), /* @__PURE__ */ React.createElement("div", { style: { padding: "16px 16px 32px" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 18 } }, ["hoje", "hist\xF3rico", "semana", "assiduidade"].map(function(t) {
     const labels = { hoje: "Hoje", historico: "Hist\xF3rico", semana: "Pr\xF3xima Semana", assiduidade: "Assiduidade" };
     return /* @__PURE__ */ React.createElement("button", { key: t, onClick: function() {
       setDashTab(t);
     }, style: { flex: 1, padding: "9px 4px", borderRadius: 8, border: "none", background: dashTab === t ? "#2E6DA4" : "#fff", color: dashTab === t ? "#fff" : "#64748B", fontWeight: 700, fontSize: 11, cursor: "pointer", boxShadow: dashTab === t ? "none" : "0 1px 4px rgba(0,0,0,0.07)" } }, labels[t]);
   })), dashTab === "hoje" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 14 } }, (/* @__PURE__ */ new Date()).toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long" })), loadingJobs ? /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar servi\xE7os...") : myJ.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16 } }, "Sem servi\xE7os para hoje")) : myJ.map(function(job) {
     return /* @__PURE__ */ React.createElement(JobCard, { key: job.id, job });
-  })), dashTab === "historico" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 14 } }, "\xDAltimos 7 dias"), loadingJobs ? /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...") : myHist.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16 } }, "Sem hist\xF3rico")) : myHist.map(function(job) {
+  })), dashTab === "hist\xF3rico" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 14 } }, "\xDAltimos 7 dias"), loadingJobs ? /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...") : myHist.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16 } }, "Sem hist\xF3rico")) : myHist.map(function(job) {
     return /* @__PURE__ */ React.createElement(JobCard, { key: job.id, job, isHist: true });
   })), dashTab === "semana" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 14 } }, "Pr\xF3ximos servi\xE7os agendados"), loadingJobs ? /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...") : myWeek.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16 } }, "Sem servi\xE7os agendados"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, marginTop: 8 } }, "Quando o gestor gerar a semana, aparece aqui.")) : myWeek.map(function(job) {
     return /* @__PURE__ */ React.createElement(JobCard, { key: job.id, job, isHist: true });
@@ -2006,7 +2063,7 @@ function NotaForm(props) {
       setTextoNota("");
     }, 2e3);
   }
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16 } }, [["geral", "Nota geral"], ["servico", "Sobre um servi\xE7o"]].map(function(o) {
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16 } }, [["geral", "Nota geral"], ["servi\xE7o", "Sobre um servi\xE7o"]].map(function(o) {
     return /* @__PURE__ */ React.createElement("button", { key: o[0], onClick: function() {
       setTipoNota(o[0]);
     }, style: { flex: 1, padding: "10px 0", borderRadius: 8, border: "1.5px solid " + (tipoNota === o[0] ? "#2E6DA4" : "#E2EBF4"), background: tipoNota === o[0] ? "#2E6DA4" : "#F8FAFC", color: tipoNota === o[0] ? "#fff" : "#64748B", fontWeight: 700, fontSize: 13, cursor: "pointer" } }, o[1]);
@@ -2021,6 +2078,42 @@ function NotaForm(props) {
       placeholder: tipoNota === "geral" ? "Ex: Por favor trazer produto espec\xEDfico para m\xE1rmore..." : "Ex: Na \xFAltima limpeza o espelho da casa de banho ficou com marcas..."
     }
   ), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 12 } }, "Esta nota fica vis\xEDvel ao gestor durante 30 dias."), sent ? /* @__PURE__ */ React.createElement("div", { style: { background: "#DCFCE7", borderRadius: 10, padding: "14px", textAlign: "center", color: "#15803D", fontWeight: 700 } }, "Nota enviada com sucesso!") : /* @__PURE__ */ React.createElement("button", { onClick: enviarNota, disabled: !textoNota.trim(), style: { width: "100%", background: textoNota.trim() ? "#2E6DA4" : "#94A3B8", border: "none", borderRadius: 12, padding: "14px 0", color: "#fff", fontSize: 15, fontWeight: 700, cursor: textoNota.trim() ? "pointer" : "not-allowed" } }, "Enviar Nota"));
+}
+function TeamConfirmContent(props) {
+  const empId = props.empId;
+  const clientId = props.clientId;
+  const allEmps = props.allEmps || [];
+  const onConfirm = props.onConfirm;
+  const [suggestedMateId, setSuggestedMateId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(function() {
+    db.list("servicos", "?select=team&client_id=eq." + encodeURIComponent(clientId) + "&date=eq." + today).then(function(rows) {
+      if (rows && rows.length > 0) {
+        const team = rows[0].team || [];
+        const mate = team.find(function(id) {
+          return id !== empId;
+        });
+        setSuggestedMateId(mate || null);
+      }
+      setLoading(false);
+    });
+  }, [clientId, empId]);
+  const suggestedMate = suggestedMateId ? allEmps.find(function(e) {
+    return e.id === suggestedMateId;
+  }) : null;
+  const otherEmps = allEmps.filter(function(e) {
+    return e.id !== empId && e.id !== suggestedMateId;
+  });
+  if (loading) return /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.5)", fontSize: 13 } }, "A carregar...");
+  return /* @__PURE__ */ React.createElement("div", { style: { width: "100%", maxWidth: 360 } }, suggestedMate ? /* @__PURE__ */ React.createElement("div", { style: { background: "rgba(56,182,216,0.15)", border: "1px solid rgba(56,182,216,0.3)", borderRadius: 14, padding: "16px 20px", marginBottom: 14, textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.5)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Colega previsto no servi\xE7o"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 14 } }, /* @__PURE__ */ React.createElement(Av, { init: suggestedMate.av, size: 40, color: "#38B6D8" }), /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 16 } }, suggestedMate.name)), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    onConfirm(suggestedMateId);
+  }, style: { width: "100%", background: "#38B6D8", border: "none", borderRadius: 10, padding: "13px 0", color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer" } }, "Confirmar \u2014 estou com ", suggestedMate.name.split(" ")[0])) : null, /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginBottom: 10, textAlign: "center" } }, suggestedMate ? "Ou escolhe outro colega" : "Quem \xE9 o teu colega?"), otherEmps.map(function(e) {
+    return /* @__PURE__ */ React.createElement("button", { key: e.id, onClick: function() {
+      onConfirm(e.id);
+    }, style: { width: "100%", background: "rgba(255,255,255,0.07)", border: "1.5px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "12px 16px", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", marginBottom: 8, display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 32, color: "#64748B" }), /* @__PURE__ */ React.createElement("span", null, e.name));
+  })), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    onConfirm(null);
+  }, style: { background: "transparent", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 12, cursor: "pointer", width: "100%", textAlign: "center", marginTop: 4 } }, "Trabalho sozinho hoje"));
 }
 function ClientPortal(props) {
   const onExit = props.onExit;
@@ -2050,6 +2143,7 @@ function ClientPortal(props) {
   const [teamJobs, setTeamJobs] = useState([]);
   const [loadingTeam, setLoadingTeam] = useState(false);
   const [checkedInThisSession, setCheckedInThisSession] = useState({});
+  const [confirmedMateId, setConfirmedMateId] = useState(null);
   const extras = ["Limpeza de estofos adicional", "Limpeza de vidros exteriores", "Limpeza de garagem", "Limpeza de varandas", "Desinfec\xE7\xE3o profunda", "Outro"];
   useEffect(function() {
     if (clientId) {
@@ -2057,7 +2151,7 @@ function ClientPortal(props) {
       Promise.all([
         db.list("clientes", "?select=*&id=eq." + encodeURIComponent(clientId)),
         db.list("client_contacts", "?select=*&client_id=eq." + encodeURIComponent(clientId)),
-        db.list("funcionarios", "?select=*&order=id")
+        db.list("funcion\xE1rios", "?select=*&order=id")
       ]).then(function(results) {
         if (results[0] && results[0].length) setClient(results[0][0]);
         setContacts(results[1] || []);
@@ -2094,10 +2188,9 @@ function ClientPortal(props) {
           });
           if (match) {
             setCurrentEmp(match);
-            setPhase("team-portal");
+            setPhase("team-confirm");
             setPinErr(false);
             setPin("");
-            loadTeamData(match.id);
           } else {
             setPinErr(true);
             setPin("");
@@ -2108,7 +2201,7 @@ function ClientPortal(props) {
   }
   function loadTeamData(empId) {
     setLoadingTeam(true);
-    db.list("servicos", "?select=*&date=eq." + today + "&order=t1").then(function(rows) {
+    db.list("servi\xE7os", "?select=*&date=eq." + today + "&order=t1").then(function(rows) {
       const myJobs = (rows || []).filter(function(j) {
         return (j.team || []).indexOf(empId) !== -1;
       });
@@ -2127,8 +2220,8 @@ function ClientPortal(props) {
   }
   function loadPortalData() {
     if (!clientId) return;
-    const todayStr = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
-    db.list("servicos", "?select=*&client_id=eq." + encodeURIComponent(clientId) + "&order=date").then(function(rows) {
+    const todayStr = localDateStr();
+    db.list("servi\xE7os", "?select=*&client_id=eq." + encodeURIComponent(clientId) + "&order=date").then(function(rows) {
       const all = rows || [];
       setHistory(all.filter(function(j) {
         return j.status === "completed" || j.date < todayStr;
@@ -2140,7 +2233,7 @@ function ClientPortal(props) {
   }
   async function submitRate(job) {
     const promises = (job.team || []).map(function(eid) {
-      return db.insert("avaliacoes", {
+      return db.insert("avalia\xE7\xF5es", {
         servico_id: job.id,
         funcionario_id: eid,
         client_id: clientId,
@@ -2150,15 +2243,15 @@ function ClientPortal(props) {
       });
     });
     await Promise.all(promises);
-    await db.update("servicos", job.id, { rated: true });
+    await db.update("servi\xE7os", job.id, { rated: true });
     for (let i = 0; i < (job.team || []).length; i++) {
       const eid = job.team[i];
-      const allAvs = await db.list("avaliacoes", "?select=stars&funcionario_id=eq." + encodeURIComponent(eid));
+      const allAvs = await db.list("avalia\xE7\xF5es", "?select=stars&funcion\xE1rio_id=eq." + encodeURIComponent(eid));
       if (allAvs && allAvs.length > 0) {
         const avg = allAvs.reduce(function(s, a) {
           return s + (a.stars || 0);
         }, 0) / allAvs.length;
-        await db.update("funcionarios", eid, { rating: Math.round(avg * 10) / 10 });
+        await db.update("funcion\xE1rios", eid, { rating: Math.round(avg * 10) / 10 });
       }
     }
     setRateDone(true);
@@ -2240,6 +2333,26 @@ function ClientPortal(props) {
       setPinErr(false);
     }, style: { background: "transparent", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 13, cursor: "pointer" } }, "Voltar"));
   }
+  if (phase === "team-confirm" && currentEmp) {
+    let loadAndConfirm = function(mateId) {
+      setConfirmedMateId(mateId);
+      db.list("servicos", "?select=*&client_id=eq." + encodeURIComponent(clientId) + "&date=eq." + today).then(function(rows) {
+        const jobs = rows || [];
+        const promises = jobs.map(function(job) {
+          const newTeam = mateId ? [currentEmp.id, mateId] : [currentEmp.id];
+          return db.update("servicos", job.id, { team: newTeam });
+        });
+        Promise.all(promises).then(function() {
+          loadTeamData(currentEmp.id);
+          setPhase("team-portal");
+        });
+      });
+    };
+    const suggestedMateId = /* @__PURE__ */ (function() {
+      return null;
+    })();
+    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", marginBottom: 28 } }, /* @__PURE__ */ React.createElement(Av, { init: currentEmp.av, size: 56, color: "#38B6D8" }), /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 20, marginTop: 12 } }, "Ol\xE1, ", currentEmp.name.split(" ")[0], "!"), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.5)", fontSize: 13, marginTop: 4 } }, "Com quem est\xE1s a trabalhar hoje?")), /* @__PURE__ */ React.createElement(TeamConfirmContent, { empId: currentEmp.id, clientId, allEmps, onConfirm: loadAndConfirm }));
+  }
   if (phase === "team-portal") {
     let TeamJobCard = function(props2) {
       const job = props2.job;
@@ -2258,7 +2371,7 @@ function ClientPortal(props) {
         } else {
           dt.push(task);
         }
-        const updated = await db.update("servicos", job.id, { done_tasks: dt });
+        const updated = await db.update("servi\xE7os", job.id, { done_tasks: dt });
         if (updated) {
           setTeamJobs(function(p) {
             return { current: p.current.map(function(j) {
@@ -2269,7 +2382,7 @@ function ClientPortal(props) {
       }
       async function doCheckin() {
         const time = (/* @__PURE__ */ new Date()).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
-        const updated = await db.update("servicos", job.id, { check_in: time, check_in_emp: currentEmp ? currentEmp.id : null });
+        const updated = await db.update("servi\xE7os", job.id, { check_in: time, check_in_emp: currentEmp ? currentEmp.id : null });
         if (updated) {
           setTeamJobs(function(p) {
             return { current: p.current.map(function(j) {
@@ -2287,7 +2400,7 @@ function ClientPortal(props) {
         const time = (/* @__PURE__ */ new Date()).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
         const patch = { check_out: time, status: "completed" };
         if (!checklistComplete) patch.checklist_incomplete = true;
-        const updated = await db.update("servicos", job.id, patch);
+        const updated = await db.update("servi\xE7os", job.id, patch);
         if (updated) {
           setTeamJobs(function(p) {
             return { current: p.current.map(function(j) {
@@ -2324,7 +2437,7 @@ function ClientPortal(props) {
     setPhase("welcome");
     setCurrentContact(null);
     setTab("home");
-  }, style: { background: "rgba(255,255,255,0.1)", border: "none", color: "rgba(255,255,255,0.7)", borderRadius: 8, padding: "5px 10px", fontSize: 11, cursor: "pointer" } }, "Sair")), client && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 900, color: "#fff", marginBottom: 4 } }, client.name), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 } }, [{ l: "Servicos", v: history.length + upcoming.length, c: "#2E6DA4" }, { l: "Agendados", v: upcoming.length, c: "#7C3AED" }, { l: "Avaliados", v: history.filter(function(h) {
+  }, style: { background: "rgba(255,255,255,0.1)", border: "none", color: "rgba(255,255,255,0.7)", borderRadius: 8, padding: "5px 10px", fontSize: 11, cursor: "pointer" } }, "Sair")), client && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 900, color: "#fff", marginBottom: 4 } }, client.name), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 } }, [{ l: "Servi\xE7os", v: history.length + upcoming.length, c: "#2E6DA4" }, { l: "Agendados", v: upcoming.length, c: "#7C3AED" }, { l: "Avaliados", v: history.filter(function(h) {
     return h.rated;
   }).length, c: "#16A34A" }].map(function(s) {
     return /* @__PURE__ */ React.createElement("div", { key: s.l, style: { background: "rgba(255,255,255,0.08)", borderRadius: 10, padding: "10px 8px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 18 } }, s.v), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.4)", fontSize: 9, fontWeight: 600, textTransform: "uppercase", marginTop: 2 } }, s.l));
@@ -2419,7 +2532,7 @@ export default function App() {
   const params = new URLSearchParams(window.location.search);
   const clienteParam = params.get("cliente");
   const ocasionalParam = params.get("ocasional");
-  const funcionarioParam = params.get("funcionario");
+  const funcionarioParam = params.get("funcion\xE1rio");
   const [mod, setMod] = useState(function() {
     if (clienteParam || ocasionalParam) return "client";
     if (funcionarioParam) return "employee";
