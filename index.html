@@ -14,7 +14,7 @@
   <div id="root"></div>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script type="module">
+  <script>
     const { useState, useEffect } = React;
     function jsx(type, props, key) {
       const p = Object.assign({}, props); const ch = p.children; delete p.children;
@@ -1407,6 +1407,323 @@ function Clients() {
   }
   return null;
 }
+function FichaRH(props) {
+  const sel = props.sel;
+  const editForm = props.editForm;
+  const setEditForm = props.setEditForm;
+  const saveEdit = props.saveEdit;
+  const saving = props.saving;
+  const [tab, setTab] = useState("dados");
+  const [rh, setRh] = useState(null);
+  const [rhForm, setRhForm] = useState(null);
+  const [ausencias, setAusencias] = useState([]);
+  const [fardamento, setFardamento] = useState([]);
+  const [docs, setDocs] = useState([]);
+  const [avsInt, setAvsInt] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddAus, setShowAddAus] = useState(false);
+  const [showAddFard, setShowAddFard] = useState(false);
+  const [showAddDoc, setShowAddDoc] = useState(false);
+  const [showAddAv, setShowAddAv] = useState(false);
+  const [ausForm, setAusForm] = useState({ tipo: "Baixa M\xE9dica", data_inicio: "", data_fim: "", descricao: "", estado: "aprovado" });
+  const [fardForm, setFardForm] = useState({ item: "", tamanho: "", quantidade: 1, data_entrega: localDateStr(), estado: "activo", notas: "" });
+  const [docFile, setDocFile] = useState(null);
+  const [docForm, setDocForm] = useState({ tipo: "Contrato", nome: "", mes_ano: "" });
+  const [avForm, setAvForm] = useState({ periodo: "", qualidade_trabalho: 3, pontualidade: 3, postura: 3, relacao_equipa: 3, seguimento_instrucoes: 3, nota_geral: "", avaliado_por: "" });
+  const [uploading, setUploading] = useState(false);
+  const TIPOS_AUS = ["Baixa M\xE9dica", "F\xE9rias", "Falta Justificada", "Falta Injustificada", "Licen\xE7a", "Forma\xE7\xE3o Externa", "Dispensa"];
+  const TIPOS_DOC = ["Contrato", "Recibo de Vencimento", "Declara\xE7\xE3o", "Certificado", "Outro"];
+  useEffect(function() {
+    setLoading(true);
+    Promise.all([
+      fetch(SUPABASE_URL + "/rest/v1/funcionarios_rh?select=*&funcionario_id=eq." + encodeURIComponent(sel.id), { headers: dbHeaders() }).then(function(r) {
+        return r.json();
+      }),
+      fetch(SUPABASE_URL + "/rest/v1/ausencias?select=*&funcionario_id=eq." + encodeURIComponent(sel.id) + "&order=data_inicio.desc", { headers: dbHeaders() }).then(function(r) {
+        return r.json();
+      }),
+      fetch(SUPABASE_URL + "/rest/v1/fardamento?select=*&funcionario_id=eq." + encodeURIComponent(sel.id) + "&order=data_entrega.desc", { headers: dbHeaders() }).then(function(r) {
+        return r.json();
+      }),
+      fetch(SUPABASE_URL + "/rest/v1/funcionarios_docs?select=*&funcionario_id=eq." + encodeURIComponent(sel.id) + "&order=created_at.desc", { headers: dbHeaders() }).then(function(r) {
+        return r.json();
+      }),
+      fetch(SUPABASE_URL + "/rest/v1/avaliacoes_internas?select=*&funcionario_id=eq." + encodeURIComponent(sel.id) + "&order=created_at.desc", { headers: dbHeaders() }).then(function(r) {
+        return r.json();
+      })
+    ]).then(function(results) {
+      const rhData = results[0] && results[0].length > 0 ? results[0][0] : null;
+      setRh(rhData);
+      setRhForm(rhData ? Object.assign({}, rhData) : { nif: "", niss: "", data_nascimento: "", morada: "", data_admissao: "", salario_base: "", carta_conducao: false, carta_validade: "", contacto_emergencia_nome: "", contacto_emergencia_tel: "", notas: "" });
+      setAusencias(results[1] || []);
+      setFardamento(results[2] || []);
+      setDocs(results[3] || []);
+      setAvsInt(results[4] || []);
+      setLoading(false);
+    });
+  }, [sel.id]);
+  async function saveRH() {
+    if (!rhForm) return;
+    const patch = Object.assign({}, rhForm, { funcionario_id: sel.id });
+    if (rh) {
+      const res = await fetch(SUPABASE_URL + "/rest/v1/funcionarios_rh?id=eq." + rh.id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify(patch) });
+      if (res.ok) {
+        setRh(Object.assign({}, rh, patch));
+        alert("Dados RH guardados!");
+      }
+    } else {
+      const res = await fetch(SUPABASE_URL + "/rest/v1/funcionarios_rh", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }), body: JSON.stringify(patch) });
+      if (res.ok) {
+        const d = await res.json();
+        setRh(d[0]);
+        alert("Dados RH guardados!");
+      }
+    }
+  }
+  async function addAusencia() {
+    const res = await fetch(SUPABASE_URL + "/rest/v1/ausencias", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }), body: JSON.stringify(Object.assign({}, ausForm, { funcionario_id: sel.id })) });
+    if (res.ok) {
+      const d = await res.json();
+      setAusencias(function(p) {
+        return [d[0]].concat(p);
+      });
+      setShowAddAus(false);
+      setAusForm({ tipo: "Baixa M\xE9dica", data_inicio: "", data_fim: "", descricao: "", estado: "aprovado" });
+    }
+  }
+  async function addFardamento() {
+    const res = await fetch(SUPABASE_URL + "/rest/v1/fardamento", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }), body: JSON.stringify(Object.assign({}, fardForm, { funcionario_id: sel.id })) });
+    if (res.ok) {
+      const d = await res.json();
+      setFardamento(function(p) {
+        return [d[0]].concat(p);
+      });
+      setShowAddFard(false);
+      setFardForm({ item: "", tamanho: "", quantidade: 1, data_entrega: localDateStr(), estado: "activo", notas: "" });
+    }
+  }
+  async function uploadDoc() {
+    if (!docFile || !docForm.nome.trim()) return;
+    setUploading(true);
+    const fname = Date.now() + "_" + docFile.name.replace(/\s+/g, "_");
+    const upRes = await fetch(SUPABASE_URL + "/storage/v1/object/rh/" + fname, { method: "POST", headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": docFile.type }, body: docFile });
+    if (!upRes.ok) {
+      alert("Erro no upload.");
+      setUploading(false);
+      return;
+    }
+    const fileUrl = SUPABASE_URL + "/storage/v1/object/public/rh/" + fname;
+    const res = await fetch(SUPABASE_URL + "/rest/v1/funcionarios_docs", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }), body: JSON.stringify(Object.assign({}, docForm, { funcionario_id: sel.id, file_url: fileUrl, file_name: docFile.name, file_size: docFile.size })) });
+    if (res.ok) {
+      const d = await res.json();
+      setDocs(function(p) {
+        return [d[0]].concat(p);
+      });
+    }
+    setShowAddDoc(false);
+    setDocFile(null);
+    setDocForm({ tipo: "Contrato", nome: "", mes_ano: "" });
+    setUploading(false);
+  }
+  async function addAvaliacaoInterna() {
+    const res = await fetch(SUPABASE_URL + "/rest/v1/avaliacoes_internas", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }), body: JSON.stringify(Object.assign({}, avForm, { funcionario_id: sel.id })) });
+    if (res.ok) {
+      const d = await res.json();
+      setAvsInt(function(p) {
+        return [d[0]].concat(p);
+      });
+      setShowAddAv(false);
+      setAvForm({ periodo: "", qualidade_trabalho: 3, pontualidade: 3, postura: 3, relacao_equipa: 3, seguimento_instrucoes: 3, nota_geral: "", avaliado_por: "" });
+    }
+  }
+  async function deleteAusencia(id) {
+    if (!window.confirm("Apagar esta aus\xEAncia?")) return;
+    await fetch(SUPABASE_URL + "/rest/v1/ausencias?id=eq." + id, { method: "DELETE", headers: dbHeaders() });
+    setAusencias(function(p) {
+      return p.filter(function(a) {
+        return a.id !== id;
+      });
+    });
+  }
+  async function deleteFardamento(id) {
+    if (!window.confirm("Apagar este registo?")) return;
+    await fetch(SUPABASE_URL + "/rest/v1/fardamento?id=eq." + id, { method: "DELETE", headers: dbHeaders() });
+    setFardamento(function(p) {
+      return p.filter(function(f) {
+        return f.id !== id;
+      });
+    });
+  }
+  async function deleteDoc(doc) {
+    if (!window.confirm("Apagar este documento?")) return;
+    const fname = doc.file_url.split("/rh/").pop();
+    await fetch(SUPABASE_URL + "/storage/v1/object/rh/" + fname, { method: "DELETE", headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY } });
+    await fetch(SUPABASE_URL + "/rest/v1/funcionarios_docs?id=eq." + doc.id, { method: "DELETE", headers: dbHeaders() });
+    setDocs(function(p) {
+      return p.filter(function(d) {
+        return d.id !== doc.id;
+      });
+    });
+  }
+  function fmtSize(b) {
+    if (!b) return "";
+    if (b < 1024 * 1024) return Math.round(b / 1024) + "KB";
+    return (b / (1024 * 1024)).toFixed(1) + "MB";
+  }
+  function StarRating(props2) {
+    const val = props2.value, onChange = props2.onChange;
+    return /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 4 } }, [1, 2, 3, 4, 5].map(function(i) {
+      return /* @__PURE__ */ React.createElement("span", { key: i, onClick: function() {
+        onChange(i);
+      }, style: { fontSize: 24, cursor: "pointer", color: i <= val ? "#F59E0B" : "#E2EBF4" } }, "\u2605");
+    }));
+  }
+  const tabs = [{ k: "dados", l: "Dados Pessoais" }, { k: "ausencias", l: "Aus\xEAncias" }, { k: "fardamento", l: "Fardamento" }, { k: "docs", l: "Documentos" }, { k: "avaliacao", l: "Avalia\xE7\xE3o Interna" }, { k: "picagens", l: "Picagens" }];
+  if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar ficha RH...");
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, display: "flex", alignItems: "center", gap: 16, padding: 20 }) }, /* @__PURE__ */ React.createElement(Av, { init: sel.av, size: 56, color: EC[sel.id] || "#2E6DA4" }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 18, color: "#1A3A5C" } }, sel.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 2 } }, sel.role, " \u2014 ", sel.id), sel.rating && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", marginTop: 2 } }, "Avalia\xE7\xE3o: ", sel.rating, " \u2605")), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right", fontSize: 12, color: "#64748B" } }, /* @__PURE__ */ React.createElement("div", null, "PIN: ", /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "monospace", fontWeight: 700 } }, sel.pin)))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" } }, tabs.map(function(t) {
+    return /* @__PURE__ */ React.createElement("button", { key: t.k, onClick: function() {
+      setTab(t.k);
+    }, style: { padding: "8px 14px", borderRadius: 8, border: "1.5px solid " + (tab === t.k ? "#2E6DA4" : "#E2EBF4"), background: tab === t.k ? "#EFF6FF" : "#fff", color: tab === t.k ? "#2E6DA4" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, t.l);
+  })), tab === "dados" && /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 } }, /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Dados da App"), [["name", "Nome"], ["role", "Fun\xE7\xE3o"]].map(function(f) {
+    return /* @__PURE__ */ React.createElement("div", { key: f[0], style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, f[1]), /* @__PURE__ */ React.createElement("input", { style: inp, value: editForm[f[0]], onChange: function(e) {
+      setEditForm(Object.assign({}, editForm, { [f[0]]: e.target.value }));
+    } }));
+  }), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "PIN (6 d\xEDgitos)"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { fontFamily: "monospace" }), value: editForm.pin, onChange: function(e) {
+    setEditForm(Object.assign({}, editForm, { pin: e.target.value.replace(/[^0-9]/g, "").slice(0, 6) }));
+  }, maxLength: 6 })), /* @__PURE__ */ React.createElement("button", { onClick: saveEdit, disabled: saving, style: Object.assign({}, btn, { width: "100%", textAlign: "center", opacity: saving ? 0.6 : 1 }) }, saving ? "A guardar..." : "Guardar dados da app")), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Dados Pessoais (RH)"), rhForm && [
+    ["nif", "NIF"],
+    ["niss", "NISS"],
+    ["data_nascimento", "Data de Nascimento", "date"],
+    ["morada", "Morada"],
+    ["data_admissao", "Data de Admiss\xE3o", "date"],
+    ["salario_base", "Sal\xE1rio Base (\u20AC)", "number"],
+    ["contacto_emergencia_nome", "Contacto de Emerg\xEAncia \u2014 Nome"],
+    ["contacto_emergencia_tel", "Contacto de Emerg\xEAncia \u2014 Telefone"]
+  ].map(function(f) {
+    return /* @__PURE__ */ React.createElement("div", { key: f[0], style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, f[1]), /* @__PURE__ */ React.createElement("input", { style: inp, type: f[2] || "text", value: rhForm[f[0]] || "", onChange: function(e) {
+      setRhForm(Object.assign({}, rhForm, { [f[0]]: e.target.value }));
+    } }));
+  }), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Carta de Condu\xE7\xE3o"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: rhForm && rhForm.carta_conducao, onChange: function(e) {
+    setRhForm(Object.assign({}, rhForm, { carta_conducao: e.target.checked }));
+  } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#64748B" } }, "Tem carta de condu\xE7\xE3o"))), rhForm && rhForm.carta_conducao && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Validade da Carta"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: rhForm.carta_validade || "", onChange: function(e) {
+    setRhForm(Object.assign({}, rhForm, { carta_validade: e.target.value }));
+  } })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Notas internas"), /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 60, resize: "vertical" }), value: rhForm && rhForm.notas || "", onChange: function(e) {
+    setRhForm(Object.assign({}, rhForm, { notas: e.target.value }));
+  } })), /* @__PURE__ */ React.createElement("button", { onClick: saveRH, style: Object.assign({}, btnG, { width: "100%", textAlign: "center" }) }, "Guardar dados RH"))), tab === "ausencias" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, ausencias.length, " registo", ausencias.length !== 1 ? "s" : ""), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    setShowAddAus(true);
+  }, style: btn }, "+ Registar aus\xEAncia")), showAddAus && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#F8FAFC" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 12 } }, "Nova aus\xEAncia"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tipo"), /* @__PURE__ */ React.createElement("select", { style: inp, value: ausForm.tipo, onChange: function(e) {
+    setAusForm(Object.assign({}, ausForm, { tipo: e.target.value }));
+  } }, TIPOS_AUS.map(function(t) {
+    return /* @__PURE__ */ React.createElement("option", { key: t }, t);
+  }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Data in\xEDcio"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: ausForm.data_inicio, onChange: function(e) {
+    setAusForm(Object.assign({}, ausForm, { data_inicio: e.target.value }));
+  } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Data fim"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: ausForm.data_fim, onChange: function(e) {
+    setAusForm(Object.assign({}, ausForm, { data_fim: e.target.value }));
+  } })), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Descri\xE7\xE3o / Notas"), /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 50 }), value: ausForm.descricao, onChange: function(e) {
+    setAusForm(Object.assign({}, ausForm, { descricao: e.target.value }));
+  } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Estado"), /* @__PURE__ */ React.createElement("select", { style: inp, value: ausForm.estado, onChange: function(e) {
+    setAusForm(Object.assign({}, ausForm, { estado: e.target.value }));
+  } }, ["aprovado", "pendente", "recusado"].map(function(e) {
+    return /* @__PURE__ */ React.createElement("option", { key: e }, e);
+  })))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 12 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    setShowAddAus(false);
+  }, style: Object.assign({}, btnX, { flex: 1, textAlign: "center" }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: addAusencia, style: Object.assign({}, btnG, { flex: 1, textAlign: "center" }) }, "Guardar"))), ausencias.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Sem aus\xEAncias registadas.") : ausencias.map(function(a) {
+    const corTipo = a.tipo === "Baixa M\xE9dica" ? "#FEE2E2" : a.tipo === "F\xE9rias" ? "#DCFCE7" : a.tipo === "Falta Injustificada" ? "#FEE2E2" : "#EFF6FF";
+    const corTxt = a.tipo === "Baixa M\xE9dica" ? "#991B1B" : a.tipo === "F\xE9rias" ? "#15803D" : a.tipo === "Falta Injustificada" ? "#991B1B" : "#1E40AF";
+    return /* @__PURE__ */ React.createElement("div", { key: a.id, style: Object.assign({}, card, { marginBottom: 10, display: "flex", alignItems: "center", gap: 14, padding: 14 }) }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } }, /* @__PURE__ */ React.createElement("span", { style: { background: corTipo, color: corTxt, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, a.tipo), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#64748B" } }, a.data_inicio, a.data_fim ? " \u2192 " + a.data_fim : "")), a.descricao && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, a.descricao)), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+      deleteAusencia(a.id);
+    }, style: Object.assign({}, btnR, { fontSize: 11, padding: "5px 10px" }) }, "Del"));
+  })), tab === "fardamento" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, fardamento.length, " item", fardamento.length !== 1 ? "s" : ""), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    setShowAddFard(true);
+  }, style: btn }, "+ Adicionar item")), showAddFard && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#F8FAFC" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 12 } }, "Novo item"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Item"), /* @__PURE__ */ React.createElement("input", { style: inp, value: fardForm.item, onChange: function(e) {
+    setFardForm(Object.assign({}, fardForm, { item: e.target.value }));
+  }, placeholder: "Ex: T-shirt SamorClean" })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tamanho"), /* @__PURE__ */ React.createElement("input", { style: inp, value: fardForm.tamanho, onChange: function(e) {
+    setFardForm(Object.assign({}, fardForm, { tamanho: e.target.value }));
+  }, placeholder: "M, L, XL..." })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Quantidade"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", min: "1", value: fardForm.quantidade, onChange: function(e) {
+    setFardForm(Object.assign({}, fardForm, { quantidade: parseInt(e.target.value) || 1 }));
+  } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Data de entrega"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: fardForm.data_entrega, onChange: function(e) {
+    setFardForm(Object.assign({}, fardForm, { data_entrega: e.target.value }));
+  } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Estado"), /* @__PURE__ */ React.createElement("select", { style: inp, value: fardForm.estado, onChange: function(e) {
+    setFardForm(Object.assign({}, fardForm, { estado: e.target.value }));
+  } }, ["activo", "devolvido", "danificado", "perdido"].map(function(e) {
+    return /* @__PURE__ */ React.createElement("option", { key: e }, e);
+  }))), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Notas"), /* @__PURE__ */ React.createElement("input", { style: inp, value: fardForm.notas, onChange: function(e) {
+    setFardForm(Object.assign({}, fardForm, { notas: e.target.value }));
+  }, placeholder: "Observa\xE7\xF5es opcionais" }))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 12 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    setShowAddFard(false);
+  }, style: Object.assign({}, btnX, { flex: 1, textAlign: "center" }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: addFardamento, style: Object.assign({}, btnG, { flex: 1, textAlign: "center" }) }, "Guardar"))), fardamento.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Sem itens registados.") : /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { borderBottom: "2px solid #E2EBF4" } }, ["Item", "Tamanho", "Qtd", "Data entrega", "Estado", ""].map(function(h) {
+    return /* @__PURE__ */ React.createElement("th", { key: h, style: { padding: "8px 10px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, h);
+  }))), /* @__PURE__ */ React.createElement("tbody", null, fardamento.map(function(f) {
+    return /* @__PURE__ */ React.createElement("tr", { key: f.id, style: { borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("td", { style: { padding: "10px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 600, color: "#1A3A5C" } }, f.item), f.notas && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, f.notas)), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", color: "#64748B" } }, f.tamanho || "\u2014"), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", color: "#64748B" } }, f.quantidade), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", color: "#64748B" } }, f.data_entrega ? (/* @__PURE__ */ new Date(f.data_entrega + "T12:00:00")).toLocaleDateString("pt-PT") : "\u2014"), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px" } }, /* @__PURE__ */ React.createElement("span", { style: { background: f.estado === "activo" ? "#DCFCE7" : f.estado === "danificado" ? "#FEE2E2" : "#F8FAFC", color: f.estado === "activo" ? "#15803D" : f.estado === "danificado" ? "#DC2626" : "#64748B", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, f.estado)), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px" } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
+      deleteFardamento(f.id);
+    }, style: Object.assign({}, btnR, { fontSize: 11, padding: "4px 8px" }) }, "Del")));
+  }))))), tab === "docs" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, docs.length, " documento", docs.length !== 1 ? "s" : ""), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    setShowAddDoc(true);
+  }, style: btn }, "+ Adicionar documento")), showAddDoc && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#F8FAFC" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 12 } }, "Novo documento"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tipo"), /* @__PURE__ */ React.createElement("select", { style: inp, value: docForm.tipo, onChange: function(e) {
+    setDocForm(Object.assign({}, docForm, { tipo: e.target.value }));
+  } }, TIPOS_DOC.map(function(t) {
+    return /* @__PURE__ */ React.createElement("option", { key: t }, t);
+  }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "M\xEAs/Ano (para recibos)"), /* @__PURE__ */ React.createElement("input", { style: inp, value: docForm.mes_ano, onChange: function(e) {
+    setDocForm(Object.assign({}, docForm, { mes_ano: e.target.value }));
+  }, placeholder: "Ex: Junho 2026" })), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Nome do documento"), /* @__PURE__ */ React.createElement("input", { style: inp, value: docForm.nome, onChange: function(e) {
+    setDocForm(Object.assign({}, docForm, { nome: e.target.value }));
+  }, placeholder: "Ex: Contrato de trabalho" })), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Ficheiro PDF"), /* @__PURE__ */ React.createElement("input", { type: "file", accept: ".pdf,.jpg,.jpeg,.png", onChange: function(e) {
+    setDocFile(e.target.files[0]);
+  }, style: { width: "100%", padding: "8px", border: "1.5px solid #E2EBF4", borderRadius: 8, fontSize: 13 } }), docFile && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 4 } }, docFile.name, " \u2014 ", fmtSize(docFile.size)))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 12 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    setShowAddDoc(false);
+  }, style: Object.assign({}, btnX, { flex: 1, textAlign: "center" }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: uploadDoc, disabled: uploading || !docFile || !docForm.nome.trim(), style: Object.assign({}, btnG, { flex: 1, textAlign: "center", opacity: uploading || !docFile || !docForm.nome.trim() ? 0.5 : 1 }) }, uploading ? "A carregar..." : "Guardar"))), docs.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Sem documentos.") : docs.map(function(d) {
+    return /* @__PURE__ */ React.createElement("div", { key: d.id, style: Object.assign({}, card, { marginBottom: 10, display: "flex", alignItems: "center", gap: 14, padding: 14 }) }, /* @__PURE__ */ React.createElement("div", { style: { width: 40, height: 40, borderRadius: 8, background: "#FEE2E2", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 } }, "\u{1F4C4}"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C" } }, d.nome), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginTop: 4 } }, /* @__PURE__ */ React.createElement("span", { style: { background: "#EFF6FF", color: "#2E6DA4", borderRadius: 5, padding: "1px 7px", fontSize: 10, fontWeight: 700 } }, d.tipo), d.mes_ano && /* @__PURE__ */ React.createElement("span", { style: { color: "#94A3B8", fontSize: 10 } }, d.mes_ano), d.file_size && /* @__PURE__ */ React.createElement("span", { style: { color: "#94A3B8", fontSize: 10 } }, fmtSize(d.file_size)))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexShrink: 0 } }, /* @__PURE__ */ React.createElement("a", { href: d.file_url, target: "_blank", rel: "noopener noreferrer", style: Object.assign({}, btnG, { fontSize: 12, textDecoration: "none", padding: "6px 12px" }) }, "Abrir"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+      deleteDoc(d);
+    }, style: Object.assign({}, btnR, { fontSize: 12, padding: "6px 10px" }) }, "Del")));
+  })), tab === "avaliacao" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, avsInt.length, " avalia\xE7\xE3o", avsInt.length !== 1 ? "\xF5es" : ""), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    setShowAddAv(true);
+  }, style: btn }, "+ Nova avalia\xE7\xE3o")), showAddAv && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#F8FAFC" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 12 } }, "Nova avalia\xE7\xE3o interna"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Per\xEDodo"), /* @__PURE__ */ React.createElement("input", { style: inp, value: avForm.periodo, onChange: function(e) {
+    setAvForm(Object.assign({}, avForm, { periodo: e.target.value }));
+  }, placeholder: "Ex: 1\xBA Semestre 2026" })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Avaliado por"), /* @__PURE__ */ React.createElement("input", { style: inp, value: avForm.avaliado_por, onChange: function(e) {
+    setAvForm(Object.assign({}, avForm, { avaliado_por: e.target.value }));
+  }, placeholder: "Ex: Alexandre" }))), [["qualidade_trabalho", "Qualidade do Trabalho"], ["pontualidade", "Pontualidade"], ["postura", "Postura e Apresenta\xE7\xE3o"], ["relacao_equipa", "Rela\xE7\xE3o com a Equipa"], ["seguimento_instrucoes", "Seguimento de Instru\xE7\xF5es"]].map(function(c) {
+    return /* @__PURE__ */ React.createElement("div", { key: c[0], style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, c[1]), /* @__PURE__ */ React.createElement(StarRating, { value: avForm[c[0]], onChange: function(v) {
+      setAvForm(Object.assign({}, avForm, { [c[0]]: v }));
+    } }));
+  }), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Nota geral"), /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 60 }), value: avForm.nota_geral, onChange: function(e) {
+    setAvForm(Object.assign({}, avForm, { nota_geral: e.target.value }));
+  }, placeholder: "Observa\xE7\xF5es gerais..." })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    setShowAddAv(false);
+  }, style: Object.assign({}, btnX, { flex: 1, textAlign: "center" }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: addAvaliacaoInterna, style: Object.assign({}, btnG, { flex: 1, textAlign: "center" }) }, "Guardar avalia\xE7\xE3o"))), avsInt.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Sem avalia\xE7\xF5es internas.") : avsInt.map(function(a) {
+    const media = Math.round(((a.qualidade_trabalho || 0) + (a.pontualidade || 0) + (a.postura || 0) + (a.relacao_equipa || 0) + (a.seguimento_instrucoes || 0)) / 5 * 10) / 10;
+    return /* @__PURE__ */ React.createElement("div", { key: a.id, style: Object.assign({}, card, { marginBottom: 12, padding: 16 }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, a.periodo), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, "Por ", a.avaliado_por, " \u2014 ", new Date(a.created_at).toLocaleDateString("pt-PT"))), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: media >= 4 ? "#16A34A" : media >= 3 ? "#F59E0B" : "#EF4444" } }, media), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8" } }, "m\xE9dia"))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, [["qualidade_trabalho", "Qualidade"], ["pontualidade", "Pontualidade"], ["postura", "Postura"], ["relacao_equipa", "Equipa"], ["seguimento_instrucoes", "Instru\xE7\xF5es"]].map(function(c) {
+      return /* @__PURE__ */ React.createElement("div", { key: c[0], style: { display: "flex", justifyContent: "space-between", fontSize: 12, padding: "4px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B" } }, c[1]), /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, color: "#1A3A5C" } }, "\u2605".repeat(a[c[0]] || 0)));
+    })), a.nota_geral && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10, background: "#F8FAFC", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#334155", fontStyle: "italic" } }, '"', a.nota_geral, '"'));
+  })), tab === "picagens" && /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "Hist\xF3rico de picagens"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    const periodo = 30;
+    const from = /* @__PURE__ */ new Date();
+    from.setDate(from.getDate() - periodo);
+    const fromStr = localDateStr(from);
+    db.list("servicos", "?select=*&date=gte." + fromStr + "&order=date.desc").then(function(rows) {
+      const myRows = (rows || []).filter(function(j) {
+        return (j.team || []).indexOf(sel.id) !== -1;
+      });
+      function timeToMin(t) {
+        if (!t) return null;
+        const p = t.split(":");
+        return parseInt(p[0]) * 60 + parseInt(p[1]);
+      }
+      function diffMin(p, r) {
+        const pv = timeToMin(p), rv = timeToMin(r);
+        if (pv === null || rv === null) return null;
+        return rv - pv;
+      }
+      const tableRows = myRows.map(function(v) {
+        const d = diffMin(v.t1, v.check_in);
+        const dStr = d === null ? "\u2014" : d <= 0 ? "Pontual" : "+" + d + " min" + (d > 10 ? " \u26A0" : "");
+        return "<tr style='border-bottom:1px solid #eee'><td style='padding:8px'>" + v.cn + "</td><td style='padding:8px'>" + (/* @__PURE__ */ new Date(v.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "short", day: "2-digit", month: "short" }) + "</td><td style='padding:8px'>" + v.t1 + " \u2014 " + v.t2 + "</td><td style='padding:8px'>" + (v.check_in || "\u2014") + "</td><td style='padding:8px'>" + (v.check_out || "\u2014") + "</td><td style='padding:8px'>" + dStr + "</td><td style='padding:8px'>" + (v.status === "completed" ? "Conclu\xEDdo" : "Pendente") + "</td></tr>";
+      }).join("");
+      const win = window.open("", "_blank");
+      win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Picagens \u2014 ' + sel.name + "</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1A3A5C;color:#fff;padding:8px;text-align:left}tr:nth-child(even){background:#F8FAFC}@media print{body{padding:15px}}</style></head><body><h1>Picagens \u2014 " + sel.name + '</h1><h2 style="color:#64748B;font-weight:normal;margin-bottom:16px">\xDAltimos ' + periodo + " dias</h2><table><thead><tr><th>Cliente</th><th>Data</th><th>Previsto</th><th>Entrada</th><th>Sa\xEDda</th><th>Pontualidade</th><th>Estado</th></tr></thead><tbody>" + tableRows + "</tbody></table><script>window.onload=function(){window.print();}<\/script></body></html>");
+      win.document.close();
+    });
+  }, style: Object.assign({}, btn, { fontSize: 12, padding: "7px 14px" }) }, "Exportar PDF")), /* @__PURE__ */ React.createElement(HistoricoFuncionario, { empId: sel.id })));
+}
 function HistoricoFuncionario(props) {
   const empId = props.empId;
   const [visitas, setVisitas] = useState([]);
@@ -1580,62 +1897,7 @@ function Employees() {
   if (view === "detail" && sel && editForm) {
     return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 24 } }, /* @__PURE__ */ React.createElement("button", { style: btnX, onClick: function() {
       setView("list");
-    } }, "Voltar"), /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Editar Funcionario")), saved ? /* @__PURE__ */ React.createElement("div", { style: { background: "#DCFCE7", border: "1px solid #16A34A", color: "#15803D", borderRadius: 8, padding: "12px 18px", marginBottom: 20, fontWeight: 700 } }, "Guardado com sucesso!") : null, errMsg ? /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", border: "1px solid #EF4444", color: "#991B1B", borderRadius: 8, padding: "12px 18px", marginBottom: 20, fontWeight: 600 } }, errMsg) : null, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 } }, /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 14, marginBottom: 18 } }, /* @__PURE__ */ React.createElement(Av, { init: editForm.av || sel.av, size: 56, color: EC[sel.id] || "#2E6DA4" }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", fontFamily: "monospace" } }, sel.id)), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Nome"), /* @__PURE__ */ React.createElement("input", { style: inp, value: editForm.name, onChange: function(e) {
-      setEditForm(Object.assign({}, editForm, { name: e.target.value }));
-    }, placeholder: "Nome completo" })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Funcao"), /* @__PURE__ */ React.createElement("input", { style: inp, value: editForm.role, onChange: function(e) {
-      setEditForm(Object.assign({}, editForm, { role: e.target.value }));
-    }, placeholder: "Ex: T\xE9cnico Senior" })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Iniciais do avatar"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 100, textTransform: "uppercase" }), value: editForm.av, onChange: function(e) {
-      setEditForm(Object.assign({}, editForm, { av: e.target.value.slice(0, 2) }));
-    }, placeholder: "Ex: CM", maxLength: 2 })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "PIN (6 d\xEDgitos)"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 140, fontFamily: "monospace", fontSize: 16 }), value: editForm.pin, onChange: function(e) {
-      setEditForm(Object.assign({}, editForm, { pin: e.target.value.replace(/[^0-9]/g, "").slice(0, 6) }));
-    }, placeholder: "000000", maxLength: 6 })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 18 } }, /* @__PURE__ */ React.createElement("button", { onClick: saveEdit, disabled: saving, style: Object.assign({}, btn, { flex: 1, opacity: saving ? 0.6 : 1 }) }, saving ? "A guardar..." : "Guardar Altera\xE7\xF5es"))), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Informa\xE7\xE3o"), sel.rating ? /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: lbl }, "Avalia\xE7\xE3o m\xE9dia"), /* @__PURE__ */ React.createElement(Stars, { r: sel.rating }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 4 } }, sel.rating, " estrelas")) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8" } }, "Ainda sem avalia\xE7\xF5es registadas."), /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#2E6DA4", marginTop: 14, lineHeight: 1.6 } }, "O PIN \xE9 usado pelo funcion\xE1rio para entrar na \xE1rea de Funcion\xE1rios da app."))), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginTop: 20 }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "Hist\xF3rico de picagens"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-      const periodo = 30;
-      const from = /* @__PURE__ */ new Date();
-      from.setDate(from.getDate() - periodo);
-      const fromStr = localDateStr(from);
-      db.list("servicos", "?select=*&date=gte." + fromStr + "&order=date.desc").then(function(rows) {
-        const myRows = (rows || []).filter(function(j) {
-          return (j.team || []).indexOf(sel.id) !== -1;
-        });
-        function timeToMin(t) {
-          if (!t) return null;
-          const p = t.split(":");
-          return parseInt(p[0]) * 60 + parseInt(p[1]);
-        }
-        function diffMin(p, r) {
-          const pv = timeToMin(p), rv = timeToMin(r);
-          if (pv === null || rv === null) return null;
-          return rv - pv;
-        }
-        const tableRows = myRows.map(function(v) {
-          const d = diffMin(v.t1, v.check_in);
-          const dStr = d === null ? "\u2014" : d <= 0 ? "Pontual" : "+" + d + " min" + (d > 10 ? " \u26A0" : "");
-          return "<tr style='border-bottom:1px solid #eee'><td style='padding:8px'>" + v.cn + "</td><td style='padding:8px'>" + (/* @__PURE__ */ new Date(v.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "short", day: "2-digit", month: "short" }) + "</td><td style='padding:8px'>" + v.t1 + " \u2014 " + v.t2 + "</td><td style='padding:8px'>" + (v.check_in || "\u2014") + "</td><td style='padding:8px'>" + (v.check_out || "\u2014") + "</td><td style='padding:8px'>" + dStr + "</td><td style='padding:8px'>" + (v.status === "completed" ? "Conclu\xEDdo" : "Pendente") + "</td></tr>";
-        }).join("");
-        const win = window.open("", "_blank");
-        win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
-                <title>Picagens \u2014 ${sel.name}</title>
-                <style>body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C}
-                h1{font-size:18px;margin-bottom:4px}h2{font-size:12px;color:#64748B;font-weight:normal;margin-bottom:20px}
-                table{width:100%;border-collapse:collapse;font-size:12px}
-                th{background:#1A3A5C;color:#fff;padding:8px;text-align:left;font-size:11px}
-                tr:nth-child(even){background:#F8FAFC}
-                .header{display:flex;justify-content:space-between;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #1A3A5C}
-                @media print{body{padding:15px}}</style></head><body>
-                <div class="header">
-                  <div><h1>Picagens \u2014 ${sel.name}</h1>
-                  <h2>\xDAltimos ${periodo} dias | Gerado em ${(/* @__PURE__ */ new Date()).toLocaleDateString("pt-PT")}</h2></div>
-                  <div style="text-align:right;font-size:11px;color:#64748B"><strong>SamorClean by Fragancelines, Lda</strong><br>samorclean.geral@gmail.com</div>
-                </div>
-                <table><thead><tr>
-                  <th>Cliente</th><th>Data</th><th>Previsto</th><th>Entrada</th><th>Sa\xEDda</th><th>Pontualidade</th><th>Estado</th>
-                </tr></thead><tbody>${tableRows}</tbody></table>
-                <div style="margin-top:16px;font-size:10px;color:#94A3B8">\u26A0 Atraso assinalado quando entrada superior a 10 min ap\xF3s hora prevista.</div>
-                <script>window.onload=function(){window.print();}<\/script>
-                </body></html>`);
-        win.document.close();
-      });
-    }, style: Object.assign({}, btn, { fontSize: 12, padding: "7px 14px" }) }, "Exportar PDF")), /* @__PURE__ */ React.createElement(HistoricoFuncionario, { empId: sel.id })));
+    } }, "Voltar"), /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, sel.name)), saved ? /* @__PURE__ */ React.createElement("div", { style: { background: "#DCFCE7", border: "1px solid #16A34A", color: "#15803D", borderRadius: 8, padding: "12px 18px", marginBottom: 20, fontWeight: 700 } }, "Guardado com sucesso!") : null, errMsg ? /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", border: "1px solid #EF4444", color: "#991B1B", borderRadius: 8, padding: "12px 18px", marginBottom: 20, fontWeight: 600 } }, errMsg) : null, /* @__PURE__ */ React.createElement(FichaRH, { sel, editForm, setEditForm, saveEdit, saving, emps, dates: [], wJobs: [] }));
   }
   if (view === "new") {
     return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 24 } }, /* @__PURE__ */ React.createElement("button", { style: btnX, onClick: function() {
