@@ -317,18 +317,23 @@ function Finance() {
 }
 function Routes() {
   const [jobs, setJobs] = useState([]);
-  const [emps, setEmps] = useState(EMPS);
+  const [emps, setEmps] = useState([]);
+  const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [wk, setWk] = useState(0);
-  const [drag, setDrag] = useState(null);
-  const [over, setOver] = useState(null);
-  const [sel, setSel] = useState(null);
+  const [selJob, setSelJob] = useState(null);
   const [showNew, setShowNew] = useState(false);
-  const [nj, setNj] = useState({ cn: "", addr: "", svc: SVCS[0], date: "", t1: "08:00", t2: "12:00", team: [], val: "" });
   const [showGen, setShowGen] = useState(false);
   const [preview, setPreview] = useState([]);
   const [generating, setGenerating] = useState(false);
-  const [clients, setClients] = useState([]);
+  const [dragJob, setDragJob] = useState(null);
+  const [nj, setNj] = useState({ cn: "", addr: "", svc: "", date: "", t1: "08:00", t2: "10:00", team: [], val: "" });
+  const [calView, setCalView] = useState("week");
+  const DIAS_PT = ["Segunda", "Ter\xE7a", "Quarta", "Quinta", "Sexta", "S\xE1bado"];
+  const DIAS_SHORT = ["Seg", "Ter", "Qua", "Qui", "Sex", "S\xE1b"];
+  const HOURS = Array.from({ length: 13 }, function(_, i) {
+    return i + 7;
+  });
   useEffect(function() {
     Promise.all([
       db.list("servicos", "?select=*&order=date"),
@@ -341,179 +346,65 @@ function Routes() {
       setLoading(false);
     });
   }, []);
-  function getNextWeekDates() {
+  function getWeekDates(offset) {
     const d = /* @__PURE__ */ new Date();
-    const day = d.getDay();
+    const day = d.getDay() || 7;
     const monday = new Date(d);
-    monday.setDate(d.getDate() - day + (day === 0 ? 1 : 8));
-    return Array.from({ length: 5 }, function(_, i) {
+    monday.setDate(d.getDate() - day + 1 + offset * 7);
+    return Array.from({ length: 6 }, function(_, i) {
       const dt = new Date(monday);
       dt.setDate(monday.getDate() + i);
       return localDateStr(dt);
     });
   }
-  function exportRotasPDF(dates2, jobs2, empList) {
-    const semanaLabel = (/* @__PURE__ */ new Date(dates2[0] + "T12:00:00")).toLocaleDateString("pt-PT", { day: "numeric", month: "long" }) + " a " + (/* @__PURE__ */ new Date(dates2[4] + "T12:00:00")).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" });
-    const byEmp = {};
-    empList.forEach(function(e) {
-      byEmp[e.id] = { emp: e, jobs: [] };
-    });
-    jobs2.forEach(function(job) {
-      (job.team || []).forEach(function(eid) {
-        if (byEmp[eid]) byEmp[eid].jobs.push(job);
-      });
-    });
-    const empSections = Object.values(byEmp).filter(function(x) {
-      return x.jobs.length > 0;
-    }).map(function(x) {
-      const rows = x.jobs.slice().sort(function(a, b) {
-        return a.date < b.date ? -1 : 1;
-      }).map(function(job) {
-        const dayLabel = (/* @__PURE__ */ new Date(job.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "short" });
-        const colegaIds = (job.team || []).filter(function(id) {
-          return id !== x.emp.id;
-        });
-        const colegas = colegaIds.map(function(id) {
-          const e = empList.find(function(e2) {
-            return e2.id === id;
-          });
-          return e ? e.name.split(" ")[0] : id;
-        }).join(", ") || "\u2014";
-        const statusStyle = job.status === "completed" ? "background:#DCFCE7;color:#15803D;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold" : "background:#FEF3C7;color:#92400E;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold";
-        return `<tr>
-          <td style="padding:8px 10px;color:#334155">${dayLabel}</td>
-          <td style="padding:8px 10px;font-weight:600;color:#1A3A5C">${job.cn}</td>
-          <td style="padding:8px 10px;color:#64748B;font-size:12px">${job.addr || "\u2014"}</td>
-          <td style="padding:8px 10px;white-space:nowrap;color:#334155">${job.t1} \u2014 ${job.t2}</td>
-          <td style="padding:8px 10px;color:#64748B">${colegas}</td>
-          <td style="padding:8px 10px"><span style="${statusStyle}">${job.status === "completed" ? "Conclu\xEDdo" : "Pendente"}</span></td>
-        </tr>`;
-      }).join("");
-      return `
-        <div style="margin-bottom:32px;page-break-inside:avoid">
-          <div style="background:#1A3A5C;color:#fff;padding:12px 16px;border-radius:8px 8px 0 0;display:flex;align-items:center;gap:10px">
-            <div style="width:32px;height:32px;border-radius:50%;background:#38B6D8;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px">${x.emp.av || x.emp.name.slice(0, 2).toUpperCase()}</div>
-            <div>
-              <div style="font-weight:800;font-size:15px">${x.emp.name}</div>
-              <div style="font-size:11px;opacity:0.6">${x.emp.role || ""} \u2014 ${x.jobs.length} servi\xE7o${x.jobs.length !== 1 ? "s" : ""} esta semana</div>
-            </div>
-          </div>
-          <table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #E2EBF4;border-top:none">
-            <thead>
-              <tr style="background:#F8FAFC">
-                <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748B;font-weight:700;text-transform:uppercase">Dia</th>
-                <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748B;font-weight:700;text-transform:uppercase">Cliente</th>
-                <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748B;font-weight:700;text-transform:uppercase">Morada</th>
-                <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748B;font-weight:700;text-transform:uppercase">Hor\xE1rio</th>
-                <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748B;font-weight:700;text-transform:uppercase">Colega</th>
-                <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748B;font-weight:700;text-transform:uppercase">Estado</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>`;
-    }).join("");
-    const win = window.open("", "_blank");
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
-    <title>Rotas \u2014 ${semanaLabel}</title>
-    <style>
-      body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C;max-width:900px;margin:0 auto}
-      .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:16px;border-bottom:3px solid #1A3A5C}
-      tr:nth-child(even){background:#F8FAFC}
-      @media print{body{padding:15px;max-width:none} .no-print{display:none}}
-    </style></head><body>
-    <div class="header">
-      <div>
-        <h1 style="margin:0;font-size:22px">Rotas Semanais</h1>
-        <p style="margin:4px 0 0;color:#64748B;font-size:13px">${semanaLabel}</p>
-      </div>
-      <div style="text-align:right;font-size:12px;color:#64748B">
-        <strong>SamorClean by Fragancelines, Lda</strong><br>
-        samorclean.geral@gmail.com | 910 637 588<br>
-        <span style="font-size:10px">Gerado em ${(/* @__PURE__ */ new Date()).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" })}</span>
-      </div>
-    </div>
-    ${empSections || '<p style="color:#94A3B8;text-align:center;padding:40px">Sem servi\xE7os para esta semana.</p>'}
-    <script>window.onload=function(){window.print();}<\/script>
-    </body></html>`);
-    win.document.close();
+  function getMonthDates(offset) {
+    const d = /* @__PURE__ */ new Date();
+    const m = new Date(d.getFullYear(), d.getMonth() + offset, 1);
+    const days = [];
+    const firstDay = (m.getDay() || 7) - 1;
+    for (let i = 0; i < firstDay; i++) days.push(null);
+    const daysInMonth = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate();
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dt = new Date(m.getFullYear(), m.getMonth(), i);
+      days.push(localDateStr(dt));
+    }
+    return days;
   }
-  function exportEmpPDF(emp, dates2, jobs2) {
-    const semanaLabel = (/* @__PURE__ */ new Date(dates2[0] + "T12:00:00")).toLocaleDateString("pt-PT", { day: "numeric", month: "long" }) + " a " + (/* @__PURE__ */ new Date(dates2[4] + "T12:00:00")).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" });
-    const myJobs = jobs2.filter(function(j) {
-      return (j.team || []).indexOf(emp.id) !== -1;
-    }).slice().sort(function(a, b) {
-      return a.date < b.date ? -1 : 1;
-    });
-    const rows = myJobs.map(function(job) {
-      const dayLabel = (/* @__PURE__ */ new Date(job.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long" });
-      const colegaIds = (job.team || []).filter(function(id) {
-        return id !== emp.id;
-      });
-      const colegas = colegaIds.map(function(id) {
-        const e = emps.find(function(e2) {
-          return e2.id === id;
-        });
-        return e ? e.name.split(" ")[0] : id;
-      }).join(", ") || "Sozinho/a";
-      return `<tr>
-        <td style="padding:10px 12px;font-weight:600;color:#1A3A5C;text-transform:capitalize">${dayLabel}</td>
-        <td style="padding:10px 12px;font-weight:700;color:#1A3A5C">${job.cn}</td>
-        <td style="padding:10px 12px;color:#64748B;font-size:12px">${job.addr || "\u2014"}</td>
-        <td style="padding:10px 12px;white-space:nowrap;color:#334155;font-weight:600">${job.t1} \u2014 ${job.t2}</td>
-        <td style="padding:10px 12px;color:#64748B">${colegas}</td>
-      </tr>`;
-    }).join("");
-    const win = window.open("", "_blank");
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
-    <title>Rota \u2014 ${emp.name} \u2014 ${semanaLabel}</title>
-    <style>
-      body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C;max-width:800px;margin:0 auto}
-      .header{background:#1A3A5C;color:#fff;padding:20px 24px;border-radius:10px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center}
-      .avatar{width:48px;height:48px;border-radius:50%;background:#38B6D8;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;color:#1A3A5C;flex-shrink:0}
-      table{width:100%;border-collapse:collapse;font-size:13px}
-      th{background:#1A3A5C;color:#fff;padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.5px}
-      tr:nth-child(even){background:#F8FAFC}
-      tr:hover{background:#EFF6FF}
-      .footer{margin-top:24px;padding-top:12px;border-top:1px solid #E2EBF4;font-size:10px;color:#94A3B8;display:flex;justify-content:space-between}
-      .badge{display:inline-block;background:#EFF6FF;color:#2E6DA4;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
-      @media print{body{padding:15px;max-width:none}}
-    </style></head><body>
-    <div class="header">
-      <div style="display:flex;align-items:center;gap:16px">
-        <div class="avatar">${emp.av || emp.name.slice(0, 2).toUpperCase()}</div>
-        <div>
-          <div style="font-size:20px;font-weight:800">${emp.name}</div>
-          <div style="font-size:12px;opacity:0.6;margin-top:2px">${emp.role || "T\xE9cnico/a de Limpeza"}</div>
-        </div>
-      </div>
-      <div style="text-align:right">
-        <div style="font-size:13px;font-weight:700">Semana de</div>
-        <div style="font-size:12px;opacity:0.7;margin-top:2px">${semanaLabel}</div>
-        <div style="margin-top:8px"><span class="badge">${myJobs.length} servi\xE7o${myJobs.length !== 1 ? "s" : ""}</span></div>
-      </div>
-    </div>
-    ${myJobs.length === 0 ? '<p style="text-align:center;color:#94A3B8;padding:40px">Sem servi\xE7os agendados para esta semana.</p>' : `<table>
-          <thead><tr>
-            <th>Dia</th><th>Cliente</th><th>Morada</th><th>Hor\xE1rio</th><th>Colega</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>`}
-    <div class="footer">
-      <span>SamorClean by Fragancelines, Lda \u2022 samorclean.geral@gmail.com \u2022 910 637 588</span>
-      <span>Gerado em ${(/* @__PURE__ */ new Date()).toLocaleDateString("pt-PT")}</span>
-    </div>
-    <script>window.onload=function(){window.print();}<\/script>
-    </body></html>`);
-    win.document.close();
+  function empColor(id) {
+    return EC[id] || "#64748B";
+  }
+  const dates = getWeekDates(wk);
+  const todayStr = localDateStr();
+  const wJobs = calView === "week" ? jobs.filter(function(j) {
+    return dates.indexOf(j.date) !== -1;
+  }) : jobs.filter(function(j) {
+    if (!j.date) return false;
+    const d = /* @__PURE__ */ new Date(j.date + "T12:00:00");
+    const ref = /* @__PURE__ */ new Date();
+    ref.setMonth(ref.getMonth() + wk);
+    return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth();
+  });
+  function timeToMin(t) {
+    if (!t) return 0;
+    const p = t.split(":");
+    return parseInt(p[0]) * 60 + parseInt(p[1]);
+  }
+  function minToTime(m) {
+    return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
+  }
+  function getLabel() {
+    if (calView === "week") {
+      const d0 = /* @__PURE__ */ new Date(dates[0] + "T12:00:00");
+      const d5 = /* @__PURE__ */ new Date(dates[5] + "T12:00:00");
+      return d0.toLocaleDateString("pt-PT", { day: "numeric", month: "long" }) + " \u2014 " + d5.toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" });
+    } else {
+      const d = /* @__PURE__ */ new Date();
+      d.setMonth(d.getMonth() + wk);
+      return d.toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
+    }
   }
   function generatePreview() {
-    function timeToMin(t) {
-      if (!t) return 0;
-      const p = t.split(":");
-      return parseInt(p[0]) * 60 + parseInt(p[1]);
-    }
-    const nextWeek = getNextWeekDates();
+    const nextDates = getWeekDates(wk === 0 ? 1 : wk);
     const previews = [];
     clients.forEach(function(c) {
       const sch = c.schedule || [];
@@ -521,29 +412,33 @@ function Routes() {
       if (c.freq === "Pontual") return;
       sch.forEach(function(d) {
         const dayIdx = d.day;
-        if (dayIdx < 0 || dayIdx > 4) return;
-        const date = nextWeek[dayIdx];
+        if (dayIdx < 0 || dayIdx > 5) return;
+        const date = nextDates[dayIdx];
         if (!date) return;
+        const exists = jobs.some(function(j) {
+          return j.client_id === c.id && j.date === date;
+        });
+        if (exists) return;
         const visitHrs = Math.max(0, (timeToMin(d.time_end) - timeToMin(d.time_start)) / 60);
-        const weekTotalRealHours = sch.reduce(function(s, dd) {
+        const weekTotal = sch.reduce(function(s, dd) {
           return s + Math.max(0, (timeToMin(dd.time_end) - timeToMin(dd.time_start)) / 60);
         }, 0);
-        const visitShare = weekTotalRealHours > 0 ? visitHrs / weekTotalRealHours : 0;
+        const share = weekTotal > 0 ? visitHrs / weekTotal : 1;
         previews.push({
           id: "J" + Date.now() + Math.random().toString(36).slice(2, 6),
           client_id: c.id,
           cn: c.name,
           addr: c.address,
-          svc: c.service,
+          svc: c.service || "",
           date,
-          t1: d.time_start,
-          t2: d.time_end,
-          team: d.team_ids || [],
+          t1: d.time_start || "08:00",
+          t2: d.time_end || "10:00",
+          team: d.team_ids || (c.equipa_habitual || []),
           status: "pending",
           cl: c.checklist || [],
           prods: [],
           notes: c.notes || "",
-          val: (c.hours_contracted || 0) * (c.price_per_hour || PRICE_PER_HOUR) * visitShare,
+          val: (c.hours_contracted || 0) * (c.price_per_hour || PRICE_PER_HOUR) * share,
           iva_override: c.iva_type || "normal",
           paid: false
         });
@@ -563,282 +458,365 @@ function Routes() {
     setPreview([]);
     setGenerating(false);
   }
-  function empColor(id) {
-    return EC[id] || "#64748B";
-  }
-  const dates = getWeek(wk);
-  const todayStr = localDateStr();
-  const wJobs = jobs.filter(function(j) {
-    return dates.indexOf(j.date) !== -1;
-  });
-  const wTotal = wJobs.reduce(function(s, j) {
-    return s + (j.val || 0);
-  }, 0);
-  async function drop(d) {
-    if (!drag) return;
-    const updated = await db.update("servicos", drag.id, { date: d });
+  async function updateJob(id, patch) {
+    const updated = await db.update("servicos", id, patch);
     if (updated) {
       setJobs(function(p) {
         return p.map(function(j) {
-          return j.id === drag.id ? updated : j;
+          return j.id === id ? Object.assign({}, j, patch) : j;
         });
       });
-    }
-    setDrag(null);
-    setOver(null);
-  }
-  async function addJ() {
-    const newId = "J" + Date.now();
-    const selClient = clients.find(function(c) {
-      return c.name === nj.cn;
-    });
-    const j = Object.assign({}, nj, {
-      id: newId,
-      status: "pending",
-      cl: selClient && selClient.checklist ? selClient.checklist : ["Limpeza geral"],
-      prods: ["P001"],
-      val: Number(nj.val) || 0,
-      date: nj.date || dates[0],
-      client_id: selClient ? selClient.id : null,
-      iva_override: selClient ? selClient.iva_type : "normal",
-      paid: false
-    });
-    const inserted = await db.insert("servicos", j);
-    if (inserted) {
-      setJobs(jobs.concat([inserted]));
-      setShowNew(false);
-      setNj({ cn: "", addr: "", svc: SVCS[0], date: "", t1: "08:00", t2: "12:00", team: [], val: "" });
-    } else {
-      alert("Erro ao criar servi\xE7o. Verifica a liga\xE7\xE3o.");
-    }
-  }
-  function togT(id) {
-    setNj(function(p) {
-      const has = p.team.indexOf(id) !== -1;
-      return Object.assign({}, p, { team: has ? p.team.filter(function(e) {
-        return e !== id;
-      }) : p.team.concat([id]) });
-    });
-  }
-  async function toggleStatus(job) {
-    const newStatus = job.status === "completed" ? "pending" : "completed";
-    const updated = await db.update("servicos", job.id, { status: newStatus });
-    if (updated) {
-      setJobs(function(p) {
-        return p.map(function(j) {
-          return j.id === job.id ? updated : j;
-        });
-      });
-      setSel(updated);
-    }
-  }
-  async function togglePaid(job) {
-    const newPaid = !job.paid;
-    const patch = newPaid ? { paid: true, paid_date: localDateStr() } : { paid: false, paid_date: null };
-    const res = await fetch(SUPABASE_URL + "/rest/v1/servicos?id=eq." + encodeURIComponent(job.id), {
-      method: "PATCH",
-      headers: dbHeaders(),
-      body: JSON.stringify(patch)
-    });
-    if (res.ok) {
-      const updated = Object.assign({}, job, patch);
-      setJobs(function(p) {
-        return p.map(function(j) {
-          return j.id === job.id ? updated : j;
-        });
-      });
-      setSel(updated);
+      if (selJob && selJob.id === id) setSelJob(Object.assign({}, selJob, patch));
     }
   }
   async function deleteJob(job) {
-    const ok = await db.remove("servicos", job.id);
-    if (ok) {
-      setJobs(function(p) {
-        return p.filter(function(j) {
-          return j.id !== job.id;
-        });
+    if (!window.confirm("Apagar este servi\xE7o?")) return;
+    await db.remove("servicos", job.id);
+    setJobs(function(p) {
+      return p.filter(function(j) {
+        return j.id !== job.id;
       });
-    }
-    setSel(null);
-  }
-  if (loading) {
-    return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar rotas...");
-  }
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Gest\xE3o de Rotas"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, (/* @__PURE__ */ new Date(dates[0] + "T12:00:00")).toLocaleDateString("pt-PT", { day: "numeric", month: "long" }), " a ", (/* @__PURE__ */ new Date(dates[6] + "T12:00:00")).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" }))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
-    setWk(wk - 1);
-  }, style: Object.assign({}, btnO, { padding: "8px 14px", fontSize: 13 }) }, "\u2190 Anterior"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-    setWk(0);
-  }, style: Object.assign({}, btnX, { fontSize: 13 }) }, "Hoje"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-    setWk(wk + 1);
-  }, style: Object.assign({}, btnO, { padding: "8px 14px", fontSize: 13 }) }, "Pr\xF3xima \u2192"), /* @__PURE__ */ React.createElement("button", { onClick: generatePreview, style: Object.assign({}, btnG, { fontSize: 13 }) }, "\u26A1 Gerar Semana"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-    exportRotasPDF(dates, wJobs, emps);
-  }, style: Object.assign({}, btnO, { fontSize: 13 }) }, "\u{1F4C4} PDF Rotas"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-    setShowNew(true);
-  }, style: btn }, "+ Novo"))), showGen && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 20 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 28, width: "100%", maxWidth: 600, maxHeight: "80vh", overflowY: "auto" } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 18, color: "#1A3A5C", marginBottom: 4 } }, "Pr\xE9-visualiza\xE7\xE3o \u2014 Semana seguinte"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 20 } }, preview.length, " servi\xE7os a gerar com base nas configura\xE7\xF5es dos clientes"), preview.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 32, color: "#94A3B8" } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, marginBottom: 8 } }, "Nenhum servi\xE7o a gerar"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13 } }, "Verifica se os clientes t\xEAm dias de visita configurados.")) : /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 20 } }, preview.map(function(j, i) {
-    return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "#F8FAFC", borderRadius: 8, marginBottom: 6, borderLeft: "3px solid #2E6DA4" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C" } }, j.cn), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, (/* @__PURE__ */ new Date(j.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" }), " \u2014 ", j.t1, " \xE0s ", j.t2)), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#16A34A" } }, fmt(j.val)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, (j.team || []).length, " pessoa", (j.team || []).length !== 1 ? "s" : "")));
-  })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
-    setShowGen(false);
-    setPreview([]);
-  }, style: Object.assign({}, btnX, { flex: 1 }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: confirmGenerate, disabled: generating || preview.length === 0, style: Object.assign({}, btnG, { flex: 2, opacity: preview.length === 0 ? 0.5 : 1 }) }, generating ? "A criar servi\xE7os..." : "Confirmar e criar " + preview.length + " servi\xE7os")))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 16 } }, [
-    { l: "Total semana", v: wJobs.length + " servi\xE7os", c: "#2E6DA4" },
-    { l: "Conclu\xEDdos / Pendentes", v: wJobs.filter(function(j) {
-      return j.status === "completed";
-    }).length + " / " + wJobs.filter(function(j) {
-      return j.status !== "completed";
-    }).length, c: "#0F766E" },
-    { l: "Fatura\xE7\xE3o prevista", v: fmt(wTotal), c: "#7C3AED" }
-  ].map(function(k) {
-    return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 16 }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, k.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: k.c } }, k.v));
-  })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { padding: "12px 20px", marginBottom: 14, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }) }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#64748B", fontWeight: 700, textTransform: "uppercase" } }, "Equipa:"), emps.map(function(e) {
-    return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 10, height: 10, borderRadius: 2, background: empColor(e.id) } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 600 } }, e.name.split(" ")[0]));
-  }), /* @__PURE__ */ React.createElement("span", { style: { marginLeft: "auto", fontSize: 11, color: "#94A3B8" } }, "Arrasta para reagendar")), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 8 } }, dates.map(function(date, di) {
-    const dj = jobs.filter(function(j) {
-      return j.date === date;
     });
-    const isTd = date === todayStr;
-    const isPa = date < todayStr;
-    const isOv = over === date;
-    return /* @__PURE__ */ React.createElement(
-      "div",
-      {
-        key: date,
-        onDragOver: function(e) {
-          e.preventDefault();
-          setOver(date);
-        },
-        onDragLeave: function() {
-          setOver(null);
-        },
-        onDrop: function() {
-          drop(date);
-        },
-        style: { minHeight: 200, background: isOv ? "#EFF6FF" : isPa ? "#FAFAFA" : "#fff", borderRadius: 10, border: "2px solid " + (isOv ? "#2E6DA4" : isTd ? "#38B6D8" : "#E2EBF4"), padding: 8 }
-      },
-      /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 8, textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: isTd ? "#2E6DA4" : "#64748B", textTransform: "uppercase" } }, DAY_LABELS[di]), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: isTd ? "#2E6DA4" : isPa ? "#94A3B8" : "#1A3A5C" } }, (/* @__PURE__ */ new Date(date + "T12:00:00")).getDate()), isTd ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#38B6D8", fontWeight: 700 } }, "HOJE") : null),
-      dj.map(function(job) {
-        const isDragging = drag && drag.id === job.id;
-        return /* @__PURE__ */ React.createElement(
-          "div",
-          {
-            key: job.id,
-            draggable: true,
-            onDragStart: function() {
-              setDrag(job);
-            },
-            onDragEnd: function() {
-              setDrag(null);
-              setOver(null);
-            },
-            onClick: function() {
-              setSel(job);
-            },
-            style: { background: job.status === "completed" ? "#F0FDF4" : "#fff", border: "1.5px solid " + (job.status === "completed" ? "#86EFAC" : "#E2EBF4"), borderLeft: "3px solid " + (job.status === "completed" ? "#16A34A" : "#2E6DA4"), borderRadius: 6, padding: "6px 8px", marginBottom: 6, cursor: "grab", opacity: isDragging ? 0.4 : 1 }
-          },
-          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, color: "#1A3A5C", fontSize: 11, lineHeight: 1.3, marginBottom: 2 } }, (job.cn || "").length > 16 ? job.cn.slice(0, 16) + "..." : job.cn),
-          /* @__PURE__ */ React.createElement("div", { style: { color: "#64748B", fontSize: 10 } }, job.t1, "-", job.t2),
-          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 3, marginTop: 5, alignItems: "center" } }, (job.team || []).map(function(eid) {
-            let em = null;
-            for (let k = 0; k < emps.length; k++) {
-              if (emps[k].id === eid) {
-                em = emps[k];
-                break;
-              }
-            }
-            return /* @__PURE__ */ React.createElement("div", { key: eid, style: { width: 16, height: 16, borderRadius: "50%", background: empColor(eid), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7, color: "#fff", fontWeight: 700 } }, em ? em.av : "");
-          }), /* @__PURE__ */ React.createElement("div", { style: { marginLeft: "auto", fontWeight: 700, color: "#2E6DA4", fontSize: 10 } }, fmt(job.val || 0)))
-        );
-      }),
-      dj.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#CBD5E1", fontSize: 11, marginTop: 24 } }, isOv ? "Largar aqui" : "Livre") : null
-    );
-  })), sel ? /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 20 }, onClick: function() {
-    setSel(null);
-  } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 28, maxWidth: 460, width: "100%" }, onClick: function(e) {
-    e.stopPropagation();
-  } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: "#1A3A5C" } }, sel.cn), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 3 } }, sel.svc)), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-    setSel(null);
-  }, style: Object.assign({}, btnX, { padding: "4px 8px", fontSize: 18 }) }, "X")), /* @__PURE__ */ React.createElement("div", { style: divid }), [["Morada", sel.addr], ["Data", (/* @__PURE__ */ new Date(sel.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long" })], ["Hor\xE1rio", sel.t1 + " - " + sel.t2], ["Valor", fmt(sel.val || 0)]].map(function(pair) {
-    return /* @__PURE__ */ React.createElement("div", { key: pair[0], style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 700, textTransform: "uppercase", marginBottom: 3 } }, pair[0]), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "#334155" } }, pair[1]));
-  }), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 } }, "Equipa"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } }, (sel.team || []).map(function(eid) {
-    let em = null;
-    for (let k = 0; k < emps.length; k++) {
-      if (emps[k].id === eid) {
-        em = emps[k];
-        break;
-      }
+    setSelJob(null);
+  }
+  async function addJ() {
+    if (!nj.cn) return;
+    const c = clients.find(function(x) {
+      return x.name === nj.cn;
+    });
+    const job = Object.assign({}, nj, {
+      id: "J" + Date.now() + Math.random().toString(36).slice(2, 5),
+      client_id: c ? c.id : "",
+      svc: c ? c.service : nj.svc,
+      status: "pending",
+      cl: c ? c.checklist || [] : [],
+      prods: [],
+      val: parseFloat(nj.val) || 0,
+      paid: false
+    });
+    const ins = await db.insert("servicos", job);
+    if (ins) {
+      setJobs(function(p) {
+        return p.concat([ins]);
+      });
+      setShowNew(false);
     }
-    return /* @__PURE__ */ React.createElement("div", { key: eid, style: { display: "flex", alignItems: "center", gap: 6, background: "#F8FAFC", borderRadius: 8, padding: "6px 10px" } }, /* @__PURE__ */ React.createElement(Av, { init: em ? em.av : "", size: 24, color: empColor(eid) }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: "#334155" } }, em ? em.name : ""));
-  }))), sel.notes ? /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF3C7", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#78350F", marginBottom: 14 } }, sel.notes) : null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, background: sel.paid ? "#DCFCE7" : "#FEF3C7", borderRadius: 8, padding: "10px 14px" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 700, color: sel.paid ? "#15803D" : "#92400E" } }, sel.paid ? "Pago em " + (sel.paid_date ? (/* @__PURE__ */ new Date(sel.paid_date + "T12:00:00")).toLocaleDateString("pt-PT") : "--") : "Por pagar"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-    togglePaid(sel);
-  }, style: { background: sel.paid ? "#EF4444" : "#16A34A", border: "none", borderRadius: 6, padding: "5px 12px", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, sel.paid ? "N\xE3o pago" : "Marcar pago")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
-    toggleStatus(sel);
-  }, style: Object.assign({}, btnG, { flex: 1, textAlign: "center" }) }, sel.status === "completed" ? "Reabrir" : "Conclu\xEDdo"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-    deleteJob(sel);
-  }, style: Object.assign({}, btnR, { padding: "10px 14px" }) }, "Del")))) : null, wJobs.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginTop: 16, padding: 16 }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 13, color: "#1A3A5C", marginBottom: 12 } }, "PDF individual por colaborador"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } }, emps.filter(function(e) {
+  }
+  function togT(eid) {
+    const t = nj.team.indexOf(eid) === -1 ? nj.team.concat([eid]) : nj.team.filter(function(x) {
+      return x !== eid;
+    });
+    setNj(Object.assign({}, nj, { team: t }));
+  }
+  function exportEmpPDF(emp) {
+    const myJobs = wJobs.filter(function(j) {
+      return (j.team || []).indexOf(emp.id) !== -1;
+    }).slice().sort(function(a, b) {
+      return a.date < b.date ? -1 : 1;
+    });
+    const semanaLabel = dates[0] ? (/* @__PURE__ */ new Date(dates[0] + "T12:00:00")).toLocaleDateString("pt-PT", { day: "numeric", month: "long" }) + " a " + (/* @__PURE__ */ new Date(dates[5] + "T12:00:00")).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" }) : "";
+    const rows = myJobs.map(function(job) {
+      const dayLabel = (/* @__PURE__ */ new Date(job.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long" });
+      const colegas = (job.team || []).filter(function(id) {
+        return id !== emp.id;
+      }).map(function(id) {
+        const e = emps.find(function(e2) {
+          return e2.id === id;
+        });
+        return e ? e.name.split(" ")[0] : id;
+      }).join(", ") || "Sozinho/a";
+      return `<tr><td style="padding:10px 12px;font-weight:600;color:#1A3A5C;text-transform:capitalize">${dayLabel}</td><td style="padding:10px 12px;font-weight:700;color:#1A3A5C">${job.cn}</td><td style="padding:10px 12px;color:#64748B;font-size:12px">${job.addr || "\u2014"}</td><td style="padding:10px 12px;white-space:nowrap;color:#334155;font-weight:600">${job.t1} \u2014 ${job.t2}</td><td style="padding:10px 12px;color:#64748B">${colegas}</td></tr>`;
+    }).join("");
+    const win = window.open("", "_blank");
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Rota \u2014 ${emp.name}</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C;max-width:800px;margin:0 auto}.header{background:#1A3A5C;color:#fff;padding:20px 24px;border-radius:10px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center}table{width:100%;border-collapse:collapse;font-size:13px}th{background:#1A3A5C;color:#fff;padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase}tr:nth-child(even){background:#F8FAFC}.footer{margin-top:24px;padding-top:12px;border-top:1px solid #E2EBF4;font-size:10px;color:#94A3B8;display:flex;justify-content:space-between}@media print{body{padding:15px}}</style></head><body><div class="header"><div style="display:flex;align-items:center;gap:16px"><div style="width:48px;height:48px;border-radius:50%;background:#38B6D8;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;color:#1A3A5C">${emp.av || emp.name.slice(0, 2).toUpperCase()}</div><div><div style="font-size:20px;font-weight:800">${emp.name}</div><div style="font-size:12px;opacity:0.6">${emp.role || "T\xE9cnico/a de Limpeza"}</div></div></div><div style="text-align:right"><div style="font-size:13px;font-weight:700">Semana de</div><div style="font-size:12px;opacity:0.7">${semanaLabel}</div><div style="margin-top:8px;background:#38B6D8;color:#1A3A5C;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;display:inline-block">${myJobs.length} servi\xE7o${myJobs.length !== 1 ? "s" : ""}</div></div></div>${myJobs.length === 0 ? '<p style="text-align:center;color:#94A3B8;padding:40px">Sem servi\xE7os nesta semana.</p>' : `<table><thead><tr><th>Dia</th><th>Cliente</th><th>Morada</th><th>Hor\xE1rio</th><th>Colega</th></tr></thead><tbody>${rows}</tbody></table>`}<div class="footer"><span>SamorClean by Fragancelines, Lda \u2022 samorclean.geral@gmail.com \u2022 910 637 588</span><span>Gerado em ${(/* @__PURE__ */ new Date()).toLocaleDateString("pt-PT")}</span></div><script>window.onload=function(){window.print();}<\/script></body></html>`);
+    win.document.close();
+  }
+  if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar rotas...");
+  function CalendarWeek() {
+    const hourH = 60;
+    const startH = 7;
+    const endH = 20;
+    const totalH = (endH - startH) * hourH;
+    function jobTop(t1) {
+      return (timeToMin(t1) / 60 - startH) * hourH;
+    }
+    function jobHeight(t1, t2) {
+      return Math.max(30, (timeToMin(t2) - timeToMin(t1)) / 60 * hourH);
+    }
+    return /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "50px repeat(6, 1fr)", minWidth: 700 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderBottom: "2px solid #E2EBF4", height: 44 } }), dates.map(function(d, i) {
+      const isToday = d === todayStr;
+      const dt = /* @__PURE__ */ new Date(d + "T12:00:00");
+      const dayJobs = wJobs.filter(function(j) {
+        return j.date === d;
+      });
+      return /* @__PURE__ */ React.createElement("div", { key: d, style: { background: isToday ? "#EFF6FF" : "#F8FAFC", borderBottom: "2px solid #E2EBF4", borderLeft: "1px solid #E2EBF4", padding: "6px 4px", textAlign: "center", height: 44 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: isToday ? "#2E6DA4" : "#94A3B8", textTransform: "uppercase" } }, DIAS_SHORT[i]), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 800, color: isToday ? "#2E6DA4" : "#1A3A5C" } }, dt.getDate()));
+    }), /* @__PURE__ */ React.createElement("div", { style: { position: "relative", height: totalH, borderRight: "1px solid #E2EBF4" } }, Array.from({ length: endH - startH }, function(_, i) {
+      return /* @__PURE__ */ React.createElement("div", { key: i, style: { position: "absolute", top: i * hourH, left: 0, right: 0, height: hourH, borderTop: "1px solid #F1F5F9", paddingLeft: 4 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 9, color: "#CBD5E1", lineHeight: "1" } }, String(startH + i).padStart(2, "0"), "h"));
+    })), dates.map(function(d, di) {
+      const dayJobs = wJobs.filter(function(j) {
+        return j.date === d;
+      }).slice().sort(function(a, b) {
+        return timeToMin(a.t1) - timeToMin(b.t1);
+      });
+      const isToday = d === todayStr;
+      return /* @__PURE__ */ React.createElement(
+        "div",
+        {
+          key: d,
+          style: { position: "relative", height: totalH, borderLeft: "1px solid #E2EBF4", background: isToday ? "rgba(239,246,255,0.3)" : "transparent" },
+          onDragOver: function(e) {
+            e.preventDefault();
+          },
+          onDrop: function(e) {
+            e.preventDefault();
+            if (!dragJob) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const y = e.clientY - rect.top;
+            const mins = Math.round((y / hourH + startH) * 60 / 30) * 30;
+            const dur = timeToMin(dragJob.t2) - timeToMin(dragJob.t1);
+            const newT1 = minToTime(Math.max(startH * 60, Math.min((endH - 1) * 60, mins)));
+            const newT2 = minToTime(timeToMin(newT1) + dur);
+            updateJob(dragJob.id, { date: d, t1: newT1, t2: newT2 });
+            setDragJob(null);
+          }
+        },
+        Array.from({ length: endH - startH }, function(_, i) {
+          return /* @__PURE__ */ React.createElement("div", { key: i, style: { position: "absolute", top: i * hourH, left: 0, right: 0, height: hourH, borderTop: "1px solid #F1F5F9" } });
+        }),
+        dayJobs.map(function(job, ji) {
+          const top = jobTop(job.t1);
+          const height = jobHeight(job.t1, job.t2);
+          const firstEmp = emps.find(function(e) {
+            return (job.team || [])[0] === e.id;
+          });
+          const color = firstEmp ? empColor(firstEmp.id) : "#2E6DA4";
+          const isCompleted = job.status === "completed";
+          return /* @__PURE__ */ React.createElement(
+            "div",
+            {
+              key: job.id,
+              draggable: true,
+              onDragStart: function(e) {
+                e.stopPropagation();
+                setDragJob(job);
+              },
+              onDragEnd: function() {
+                setDragJob(null);
+              },
+              onClick: function(e) {
+                e.stopPropagation();
+                setSelJob(job);
+              },
+              style: {
+                position: "absolute",
+                top,
+                left: 2 + ji * 2,
+                right: 2,
+                height,
+                minHeight: 28,
+                background: isCompleted ? "#DCFCE7" : color + "22",
+                border: "2px solid " + (isCompleted ? "#16A34A" : color),
+                borderRadius: 6,
+                padding: "2px 5px",
+                cursor: "pointer",
+                overflow: "hidden",
+                zIndex: 10 + ji,
+                boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
+              }
+            },
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 800, color: isCompleted ? "#15803D" : color, lineHeight: 1.2, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" } }, job.cn),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#64748B", lineHeight: 1.2 } }, job.t1, "\u2013", job.t2),
+            (job.team || []).slice(0, 3).map(function(eid) {
+              const e = emps.find(function(x) {
+                return x.id === eid;
+              });
+              if (!e) return null;
+              return /* @__PURE__ */ React.createElement("div", { key: eid, style: { display: "inline-block", width: 12, height: 12, borderRadius: "50%", background: empColor(eid), marginRight: 2, marginTop: 1 } });
+            })
+          );
+        })
+      );
+    })));
+  }
+  function CalendarMonth() {
+    const d = /* @__PURE__ */ new Date();
+    d.setMonth(d.getMonth() + wk);
+    const year = d.getFullYear();
+    const month = d.getMonth();
+    const firstDay = (new Date(year, month, 1).getDay() || 7) - 1;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < firstDay; i++) cells.push(null);
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dt = new Date(year, month, i);
+      cells.push(localDateStr(dt));
+    }
+    while (cells.length % 7 !== 0) cells.push(null);
+    return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 1, background: "#E2EBF4", borderRadius: 10, overflow: "hidden" } }, DIAS_SHORT.map(function(d2) {
+      return /* @__PURE__ */ React.createElement("div", { key: d2, style: { background: "#1A3A5C", color: "#fff", padding: "8px 4px", textAlign: "center", fontSize: 11, fontWeight: 700 } }, d2);
+    }), cells.map(function(dateStr, i) {
+      if (!dateStr) return /* @__PURE__ */ React.createElement("div", { key: "e" + i, style: { background: "#F8FAFC", minHeight: 80 } });
+      const dayJobs = wJobs.filter(function(j) {
+        return j.date === dateStr;
+      });
+      const isToday = dateStr === todayStr;
+      const dt = /* @__PURE__ */ new Date(dateStr + "T12:00:00");
+      return /* @__PURE__ */ React.createElement(
+        "div",
+        {
+          key: dateStr,
+          style: { background: isToday ? "#EFF6FF" : "#fff", minHeight: 80, padding: 4, cursor: "pointer" },
+          onClick: function() {
+            setCalView("week");
+            const diff = Math.round((dt - /* @__PURE__ */ new Date()) / (7 * 24 * 3600 * 1e3));
+            setWk(diff >= 0 ? Math.ceil(diff) : Math.floor(diff));
+          }
+        },
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: isToday ? 800 : 600, color: isToday ? "#2E6DA4" : "#1A3A5C", marginBottom: 3 } }, dt.getDate()),
+        dayJobs.slice(0, 3).map(function(job) {
+          const firstEmp = emps.find(function(e) {
+            return (job.team || [])[0] === e.id;
+          });
+          const color = firstEmp ? empColor(firstEmp.id) : "#2E6DA4";
+          return /* @__PURE__ */ React.createElement("div", { key: job.id, onClick: function(e) {
+            e.stopPropagation();
+            setSelJob(job);
+          }, style: { background: color + "22", border: "1px solid " + color, borderRadius: 3, padding: "1px 4px", fontSize: 9, fontWeight: 600, color, marginBottom: 1, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", cursor: "pointer" } }, job.cn);
+        }),
+        dayJobs.length > 3 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8" } }, "+", dayJobs.length - 3, " mais")
+      );
+    })));
+  }
+  const empsWithJobs = emps.filter(function(e) {
     return wJobs.some(function(j) {
       return (j.team || []).indexOf(e.id) !== -1;
     });
-  }).map(function(e) {
+  });
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 10 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Rotas"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 2 } }, getLabel())), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", border: "1.5px solid #E2EBF4", borderRadius: 8, overflow: "hidden" } }, [["week", "Semana"], ["month", "M\xEAs"]].map(function(v) {
+    return /* @__PURE__ */ React.createElement("button", { key: v[0], onClick: function() {
+      setCalView(v[0]);
+      setWk(0);
+    }, style: { padding: "6px 14px", background: calView === v[0] ? "#1A3A5C" : "#fff", color: calView === v[0] ? "#fff" : "#64748B", fontSize: 12, fontWeight: 700, border: "none", cursor: "pointer" } }, v[1]);
+  })), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    setWk(function(w) {
+      return w - 1;
+    });
+  }, style: Object.assign({}, btnX, { padding: "7px 12px" }) }, "\u2039"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    setWk(0);
+  }, style: Object.assign({}, btnX, { padding: "7px 12px", fontSize: 11 }) }, "Hoje"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    setWk(function(w) {
+      return w + 1;
+    });
+  }, style: Object.assign({}, btnX, { padding: "7px 12px" }) }, "\u203A"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    setShowNew(true);
+  }, style: btn }, "+ Servi\xE7o"), /* @__PURE__ */ React.createElement("button", { onClick: generatePreview, style: Object.assign({}, btnG, { fontSize: 13 }) }, "\u26A1 Gerar Semana"), calView === "week" && wJobs.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    const win = window.open("", "_blank");
+    const byEmp = {};
+    emps.forEach(function(e) {
+      byEmp[e.id] = { emp: e, jobs: [] };
+    });
+    wJobs.forEach(function(j) {
+      (j.team || []).forEach(function(eid) {
+        if (byEmp[eid]) byEmp[eid].jobs.push(j);
+      });
+    });
+    const sections = Object.values(byEmp).filter(function(x) {
+      return x.jobs.length > 0;
+    }).map(function(x) {
+      const rows = x.jobs.slice().sort(function(a, b) {
+        return a.date < b.date ? -1 : 1;
+      }).map(function(j) {
+        const day = (/* @__PURE__ */ new Date(j.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "long", day: "2-digit", month: "short" });
+        return `<tr><td>${day}</td><td>${j.cn}</td><td>${j.t1}\u2013${j.t2}</td><td>${j.status === "completed" ? "\u2713 Conclu\xEDdo" : "Pendente"}</td></tr>`;
+      }).join("");
+      return `<h3 style="color:#1A3A5C;margin:20px 0 8px">${x.emp.name}</h3><table width="100%" style="border-collapse:collapse;font-size:12px"><thead><tr style="background:#1A3A5C;color:#fff"><th style="padding:6px">Dia</th><th>Cliente</th><th>Hor\xE1rio</th><th>Estado</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }).join("");
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Rotas</title></head><body style="font-family:Arial;padding:20px;color:#1A3A5C"><h2>Rotas \u2014 ${getLabel()}</h2>${sections}<script>window.onload=function(){window.print();}<\/script></body></html>`);
+    win.document.close();
+  }, style: Object.assign({}, btnO, { fontSize: 13 }) }, "\u{1F4C4} PDF Rotas"))), calView === "week" && empsWithJobs.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, padding: 12 }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 12, color: "#1A3A5C", marginBottom: 8 } }, "PDF individual:"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } }, empsWithJobs.map(function(e) {
     const count = wJobs.filter(function(j) {
       return (j.team || []).indexOf(e.id) !== -1;
     }).length;
-    return /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        key: e.id,
-        onClick: function() {
-          exportEmpPDF(e, dates, wJobs);
-        },
-        style: { display: "flex", alignItems: "center", gap: 8, background: "#F8FAFC", border: "1.5px solid #E2EBF4", borderRadius: 10, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600, color: "#1A3A5C" }
-      },
-      /* @__PURE__ */ React.createElement("div", { style: { width: 28, height: 28, borderRadius: "50%", background: empColor(e.id), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 10, fontWeight: 800, flexShrink: 0 } }, e.av || e.name.slice(0, 2).toUpperCase()),
-      /* @__PURE__ */ React.createElement("span", null, e.name.split(" ")[0]),
-      /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 400 } }, count, " serv."),
-      /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#2E6DA4" } }, "\u{1F4C4}")
-    );
-  }))), showNew ? /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 20 }, onClick: function() {
-    setShowNew(false);
-  } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 28, maxWidth: 500, width: "100%", maxHeight: "85vh", overflowY: "auto" }, onClick: function(e) {
+    return /* @__PURE__ */ React.createElement("button", { key: e.id, onClick: function() {
+      exportEmpPDF(e);
+    }, style: { display: "flex", alignItems: "center", gap: 6, background: "#F8FAFC", border: "1.5px solid #E2EBF4", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#1A3A5C" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: empColor(e.id), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 9, fontWeight: 800 } }, e.av || e.name.slice(0, 2).toUpperCase()), /* @__PURE__ */ React.createElement("span", null, e.name.split(" ")[0]), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: "#94A3B8" } }, count, "s"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: "#2E6DA4" } }, "\u{1F4C4}"));
+  }))), empsWithJobs.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 } }, empsWithJobs.map(function(e) {
+    return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#64748B" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 10, height: 10, borderRadius: "50%", background: empColor(e.id) } }), e.name.split(" ")[0]);
+  })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { padding: 0, overflow: "hidden" }) }, calView === "week" ? /* @__PURE__ */ React.createElement(CalendarWeek, null) : /* @__PURE__ */ React.createElement(CalendarMonth, null)), calView === "week" && /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginTop: 16 } }, [
+    { l: "Servi\xE7os semana", v: wJobs.length, c: "#2E6DA4" },
+    { l: "Conclu\xEDdos", v: wJobs.filter(function(j) {
+      return j.status === "completed";
+    }).length, c: "#16A34A" },
+    { l: "Fatura\xE7\xE3o prevista", v: fmt(wJobs.reduce(function(s, j) {
+      return s + (j.val || 0);
+    }, 0)) + "\u20AC", c: "#7C3AED" }
+  ].map(function(k) {
+    return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 14 }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, k.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: k.c } }, k.v));
+  })), selJob && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 20 }, onClick: function() {
+    setSelJob(null);
+  } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 24, maxWidth: 420, width: "100%" }, onClick: function(e) {
     e.stopPropagation();
-  } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: "#1A3A5C" } }, "Novo Servico"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+  } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C" } }, selJob.cn), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, (/* @__PURE__ */ new Date(selJob.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long" }))), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    setSelJob(null);
+  }, style: Object.assign({}, btnX, { padding: "4px 8px" }) }, "\u2715")), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 } }, [
+    { l: "Hor\xE1rio", v: selJob.t1 + " \u2014 " + selJob.t2 },
+    { l: "Estado", v: selJob.status === "completed" ? "\u2713 Conclu\xEDdo" : "\u23F3 Pendente" },
+    { l: "Valor", v: fmt(selJob.val || 0) + "\u20AC" },
+    { l: "Pago", v: selJob.paid ? "\u2713 Sim" : "\u2717 N\xE3o" }
+  ].map(function(r) {
+    return /* @__PURE__ */ React.createElement("div", { key: r.l }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase" } }, r.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "#1A3A5C", marginTop: 2 } }, r.v));
+  })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", marginBottom: 6 } }, "Equipa"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } }, (selJob.team || []).map(function(eid) {
+    const e = emps.find(function(x) {
+      return x.id === eid;
+    });
+    return e ? /* @__PURE__ */ React.createElement("div", { key: eid, style: { display: "flex", alignItems: "center", gap: 5, background: "#F8FAFC", border: "1px solid #E2EBF4", borderRadius: 6, padding: "4px 8px", fontSize: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 18, height: 18, borderRadius: "50%", background: empColor(eid), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 8, fontWeight: 800 } }, e.av || e.name.slice(0, 2)), e.name.split(" ")[0]) : null;
+  }))), selJob.checklist_incomplete && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF3C7", border: "1px solid #F59E0B", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#92400E", marginBottom: 12, fontWeight: 600 } }, "\u26A0 Checklist incompleta"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    updateJob(selJob.id, { status: selJob.status === "completed" ? "pending" : "completed" });
+  }, style: Object.assign({}, btnG, { flex: 1, textAlign: "center" }) }, selJob.status === "completed" ? "Reabrir" : "\u2713 Conclu\xEDdo"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    updateJob(selJob.id, { paid: !selJob.paid });
+  }, style: Object.assign({}, btnO, { flex: 1, textAlign: "center" }) }, selJob.paid ? "Desmarcar pago" : "Marcar pago"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    deleteJob(selJob);
+  }, style: Object.assign({}, btnR, { padding: "10px 12px" }) }, "\u{1F5D1}")))), showGen && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 20 }, onClick: function() {
+    setShowGen(false);
+  } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 24, maxWidth: 480, width: "100%", maxHeight: "80vh", overflowY: "auto" }, onClick: function(e) {
+    e.stopPropagation();
+  } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C", marginBottom: 4 } }, "Pr\xE9-visualiza\xE7\xE3o da semana"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 16 } }, preview.length, " servi\xE7os a criar"), preview.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24 } }, "Nenhum servi\xE7o a gerar \u2014 todos os clientes j\xE1 t\xEAm servi\xE7os esta semana ou n\xE3o t\xEAm agenda configurada.") : preview.map(function(j, i) {
+    return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #F1F5F9", fontSize: 13 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, color: "#1A3A5C" } }, j.cn), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, (/* @__PURE__ */ new Date(j.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" }), " \u2022 ", j.t1, "\u2013", j.t2)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#2E6DA4", fontWeight: 700 } }, fmt(j.val || 0), "\u20AC"));
+  }), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 16 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    setShowGen(false);
+  }, style: Object.assign({}, btnX, { flex: 1, textAlign: "center" }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: confirmGenerate, disabled: generating || preview.length === 0, style: Object.assign({}, btnG, { flex: 2, textAlign: "center", opacity: preview.length === 0 ? 0.5 : 1 }) }, generating ? "A criar..." : "Confirmar " + preview.length + " servi\xE7os")))), showNew && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 20 }, onClick: function() {
     setShowNew(false);
-  }, style: Object.assign({}, btnX, { padding: "4px 8px", fontSize: 18 }) }, "X")), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Cliente"), /* @__PURE__ */ React.createElement("select", { style: inp, value: nj.cn, onChange: function(e) {
+  } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 24, maxWidth: 480, width: "100%", maxHeight: "85vh", overflowY: "auto" }, onClick: function(e) {
+    e.stopPropagation();
+  } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C", marginBottom: 16 } }, "Novo Servi\xE7o"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Cliente"), /* @__PURE__ */ React.createElement("select", { style: inp, value: nj.cn, onChange: function(e) {
     const c = clients.find(function(x) {
       return x.name === e.target.value;
     });
-    setNj(Object.assign({}, nj, { cn: e.target.value, addr: c ? c.address : nj.addr, svc: c ? c.service : nj.svc }));
-  } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014 Selecciona um cliente \u2014"), clients.map(function(c) {
-    return /* @__PURE__ */ React.createElement("option", { key: c.id, value: c.name }, c.name);
-  }))), [["addr", "Morada", "Rua, N, Local", true], ["val", "Valor (EUR)", "250", false]].map(function(f) {
-    const key = f[0], label = f[1], ph = f[2], full = f[3];
-    return /* @__PURE__ */ React.createElement("div", { key, style: { gridColumn: full ? "1 / -1" : "auto" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, label), /* @__PURE__ */ React.createElement("input", { style: inp, value: nj[key], onChange: function(e) {
-      const u = Object.assign({}, nj);
-      u[key] = e.target.value;
-      setNj(u);
-    }, placeholder: ph }));
-  }), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Hora in\xEDcio"), /* @__PURE__ */ React.createElement("select", { style: inp, value: nj.t1, onChange: function(e) {
+    setNj(Object.assign({}, nj, { cn: e.target.value, addr: c ? c.address : "", team: c && c.equipa_habitual ? c.equipa_habitual : [] }));
+  } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "Seleccionar cliente..."), clients.map(function(c) {
+    return /* @__PURE__ */ React.createElement("option", { key: c.id }, c.name);
+  }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Data"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: nj.date, onChange: function(e) {
+    setNj(Object.assign({}, nj, { date: e.target.value }));
+  } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Valor (\u20AC)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: nj.val, onChange: function(e) {
+    setNj(Object.assign({}, nj, { val: e.target.value }));
+  }, onFocus: function(e) {
+    if (e.target.value === "0" || e.target.value === "") e.target.select();
+  } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Hora in\xEDcio"), /* @__PURE__ */ React.createElement("select", { style: inp, value: nj.t1, onChange: function(e) {
     setNj(Object.assign({}, nj, { t1: e.target.value }));
   } }, TIME_SLOTS.map(function(t) {
-    return /* @__PURE__ */ React.createElement("option", { key: t, value: t }, t);
+    return /* @__PURE__ */ React.createElement("option", { key: t }, t);
   }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Hora fim"), /* @__PURE__ */ React.createElement("select", { style: inp, value: nj.t2, onChange: function(e) {
     setNj(Object.assign({}, nj, { t2: e.target.value }));
   } }, TIME_SLOTS.map(function(t) {
-    return /* @__PURE__ */ React.createElement("option", { key: t, value: t }, t);
-  }))), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Servi\xE7o"), /* @__PURE__ */ React.createElement("select", { style: inp, value: nj.svc, onChange: function(e) {
-    setNj(Object.assign({}, nj, { svc: e.target.value }));
-  } }, SVCS.map(function(s) {
-    return /* @__PURE__ */ React.createElement("option", { key: s }, s);
-  }))), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Data"), /* @__PURE__ */ React.createElement("select", { style: inp, value: nj.date || dates[0], onChange: function(e) {
-    setNj(Object.assign({}, nj, { date: e.target.value }));
-  } }, dates.map(function(d, i) {
-    return /* @__PURE__ */ React.createElement("option", { key: d, value: d }, DAY_LABELS[i], " ", (/* @__PURE__ */ new Date(d + "T12:00:00")).toLocaleDateString("pt-PT", { day: "numeric", month: "long" }));
+    return /* @__PURE__ */ React.createElement("option", { key: t }, t);
   }))), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Equipa"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, emps.map(function(e) {
     const checked = nj.team.indexOf(e.id) !== -1;
     return /* @__PURE__ */ React.createElement("div", { key: e.id, onClick: function() {
       togT(e.id);
-    }, style: { display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 8, border: "1.5px solid " + (checked ? "#2E6DA4" : "#E2EBF4"), background: checked ? "#EFF6FF" : "#fff", cursor: "pointer" } }, /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 24, color: checked ? empColor(e.id) : "#CBD5E1" }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: checked ? "#2E6DA4" : "#64748B" } }, e.name.split(" ")[0]));
-  })))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 18 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    }, style: { display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 8, border: "1.5px solid " + (checked ? "#2E6DA4" : "#E2EBF4"), background: checked ? "#EFF6FF" : "#fff", cursor: "pointer" } }, /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 22, color: checked ? empColor(e.id) : "#CBD5E1" }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: checked ? "#2E6DA4" : "#64748B" } }, e.name.split(" ")[0]));
+  })))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 16 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setShowNew(false);
-  }, style: Object.assign({}, btnX, { flex: 1 }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: addJ, disabled: !nj.cn, style: Object.assign({}, btn, { flex: 2, background: nj.cn ? "#2E6DA4" : "#94A3B8", cursor: nj.cn ? "pointer" : "not-allowed" }) }, "Adicionar")))) : null);
+  }, style: Object.assign({}, btnX, { flex: 1 }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: addJ, disabled: !nj.cn || !nj.date, style: Object.assign({}, btn, { flex: 2, opacity: !nj.cn || !nj.date ? 0.5 : 1 }) }, "Adicionar")))));
 }
 function HistoricoVisitas(props) {
   const cliente = props.cliente;
@@ -3139,7 +3117,7 @@ function ClientPortal(props) {
     await db.update("servicos", job.id, { rated: true });
     for (let i = 0; i < (job.team || []).length; i++) {
       const eid = job.team[i];
-      const allAvs = await db.list("avaliacoes", "?select=stars&funcion\xE1rio_id=eq." + encodeURIComponent(eid));
+      const allAvs = await db.list("avaliacoes", "?select=stars&funcionario_id=eq." + encodeURIComponent(eid));
       if (allAvs && allAvs.length > 0) {
         const avg = allAvs.reduce(function(s, a) {
           return s + (a.stars || 0);
@@ -3429,7 +3407,7 @@ function ManagerLogin(props) {
     }
   )), err && /* @__PURE__ */ React.createElement("div", { style: { background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, padding: "10px 14px", color: "#FCA5A5", fontSize: 13, marginBottom: 16 } }, err), /* @__PURE__ */ React.createElement("button", { onClick: tryLogin, disabled: loading || !password.trim(), style: { width: "100%", background: password.trim() ? "#38B6D8" : "rgba(255,255,255,0.1)", border: "none", borderRadius: 12, padding: "14px 0", color: "#fff", fontSize: 15, fontWeight: 800, cursor: password.trim() ? "pointer" : "not-allowed", marginBottom: 16 } }, loading ? "A verificar..." : "Entrar"), /* @__PURE__ */ React.createElement("button", { onClick: onBack, style: { background: "transparent", border: "none", color: "rgba(255,255,255,0.3)", fontSize: 12, cursor: "pointer" } }, "Voltar")));
 }
-export default function App() {
+function App() {
   const params = new URLSearchParams(window.location.search);
   const clienteParam = params.get("cliente");
   const ocasionalParam = params.get("ocasional");
