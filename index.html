@@ -226,15 +226,21 @@ function Finance() {
   const [monthJobs, setMonthJobs] = useState([]);
   const [last6Months, setLast6Months] = useState([]);
   const [clientsMap, setClientsMap] = useState({});
+  const [despesas, setDespesas] = useState([]);
+  const [clientes, setClientes] = useState([]);
+  const now = /* @__PURE__ */ new Date();
+  const dayOfMonth = now.getDate();
+  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const isLastWeek = dayOfMonth >= lastDayOfMonth - 6;
   useEffect(function() {
-    const now = /* @__PURE__ */ new Date();
     const monthStart = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
     const monthEnd = localDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
     const sixMonthsAgo = localDateStr(new Date(now.getFullYear(), now.getMonth() - 5, 1));
     Promise.all([
       db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd + "&status=eq.completed"),
       db.list("servicos", "?select=*&date=gte." + sixMonthsAgo + "&status=eq.completed"),
-      db.list("clientes", "?select=id,name,iva_type")
+      db.list("clientes", "?select=id,name,iva_type"),
+      db.list("despesas", "?select=*&data=gte." + monthStart + "&data=lte." + monthEnd)
     ]).then(function(results) {
       setMonthJobs(results[0] || []);
       setLast6Months(results[1] || []);
@@ -243,6 +249,8 @@ function Finance() {
         cm[c.id] = c;
       });
       setClientsMap(cm);
+      setClientes(results[2] || []);
+      setDespesas(results[3] || []);
       setLoading(false);
     });
   }, []);
@@ -266,9 +274,39 @@ function Finance() {
     return s + withIva(j.val || 0, j);
   }, 0);
   const divida = fatComIva - recebido;
+  const totalCustos = despesas.reduce(function(s, d) {
+    return s + d.valor;
+  }, 0);
+  const totalIVADedutivel = despesas.reduce(function(s, d) {
+    if (!d.iva_dedutivel) return s;
+    const ivaTotal = d.valor * (d.iva_percentagem / 100) / (1 + d.iva_percentagem / 100);
+    return s + ivaTotal * (d.iva_percentagem_dedutivel / 100);
+  }, 0);
+  const custosPorPagar = despesas.filter(function(d) {
+    return !d.pago;
+  }).reduce(function(s, d) {
+    return s + d.valor;
+  }, 0);
+  const margemBruta = fatSemIva - totalCustos;
+  const margemPct = fatSemIva > 0 ? Math.round(margemBruta / fatSemIva * 100) : 0;
+  const custosCat = {};
+  despesas.forEach(function(d) {
+    const cat = d.categoria || "Outro";
+    custosCat[cat] = (custosCat[cat] || 0) + d.valor;
+  });
+  const emAtraso = monthJobs.filter(function(j) {
+    if (j.paid) return false;
+    const jobDate = /* @__PURE__ */ new Date(j.date + "T12:00:00");
+    const diffDays = Math.floor((now - jobDate) / (24 * 3600 * 1e3));
+    return diffDays > 8;
+  });
+  const pendingRows = monthJobs.filter(function(j) {
+    return !j.paid;
+  }).sort(function(a, b) {
+    return a.date < b.date ? -1 : 1;
+  });
   const monthsData = (function() {
     const buckets = {};
-    const now = /* @__PURE__ */ new Date();
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const key = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
@@ -289,30 +327,41 @@ function Finance() {
   const maxB = Math.max.apply(null, monthsData.map(function(m) {
     return m.fat;
   }).concat([1]));
-  const pendingRows = monthJobs.filter(function(j) {
-    return !j.paid;
-  }).sort(function(a, b) {
-    return a.date < b.date ? -1 : 1;
-  });
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar dados financeiros...");
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 24 } }, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Dashboard Financeiro"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, (/* @__PURE__ */ new Date()).toLocaleDateString("pt-PT", { month: "long", year: "numeric" }))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 20 } }, [
-    { l: "Faturado sem IVA", v: fmt(fatSemIva), s: "Este m\xEAs", c: "#2E6DA4" },
-    { l: "Faturado com IVA", v: fmt(fatComIva), s: "Este m\xEAs", c: "#0F766E" },
-    { l: "Recebido", v: fmt(recebido), s: fatComIva > 0 ? Math.round(recebido / fatComIva * 100) + "%" : "0%", c: "#16A34A" },
-    { l: "Em d\xEDvida", v: fmt(divida), s: "Por cobrar", c: "#DC2626" }
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 20 } }, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Dashboard Financeiro"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, now.toLocaleDateString("pt-PT", { month: "long", year: "numeric" }))), isLastWeek && /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", border: "1.5px solid #2E6DA4", borderRadius: 10, padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 20 } }, "\u{1F4CB}"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#2E6DA4" } }, "\xC9 altura de faturar!"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, "Estamos na \xFAltima semana do m\xEAs. Emite as faturas dos clientes deste m\xEAs."))), emAtraso.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, emAtraso.map(function(j) {
+    const diffDays = Math.floor((now - /* @__PURE__ */ new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3));
+    const cor = diffDays >= 30 ? "#DC2626" : diffDays >= 15 ? "#F97316" : "#F59E0B";
+    const bg = diffDays >= 30 ? "#FEE2E2" : diffDays >= 15 ? "#FFF7ED" : "#FEF3C7";
+    const msg = diffDays >= 30 ? "\u26A0 +30 dias \u2014 considerar rescis\xE3o" : diffDays >= 15 ? "\u26A0 +15 dias \u2014 suspender servi\xE7o" : "\u26A0 +9 dias \u2014 enviar follow-up";
+    return /* @__PURE__ */ React.createElement("div", { key: j.id, style: { background: bg, border: "1.5px solid " + cor, borderRadius: 10, padding: "10px 16px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: cor } }, j.cn), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, msg, " \u2014 ", fmt(withIva(j.val || 0, j)), "\u20AC por cobrar")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: cor } }, diffDays, " dias"));
+  })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Receitas"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 } }, [
+    { l: "Faturado s/IVA", v: fmt(fatSemIva) + "\u20AC", c: "#2E6DA4" },
+    { l: "Faturado c/IVA", v: fmt(fatComIva) + "\u20AC", c: "#0F766E" },
+    { l: "Recebido", v: fmt(recebido) + "\u20AC", s: fatComIva > 0 ? Math.round(recebido / fatComIva * 100) + "%" : "0%", c: "#16A34A" },
+    { l: "Em d\xEDvida", v: fmt(divida) + "\u20AC", c: "#DC2626" }
   ].map(function(k) {
-    return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 18, borderTop: "3px solid " + k.c }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 10 } }, k.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: k.c } }, k.v), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 6 } }, k.s));
-  })), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, marginBottom: 20 } }, /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 20 } }, "Fatura\xE7\xE3o vs Recebido (com IVA) \u2014 6 meses"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", height: 160 } }, monthsData.map(function(m, i) {
-    const fH = Math.round(m.fat / maxB * 140);
-    const rH = Math.round(m.rec / maxB * 140);
-    return /* @__PURE__ */ React.createElement("div", { key: i, style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 2, alignItems: "flex-end", height: 140 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 14, height: fH, background: "#2E6DA4", borderRadius: "3px 3px 0 0" } }), /* @__PURE__ */ React.createElement("div", { style: { width: 14, height: rH, background: "#38B6D8", borderRadius: "3px 3px 0 0" } })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", fontWeight: 600 } }, m.m));
-  })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 16, marginTop: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 10, height: 10, borderRadius: 2, background: "#2E6DA4" } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#64748B" } }, "Faturado")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 10, height: 10, borderRadius: 2, background: "#38B6D8" } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#64748B" } }, "Recebido")))), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Resumo do M\xEAs"), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, fontWeight: 900, color: divida <= 0 ? "#16A34A" : "#F59E0B" } }, fatComIva > 0 ? Math.round(recebido / fatComIva * 100) : 0, "%"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B" } }, "cobrado")), /* @__PURE__ */ React.createElement("div", { style: divid }), [{ l: "Servi\xE7os conclu\xEDdos", v: monthJobs.length, c: "#1A3A5C" }, { l: "Por cobrar", v: pendingRows.length, c: "#F59E0B" }, { l: "Faturado c/IVA", v: fmt(fatComIva), c: "#0F766E" }, { l: "Recebido", v: fmt(recebido), c: "#16A34A" }].map(function(r) {
-    return /* @__PURE__ */ React.createElement("div", { key: r.l, style: { display: "flex", justifyContent: "space-between", marginBottom: 10 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#64748B" } }, r.l), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14, fontWeight: 700, color: r.c } }, r.v));
-  }))), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Servi\xE7os por Cobrar (", pendingRows.length, ")"), pendingRows.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24 } }, "Tudo cobrado este m\xEAs!") : /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { borderBottom: "2px solid #E2EBF4" } }, ["Cliente", "Servi\xE7o", "Data", "Valor s/IVA", "Valor c/IVA", "IVA"].map(function(h) {
-    return /* @__PURE__ */ React.createElement("th", { key: h, style: { textAlign: "left", padding: "8px 12px", fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, h);
+    return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 14, borderTop: "3px solid " + k.c }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 8 } }, k.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 900, color: k.c } }, k.v), k.s && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 4 } }, k.s));
+  })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Custos"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 20 } }, [
+    { l: "Total custos", v: fmt(totalCustos) + "\u20AC", c: "#EF4444" },
+    { l: "IVA dedut\xEDvel", v: fmt(totalIVADedutivel) + "\u20AC", c: "#16A34A" },
+    { l: "Por pagar", v: fmt(custosPorPagar) + "\u20AC", c: "#F59E0B" }
+  ].map(function(k) {
+    return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 14, borderTop: "3px solid " + k.c }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 8 } }, k.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 900, color: k.c } }, k.v));
+  })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, padding: 20, background: margemBruta >= 0 ? "#F0FDF4" : "#FEF2F2", border: "2px solid " + (margemBruta >= 0 ? "#16A34A" : "#EF4444") }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 4 } }, "Margem Bruta do M\xEAs"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, fontWeight: 900, color: margemBruta >= 0 ? "#16A34A" : "#EF4444" } }, fmt(margemBruta), "\u20AC"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 2 } }, "Receitas (", fmt(fatSemIva), "\u20AC) \u2212 Custos (", fmt(totalCustos), "\u20AC)")), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 48, fontWeight: 900, color: margemBruta >= 0 ? "#16A34A" : "#EF4444" } }, margemPct, "%"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, "margem")))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, marginBottom: 20 } }, /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 16 } }, "Fatura\xE7\xE3o vs Recebido \u2014 6 meses"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", height: 140 } }, monthsData.map(function(m, i) {
+    const fH = Math.round(m.fat / maxB * 120);
+    const rH = Math.round(m.rec / maxB * 120);
+    return /* @__PURE__ */ React.createElement("div", { key: i, style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 2, alignItems: "flex-end", height: 120 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 14, height: Math.max(2, fH), background: "#2E6DA4", borderRadius: "3px 3px 0 0" } }), /* @__PURE__ */ React.createElement("div", { style: { width: 14, height: Math.max(2, rH), background: "#38B6D8", borderRadius: "3px 3px 0 0" } })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", fontWeight: 600 } }, m.m));
+  })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 16, marginTop: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 10, height: 10, background: "#2E6DA4", borderRadius: 2 } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#64748B" } }, "Faturado")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 10, height: 10, background: "#38B6D8", borderRadius: 2 } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#64748B" } }, "Recebido")))), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Custos por categoria"), Object.keys(custosCat).length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 20, fontSize: 12 } }, "Sem custos registados este m\xEAs.") : Object.keys(custosCat).sort(function(a, b) {
+    return custosCat[b] - custosCat[a];
+  }).map(function(cat) {
+    const pct = totalCustos > 0 ? Math.round(custosCat[cat] / totalCustos * 100) : 0;
+    return /* @__PURE__ */ React.createElement("div", { key: cat, style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#334155", fontWeight: 600 } }, cat), /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B" } }, fmt(custosCat[cat]), "\u20AC (", pct, "%)")), /* @__PURE__ */ React.createElement("div", { style: { height: 6, background: "#F1F5F9", borderRadius: 3 } }, /* @__PURE__ */ React.createElement("div", { style: { height: 6, width: pct + "%", background: "#EF4444", borderRadius: 3 } })));
+  }))), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Servi\xE7os por Cobrar (", pendingRows.length, ")"), pendingRows.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24 } }, "Tudo cobrado este m\xEAs! \u{1F389}") : /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { borderBottom: "2px solid #E2EBF4" } }, ["Cliente", "Data", "Valor s/IVA", "Valor c/IVA", "Dias"].map(function(h) {
+    return /* @__PURE__ */ React.createElement("th", { key: h, style: { textAlign: "left", padding: "8px 10px", fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, h);
   }))), /* @__PURE__ */ React.createElement("tbody", null, pendingRows.map(function(j) {
-    const ivaT = ivaTypeFor(j);
-    return /* @__PURE__ */ React.createElement("tr", { key: j.id, style: { borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 12px", fontWeight: 600, color: "#1A3A5C" } }, j.cn), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 12px", color: "#64748B" } }, j.svc), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 12px", color: "#64748B" } }, (/* @__PURE__ */ new Date(j.date + "T12:00:00")).toLocaleDateString("pt-PT", { day: "2-digit", month: "short" })), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 12px", fontWeight: 700 } }, fmt(j.val || 0)), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 12px", fontWeight: 700 } }, fmt(withIva(j.val || 0, j))), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 12px" } }, /* @__PURE__ */ React.createElement(Bdg, { label: ivaT === "autoliquida\xE7\xE3o" ? "Autoliq." : "Normal", bg: ivaT === "autoliquida\xE7\xE3o" ? "#F3E8FF" : "#EFF6FF", tx: ivaT === "autoliquida\xE7\xE3o" ? "#7C3AED" : "#2E6DA4", sz: 10 })));
+    const diffDays = Math.floor((now - /* @__PURE__ */ new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3));
+    const cor = diffDays >= 30 ? "#DC2626" : diffDays >= 15 ? "#F97316" : diffDays >= 9 ? "#F59E0B" : "#64748B";
+    return /* @__PURE__ */ React.createElement("tr", { key: j.id, style: { borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 600, color: "#1A3A5C" } }, j.cn), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", color: "#64748B" } }, (/* @__PURE__ */ new Date(j.date + "T12:00:00")).toLocaleDateString("pt-PT", { day: "2-digit", month: "short" })), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 700 } }, fmt(j.val || 0), "\u20AC"), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 700 } }, fmt(withIva(j.val || 0, j)), "\u20AC"), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 700, color: cor } }, diffDays, "d"));
   })))));
 }
 function Routes() {
@@ -2430,6 +2479,23 @@ function Leads() {
     convertToClient(selLead);
   }, style: Object.assign({}, btn, { flex: 1, textAlign: "center" }) }, "\u2192 Cliente")))));
 }
+function QRArmazem() {
+  const url = window.location.origin + window.location.pathname + "?armazem=1";
+  const qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" + encodeURIComponent(url);
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0, marginBottom: 4 } }, "QR Code \u2014 Armaz\xE9m"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 24 } }, "Imprime e afixa no armaz\xE9m para registo de entrada e sa\xEDda dos colaboradores."), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 } }, /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 32 }) }, /* @__PURE__ */ React.createElement("img", { src: qrUrl, style: { width: 200, height: 200, margin: "0 auto 16px", display: "block" } }), /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C", marginBottom: 4 } }, "SamorClean \u2014 Armaz\xE9m"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 16 } }, "Registo de Entrada / Sa\xEDda"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    window.open(qrUrl, "_blank");
+  }, style: Object.assign({}, btn, { marginBottom: 8, width: "100%", textAlign: "center" }) }, "Descarregar QR Code"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    window.open(url, "_blank");
+  }, style: Object.assign({}, btnO, { width: "100%", textAlign: "center" }) }, "Testar portal")), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C", marginBottom: 16 } }, "Instru\xE7\xF5es"), [
+    { n: "1", t: "Imprime o QR code", d: "Clica em 'Descarregar QR Code' e imprime em tamanho A5 ou maior." },
+    { n: "2", t: "Afixa no armaz\xE9m", d: "Coloca numa zona vis\xEDvel \xE0 entrada do armaz\xE9m, acess\xEDvel a todos os colaboradores." },
+    { n: "3", t: "Colaborador pica", d: "O colaborador aponta a c\xE2mara do telem\xF3vel ao QR, selecciona o seu nome e introduz o PIN." },
+    { n: "4", t: "Escolhe entrada ou sa\xEDda", d: "A app sugere automaticamente o tipo correcto com base na \xFAltima picagem." },
+    { n: "5", t: "Registo guardado", d: "O registo fica guardado com hora exacta e vis\xEDvel na ficha do colaborador." }
+  ].map(function(s) {
+    return /* @__PURE__ */ React.createElement("div", { key: s.n, style: { display: "flex", gap: 12, marginBottom: 14, alignItems: "flex-start" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 28, height: 28, borderRadius: "50%", background: "#2E6DA4", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 } }, s.n), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C" } }, s.t), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, s.d)));
+  }), /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF3C7", borderRadius: 8, padding: "10px 12px", fontSize: 12, color: "#92400E", marginTop: 8 } }, /* @__PURE__ */ React.createElement("strong", null, "Normas:"), " A picagem no armaz\xE9m \xE9 obrigat\xF3ria todos os dias \u2014 entrada ao chegar e sa\xEDda ao partir. O n\xE3o cumprimento \xE9 registado na ficha do colaborador."))));
+}
 const ALL_MENUS = [
   { k: "home", l: "In\xEDcio" },
   { k: "finance", l: "Financeiro" },
@@ -2554,12 +2620,13 @@ function RelatorioMensal() {
     setLoading(true);
     const from = localDateStr(new Date(ano, mes, 1));
     const to = localDateStr(new Date(ano, mes + 1, 0));
-    const [servicos, clientes, funcs, avs, pedidos] = await Promise.all([
+    const [servicos, clientes, funcs, avs, pedidos, despesas] = await Promise.all([
       db.list("servicos", "?select=*&date=gte." + from + "&date=lte." + to + "&order=date"),
       db.list("clientes", "?select=*"),
       db.list("funcionarios", "?select=*"),
       db.list("avaliacoes", "?select=*"),
-      db.list("pedidos_extra", "?select=*")
+      db.list("pedidos_extra", "?select=*"),
+      db.list("despesas", "?select=*&data=gte." + from + "&data=lte." + to)
     ]);
     const cm = {}, fm = {};
     (clientes || []).forEach(function(c) {
@@ -2567,6 +2634,19 @@ function RelatorioMensal() {
     });
     (funcs || []).forEach(function(f) {
       fm[f.id] = f;
+    });
+    const totalCustos = (despesas || []).reduce(function(s, d) {
+      return s + d.valor;
+    }, 0);
+    const totalIVADedutivel = (despesas || []).reduce(function(s, d) {
+      if (!d.iva_dedutivel) return s;
+      const ivaTotal = d.valor * (d.iva_percentagem / 100) / (1 + d.iva_percentagem / 100);
+      return s + ivaTotal * (d.iva_percentagem_dedutivel / 100);
+    }, 0);
+    const custosCat = {};
+    (despesas || []).forEach(function(d) {
+      const cat = d.categoria || "Outro";
+      custosCat[cat] = (custosCat[cat] || 0) + d.valor;
     });
     function withIva(j) {
       const c = cm[j.client_id];
@@ -2631,25 +2711,27 @@ function RelatorioMensal() {
     const monthPedidos = (pedidos || []).filter(function(p) {
       return p.created_at && p.created_at.slice(0, 7) === ano + "-" + String(mes + 1).padStart(2, "0");
     });
-    setData({ fatTotal, recTotal, custoKm, kmTotal, byClient, byEmp, cm, completed, monthAvs, monthPedidos, servicos: servicos || [] });
+    setData({ fatTotal, recTotal, custoKm, kmTotal, byClient, byEmp, cm, completed, monthAvs, monthPedidos, servicos: servicos || [], totalCustos, totalIVADedutivel, custosCat, despesas: despesas || [] });
     setLoading(false);
   }
   function exportPDF() {
     if (!data) return;
-    const { fatTotal, recTotal, custoKm, kmTotal, byClient, byEmp, cm, completed, monthAvs, monthPedidos } = data;
+    const { fatTotal, recTotal, custoKm, kmTotal, byClient, byEmp, cm, completed, monthAvs, monthPedidos, totalCustos, totalIVADedutivel, custosCat, despesas } = data;
     const mesLabel = MESES[mes] + " " + ano;
-    const margem = fatTotal - custoKm;
+    const totalCustosReal = (totalCustos || 0) + custoKm;
+    const margemBruta = fatTotal / 1.23 - totalCustosReal;
+    const margemPct = fatTotal > 0 ? Math.round(margemBruta / (fatTotal / 1.23) * 100) : 0;
     const clientRows = Object.entries(byClient).map(function(e) {
       const cid = e[0], cs = e[1];
       const c = cm[cid];
       const nome = c ? c.name : "Desconhecido";
       const custoKmC = cs.km * CUSTO_KM;
-      const margemC = cs.fat - custoKmC;
+      const margemC = cs.fat / 1.23 - custoKmC;
       return `<tr>
         <td style="padding:8px 10px;font-weight:600">${nome}</td>
         <td style="padding:8px 10px;text-align:center">${cs.servicos}</td>
+        <td style="padding:8px 10px;text-align:right">${(cs.fat / 1.23).toFixed(2)}\u20AC</td>
         <td style="padding:8px 10px;text-align:right">${cs.fat.toFixed(2)}\u20AC</td>
-        <td style="padding:8px 10px;text-align:right">${custoKmC.toFixed(2)}\u20AC</td>
         <td style="padding:8px 10px;text-align:right;font-weight:700;color:${margemC > 0 ? "#15803D" : "#DC2626"}">${margemC.toFixed(2)}\u20AC</td>
         <td style="padding:8px 10px;text-align:center">${cs.checkIncomplete > 0 ? "\u26A0 " + cs.checkIncomplete : "\u2713"}</td>
       </tr>`;
@@ -2673,6 +2755,9 @@ function RelatorioMensal() {
         <td style="padding:8px 10px;text-align:center">${mediaAvs} ${stars}</td>
       </tr>`;
     }).join("");
+    const custosRows = Object.entries(custosCat || {}).map(function(e) {
+      return `<tr><td style="padding:8px 10px">${e[0]}</td><td style="padding:8px 10px;text-align:right;font-weight:700;color:#EF4444">${e[1].toFixed(2)}\u20AC</td></tr>`;
+    }).join("");
     const win = window.open("", "_blank");
     win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
     <title>Relat\xF3rio Mensal \u2014 ${mesLabel}</title>
@@ -2683,35 +2768,56 @@ function RelatorioMensal() {
       th{background:#1A3A5C;color:#fff;padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase}
       tr:nth-child(even){background:#F8FAFC}
       .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+      .kpi3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
       .kpi-card{background:#F8FAFC;border:1px solid #E2EBF4;border-radius:8px;padding:12px 16px}
       .kpi-label{font-size:10px;color:#64748B;text-transform:uppercase;font-weight:700;margin-bottom:4px}
       .kpi-value{font-size:20px;font-weight:800}
       .header{background:#1A3A5C;color:#fff;padding:20px 24px;border-radius:10px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center}
+      .margem-box{background:${margemBruta >= 0 ? "#F0FDF4" : "#FEF2F2"};border:2px solid ${margemBruta >= 0 ? "#16A34A" : "#EF4444"};border-radius:10px;padding:16px 20px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
       @media print{body{padding:15px;max-width:none}}
     </style></head><body>
     <div class="header">
       <div>
         <h1>Relat\xF3rio Mensal \u2014 ${mesLabel}</h1>
-        <div style="font-size:12px;opacity:0.6;margin-top:4px">SamorClean by Fragancelines, Lda</div>
+        <div style="font-size:12px;opacity:0.6;margin-top:4px">SamorClean by Fragancelines, Lda \u2022 NIF 516 814 281</div>
       </div>
       <div style="text-align:right;font-size:11px;opacity:0.7">Gerado em ${(/* @__PURE__ */ new Date()).toLocaleDateString("pt-PT")}</div>
     </div>
 
-    <h2>Resumo Financeiro</h2>
+    <h2>Receitas</h2>
     <div class="kpi">
-      <div class="kpi-card"><div class="kpi-label">Faturado (c/ IVA)</div><div class="kpi-value" style="color:#2E6DA4">${fatTotal.toFixed(2)}\u20AC</div></div>
+      <div class="kpi-card"><div class="kpi-label">Faturado s/ IVA</div><div class="kpi-value" style="color:#2E6DA4">${(fatTotal / 1.23).toFixed(2)}\u20AC</div></div>
+      <div class="kpi-card"><div class="kpi-label">Faturado c/ IVA</div><div class="kpi-value" style="color:#0F766E">${fatTotal.toFixed(2)}\u20AC</div></div>
       <div class="kpi-card"><div class="kpi-label">Recebido</div><div class="kpi-value" style="color:#16A34A">${recTotal.toFixed(2)}\u20AC</div></div>
       <div class="kpi-card"><div class="kpi-label">Por cobrar</div><div class="kpi-value" style="color:#EF4444">${(fatTotal - recTotal).toFixed(2)}\u20AC</div></div>
-      <div class="kpi-card"><div class="kpi-label">Custo desloca\xE7\xE3o</div><div class="kpi-value" style="color:#F59E0B">${custoKm.toFixed(2)}\u20AC (${kmTotal}km)</div></div>
+    </div>
+
+    <h2>Custos</h2>
+    <div class="kpi3">
+      <div class="kpi-card"><div class="kpi-label">Total custos fornecedores</div><div class="kpi-value" style="color:#EF4444">${(totalCustos || 0).toFixed(2)}\u20AC</div></div>
+      <div class="kpi-card"><div class="kpi-label">IVA dedut\xEDvel</div><div class="kpi-value" style="color:#16A34A">${(totalIVADedutivel || 0).toFixed(2)}\u20AC</div></div>
+      <div class="kpi-card"><div class="kpi-label">Custo desloca\xE7\xE3o (est.)</div><div class="kpi-value" style="color:#F59E0B">${custoKm.toFixed(2)}\u20AC</div></div>
+    </div>
+    ${custosRows ? `<table><thead><tr><th>Categoria</th><th style="text-align:right">Valor</th></tr></thead><tbody>${custosRows}</tbody></table>` : ""}
+
+    <h2>Margem Real do M\xEAs</h2>
+    <div class="margem-box">
+      <div>
+        <div style="font-size:13px;color:#64748B;margin-bottom:4px">Receitas s/IVA (${(fatTotal / 1.23).toFixed(2)}\u20AC) \u2212 Custos (${totalCustosReal.toFixed(2)}\u20AC)</div>
+        <div style="font-size:28px;font-weight:900;color:${margemBruta >= 0 ? "#16A34A" : "#EF4444"}">${margemBruta.toFixed(2)}\u20AC</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:40px;font-weight:900;color:${margemBruta >= 0 ? "#16A34A" : "#EF4444"}">${margemPct}%</div>
+        <div style="font-size:11px;color:#64748B">margem</div>
+      </div>
     </div>
 
     <h2>Detalhe por Cliente</h2>
     <table><thead><tr>
-      <th>Cliente</th><th style="text-align:center">Servi\xE7os</th><th style="text-align:right">Faturado</th><th style="text-align:right">Custo km</th><th style="text-align:right">Margem</th><th style="text-align:center">Checklist</th>
+      <th>Cliente</th><th style="text-align:center">Servi\xE7os</th><th style="text-align:right">Faturado s/IVA</th><th style="text-align:right">Faturado c/IVA</th><th style="text-align:right">Margem est.</th><th style="text-align:center">Checklist</th>
     </tr></thead><tbody>${clientRows}</tbody></table>
 
     <h2>Desempenho dos Colaboradores</h2>
-    <div style="font-size:11px;color:#64748B;margin-bottom:8px">Base: ${HORAS_CONTRATO}h semanais contratadas | Custo/km: ${CUSTO_KM}\u20AC</div>
     <table><thead><tr>
       <th>Colaborador</th><th style="text-align:center">Servi\xE7os</th><th style="text-align:center">Horas reais</th><th style="text-align:center">Produtividade</th><th style="text-align:center">Faltas</th><th style="text-align:center">Parciais</th><th style="text-align:center">Atrasos</th><th style="text-align:center">Avalia\xE7\xE3o</th>
     </tr></thead><tbody>${empRows}</tbody></table>
@@ -2992,10 +3098,11 @@ function Manager(props) {
     { k: "formacao", l: "Forma\xE7\xE3o" },
     { k: "relatorio", l: "Relat\xF3rio Mensal" },
     { k: "employees", l: "Funcion\xE1rios" },
-    { k: "gestores", l: "\u2699 Utilizadores" }
+    { k: "gestores", l: "\u2699 Utilizadores" },
+    { k: "armazem_qr", l: "\u{1F4E6} QR Armaz\xE9m" }
   ];
   const navItems = allNavItems.filter(function(i) {
-    if (i.k === "gestores") return isDirector;
+    if (i.k === "gestores" || i.k === "armazem_qr") return isDirector;
     return canSee(i.k);
   });
   return /* @__PURE__ */ React.createElement("div", { style: { background: "#F4F8FB", minHeight: "100vh", color: "#334155" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 220, background: "#1A3A5C", minHeight: "100vh", display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "24px 20px 20px", borderBottom: "1px solid rgba(255,255,255,0.1)" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: "#fff" } }, "SamorClean"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#38B6D8", fontWeight: 600, letterSpacing: 1.5, marginTop: 2 } }, "GEST\xC3O OPERACIONAL")), /* @__PURE__ */ React.createElement("nav", { style: { flex: 1, padding: "12px" } }, navItems.map(function(item) {
@@ -3102,17 +3209,28 @@ function Manager(props) {
     return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: i === 0 ? "#F59E0B" : i === 1 ? "#94A3B8" : "#CD7C54", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 11, flexShrink: 0 } }, i + 1), /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 30, color: ["#2E6DA4", "#0F766E", "#7C3AED", "#C2410C"][i] || "#64748B" }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, e.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, e.role)), /* @__PURE__ */ React.createElement(Stars, { r: e.rating }));
   })))) : null, view === "finance" ? /* @__PURE__ */ React.createElement(Finance, null) : null, view === "routes" ? /* @__PURE__ */ React.createElement(Routes, null) : null, view === "clients" ? /* @__PURE__ */ React.createElement(Clients, null) : null, view === "fornecedores" ? /* @__PURE__ */ React.createElement(Fornecedores, null) : null, view === "pedidos_colab" ? /* @__PURE__ */ React.createElement(PedidosColab, { onUpdate: function(n) {
     setPedidosColabPendentes(n);
-  } }) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "leads" ? /* @__PURE__ */ React.createElement(Leads, null) : null, view === "avaliacoes" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "formacao" ? /* @__PURE__ */ React.createElement(Formacao, null) : null, view === "relatorio" ? /* @__PURE__ */ React.createElement(RelatorioMensal, null) : null, view === "gestores" ? /* @__PURE__ */ React.createElement(GestoresAdmin, null) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, null) : null));
+  } }) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "leads" ? /* @__PURE__ */ React.createElement(Leads, null) : null, view === "avaliacoes" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "formacao" ? /* @__PURE__ */ React.createElement(Formacao, null) : null, view === "relatorio" ? /* @__PURE__ */ React.createElement(RelatorioMensal, null) : null, view === "gestores" ? /* @__PURE__ */ React.createElement(GestoresAdmin, null) : null, view === "armazem_qr" ? /* @__PURE__ */ React.createElement(QRArmazem, null) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, null) : null));
 }
 function EmpPedidos(props) {
   const empId = props.empId;
   const empName = props.empName;
   const [tab, setTab] = useState("ausencia");
   const [sent, setSent] = useState(false);
+  const [historico, setHistorico] = useState([]);
+  const [loadingHist, setLoadingHist] = useState(false);
   const [ausForm, setAusForm] = useState({ tipo: "F\xE9rias", data_inicio: "", data_fim: "", descricao: "" });
   const [fardForm, setFardForm] = useState({ item: "", tamanho: "", quantidade: 1, motivo: "" });
   const [matForm, setMatForm] = useState({ item: "", quantidade: 1, motivo: "" });
   const [saving, setSaving] = useState(false);
+  useEffect(function() {
+    if (tab === "historico") {
+      setLoadingHist(true);
+      db.list("pedidos_colaboradores", "?select=*&funcionario_id=eq." + encodeURIComponent(empId) + "&order=created_at.desc").then(function(rows) {
+        setHistorico(rows || []);
+        setLoadingHist(false);
+      });
+    }
+  }, [tab, empId]);
   const TIPOS_AUS = ["F\xE9rias", "Falta Justificada", "Licen\xE7a", "Forma\xE7\xE3o Externa", "Dispensa", "Outro"];
   async function submitAusencia() {
     setSaving(true);
@@ -3149,8 +3267,9 @@ function EmpPedidos(props) {
     setAusForm({ tipo: "F\xE9rias", data_inicio: "", data_fim: "", descricao: "" });
     setFardForm({ item: "", tamanho: "", quantidade: 1, motivo: "" });
     setMatForm({ item: "", quantidade: 1, motivo: "" });
-  }, style: btn }, "Novo pedido"));
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C", marginBottom: 16 } }, "Pedidos"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16 } }, [["ausencia", "\u{1F4C5} Aus\xEAncia"], ["fardamento", "\u{1F455} Fardamento"], ["material", "\u{1F9F9} Material"]].map(function(t) {
+    setTab("historico");
+  }, style: btn }, "Ver os meus pedidos"));
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C", marginBottom: 16 } }, "Pedidos"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" } }, [["ausencia", "\u{1F4C5} Aus\xEAncia"], ["fardamento", "\u{1F455} Fardamento"], ["material", "\u{1F9F9} Material"], ["historico", "\u{1F4CB} Os meus pedidos"]].map(function(t) {
     return /* @__PURE__ */ React.createElement("button", { key: t[0], onClick: function() {
       setTab(t[0]);
     }, style: { flex: 1, padding: "8px 4px", borderRadius: 8, border: "1.5px solid " + (tab === t[0] ? "#2E6DA4" : "#E2EBF4"), background: tab === t[0] ? "#EFF6FF" : "#fff", color: tab === t[0] ? "#2E6DA4" : "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, t[1]);
@@ -3178,7 +3297,15 @@ function EmpPedidos(props) {
     setMatForm(Object.assign({}, matForm, { quantidade: parseInt(e.target.value) || 1 }));
   } })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Motivo"), /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 60, resize: "vertical" }), value: matForm.motivo, onChange: function(e) {
     setMatForm(Object.assign({}, matForm, { motivo: e.target.value }));
-  }, placeholder: "Para que \xE9 necess\xE1rio?" })), /* @__PURE__ */ React.createElement("button", { onClick: submitMaterial, disabled: saving || !matForm.item.trim(), style: Object.assign({}, btnG, { width: "100%", textAlign: "center", opacity: !matForm.item.trim() ? 0.5 : 1 }) }, saving ? "A enviar..." : "Enviar pedido")));
+  }, placeholder: "Para que \xE9 necess\xE1rio?" })), /* @__PURE__ */ React.createElement("button", { onClick: submitMaterial, disabled: saving || !matForm.item.trim(), style: Object.assign({}, btnG, { width: "100%", textAlign: "center", opacity: !matForm.item.trim() ? 0.5 : 1 }) }, saving ? "A enviar..." : "Enviar pedido")), tab === "historico" && /* @__PURE__ */ React.createElement("div", null, loadingHist ? /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...") : historico.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, marginBottom: 12 } }, "\u{1F4CB}"), /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, marginBottom: 8 } }, "Sem pedidos"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12 } }, "Os teus pedidos aparecem aqui.")) : historico.map(function(p) {
+    const TIPO_ICON = { ausencia: "\u{1F4C5}", fardamento: "\u{1F455}", material: "\u{1F9F9}" };
+    const TIPO_LABEL = { ausencia: "Aus\xEAncia", fardamento: "Fardamento", material: "Material" };
+    const ESTADO_COR = { pendente: "#F59E0B", aprovado: "#16A34A", recusado: "#EF4444" };
+    const ESTADO_BG = { pendente: "#FEF3C7", aprovado: "#DCFCE7", recusado: "#FEE2E2" };
+    const cor = ESTADO_COR[p.estado] || "#64748B";
+    const bg = ESTADO_BG[p.estado] || "#F8FAFC";
+    return /* @__PURE__ */ React.createElement("div", { key: p.id, style: Object.assign({}, card, { marginBottom: 10, padding: 16, borderLeft: "4px solid " + cor }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 20 } }, TIPO_ICON[p.tipo] || "\u{1F4CB}"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C" } }, TIPO_LABEL[p.tipo]), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8" } }, new Date(p.created_at).toLocaleDateString("pt-PT", { day: "numeric", month: "short", year: "numeric" })))), /* @__PURE__ */ React.createElement("span", { style: { background: bg, color: cor, borderRadius: 8, padding: "3px 10px", fontSize: 11, fontWeight: 800 } }, p.estado === "pendente" ? "\u23F3 Pendente" : p.estado === "aprovado" ? "\u2713 Aprovado" : "\u2717 Recusado")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: p.resposta ? 8 : 0 } }, p.descricao), p.resposta && /* @__PURE__ */ React.createElement("div", { style: { background: bg, borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#334155" } }, /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, color: cor } }, "Resposta da gest\xE3o: "), p.resposta));
+  })));
 }
 function EmpFormacao(props) {
   const empRole = props.empRole || "";
@@ -4192,14 +4319,99 @@ function ManagerLogin(props) {
     }
   )), err && /* @__PURE__ */ React.createElement("div", { style: { background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, padding: "10px 14px", color: "#FCA5A5", fontSize: 13, marginBottom: 16 } }, err), /* @__PURE__ */ React.createElement("button", { onClick: tryLogin, disabled: loading || !email.trim() || !password.trim(), style: { width: "100%", background: email.trim() && password.trim() ? "#38B6D8" : "rgba(255,255,255,0.1)", border: "none", borderRadius: 12, padding: "14px 0", color: "#fff", fontSize: 15, fontWeight: 800, cursor: email.trim() && password.trim() ? "pointer" : "not-allowed", marginBottom: 16 } }, loading ? "A verificar..." : "Entrar"), /* @__PURE__ */ React.createElement("button", { onClick: onBack, style: { background: "transparent", border: "none", color: "rgba(255,255,255,0.3)", fontSize: 12, cursor: "pointer" } }, "Voltar")));
 }
+function PortalArmazem() {
+  const [emps, setEmps] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [sel, setSel] = useState(null);
+  const [pin, setPin] = useState("");
+  const [pinErr, setPinErr] = useState(false);
+  const [done, setDone] = useState(null);
+  const [lastPicagem, setLastPicagem] = useState(null);
+  useEffect(function() {
+    db.list("funcionarios", "?select=*&order=name").then(function(rows) {
+      setEmps(rows || EMPS);
+      setLoading(false);
+    });
+  }, []);
+  async function tryPin() {
+    if (!sel) return;
+    if (pin === sel.pin) {
+      const rows = await db.list("picagens_armazem", "?select=*&funcionario_id=eq." + encodeURIComponent(sel.id) + "&order=created_at.desc&limit=1");
+      const last = rows && rows.length > 0 ? rows[0] : null;
+      setLastPicagem(last);
+      setPinErr(false);
+    } else {
+      setPinErr(true);
+      setPin("");
+    }
+  }
+  async function registar(tipo) {
+    const row = { funcionario_id: sel.id, funcionario_nome: sel.name, tipo };
+    await fetch(SUPABASE_URL + "/rest/v1/picagens_armazem", {
+      method: "POST",
+      headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }),
+      body: JSON.stringify(row)
+    });
+    const hora = (/* @__PURE__ */ new Date()).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
+    setDone({ tipo, nome: sel.name.split(" ")[0], hora });
+    setTimeout(function() {
+      setDone(null);
+      setSel(null);
+      setPin("");
+      setLastPicagem(null);
+    }, 3e3);
+  }
+  const logoUrl = "https://dtydrnezzaykiaglwxfv.supabase.co/storage/v1/object/public/formacao/samorclean_logo.jpg";
+  if (done) return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 80, marginBottom: 16 } }, done.tipo === "entrada" ? "\u{1F7E2}" : "\u{1F534}"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, fontWeight: 900, color: "#fff", marginBottom: 8 } }, done.tipo === "entrada" ? "Bom trabalho!" : "At\xE9 amanh\xE3!"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, color: "#38B6D8", fontWeight: 700 } }, done.nome), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "rgba(255,255,255,0.6)", marginTop: 8 } }, done.tipo === "entrada" ? "Entrada" : "Sa\xEDda", " registada \xE0s ", done.hora)));
+  if (lastPicagem !== null) {
+    const sugestao = lastPicagem && lastPicagem.tipo === "entrada" ? "saida" : "entrada";
+    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "rgba(255,255,255,0.06)", borderRadius: 20, padding: 32, maxWidth: 340, width: "100%", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 4 } }, "Ol\xE1, ", sel.name.split(" ")[0], "!"), lastPicagem && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 24 } }, "\xDAltima: ", lastPicagem.tipo, " \u2014 ", new Date(lastPicagem.hora || lastPicagem.created_at).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
+      registar("entrada");
+    }, style: { background: sugestao === "entrada" ? "#16A34A" : "rgba(255,255,255,0.08)", border: "2px solid " + (sugestao === "entrada" ? "#16A34A" : "rgba(255,255,255,0.2)"), borderRadius: 14, padding: "20px 12px", color: "#fff", cursor: "pointer" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 36, marginBottom: 8 } }, "\u{1F7E2}"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 800 } }, "Entrada")), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+      registar("saida");
+    }, style: { background: sugestao === "saida" ? "#EF4444" : "rgba(255,255,255,0.08)", border: "2px solid " + (sugestao === "saida" ? "#EF4444" : "rgba(255,255,255,0.2)"), borderRadius: 14, padding: "20px 12px", color: "#fff", cursor: "pointer" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 36, marginBottom: 8 } }, "\u{1F534}"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 800 } }, "Sa\xEDda"))), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+      setSel(null);
+      setPin("");
+      setLastPicagem(null);
+    }, style: { marginTop: 16, background: "transparent", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 12, cursor: "pointer" } }, "Cancelar")));
+  }
+  if (sel) return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "rgba(255,255,255,0.06)", borderRadius: 20, padding: 32, maxWidth: 320, width: "100%", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: "#fff", marginBottom: 4 } }, sel.name.split(" ")[0]), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 24 } }, "Introduz o teu PIN"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 16 } }, [1, 2, 3, 4, 5, 6, 7, 8, 9, "", 0, "\u232B"].map(function(n, i) {
+    if (n === "") return /* @__PURE__ */ React.createElement("div", { key: i });
+    return /* @__PURE__ */ React.createElement("button", { key: i, onClick: function() {
+      if (n === "\u232B") setPin(function(p) {
+        return p.slice(0, -1);
+      });
+      else if (pin.length < 6) setPin(function(p) {
+        return p + n;
+      });
+    }, style: { background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 10, padding: "16px", color: "#fff", fontSize: 20, fontWeight: 700, cursor: "pointer" } }, n);
+  })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "center", gap: 8, marginBottom: 16 } }, Array.from({ length: 6 }, function(_, i) {
+    return /* @__PURE__ */ React.createElement("div", { key: i, style: { width: 12, height: 12, borderRadius: "50%", background: i < pin.length ? "#38B6D8" : "rgba(255,255,255,0.2)" } });
+  })), pinErr && /* @__PURE__ */ React.createElement("div", { style: { color: "#FCA5A5", fontSize: 12, marginBottom: 12 } }, "PIN incorrecto. Tenta novamente."), /* @__PURE__ */ React.createElement("button", { onClick: tryPin, disabled: pin.length < 6, style: { width: "100%", background: pin.length >= 6 ? "#38B6D8" : "rgba(255,255,255,0.1)", border: "none", borderRadius: 12, padding: "14px", color: "#fff", fontSize: 15, fontWeight: 800, cursor: pin.length >= 6 ? "pointer" : "not-allowed", marginBottom: 10 } }, pin.length >= 6 ? "Confirmar" : "Introduz o PIN (6 d\xEDgitos)"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    setSel(null);
+    setPin("");
+    setPinErr(false);
+  }, style: { background: "transparent", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 12, cursor: "pointer" } }, "Voltar")));
+  return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { maxWidth: 400, margin: "0 auto" } }, /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", marginBottom: 32, paddingTop: 20 } }, /* @__PURE__ */ React.createElement("img", { src: logoUrl, onError: function(e) {
+    e.target.style.display = "none";
+  }, style: { width: 60, height: 60, borderRadius: 12, objectFit: "contain", background: "#fff", padding: 8, marginBottom: 12 } }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#fff" } }, "Armaz\xE9m SamorClean"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#38B6D8", marginTop: 4 } }, "Registo de Entrada / Sa\xEDda")), loading ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "rgba(255,255,255,0.4)" } }, "A carregar...") : /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } }, emps.map(function(e) {
+    return /* @__PURE__ */ React.createElement("button", { key: e.id, onClick: function() {
+      setSel(e);
+      setPin("");
+      setPinErr(false);
+    }, style: { background: "rgba(255,255,255,0.08)", border: "1.5px solid rgba(255,255,255,0.15)", borderRadius: 12, padding: "16px 10px", color: "#fff", cursor: "pointer", textAlign: "center" } }, /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 36, color: EC[e.id] || "#2E6DA4" }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, marginTop: 8 } }, e.name.split(" ")[0]));
+  }))));
+}
 function App() {
   const params = new URLSearchParams(window.location.search);
   const clienteParam = params.get("cliente");
   const ocasionalParam = params.get("ocasional");
   const funcionarioParam = params.get("funcion\xE1rio");
+  const armazemParam = params.get("armazem");
   const [mod, setMod] = useState(function() {
     if (clienteParam || ocasionalParam) return "client";
     if (funcionarioParam) return "employee";
+    if (armazemParam) return "armazem";
     return "sel";
   });
   const [gestor, setGestor] = useState(null);
@@ -4217,6 +4429,7 @@ function App() {
     setMod("sel");
   } });
   if (mod === "client") return /* @__PURE__ */ React.createElement(ClientPortal, { clientId: clienteParam || ocasionalParam, isOcasional: !!ocasionalParam, onExit: null });
+  if (mod === "armazem") return /* @__PURE__ */ React.createElement(PortalArmazem, null);
   return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 48, textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 20, padding: 16, width: 96, height: 96, margin: "0 auto 20px", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" } }, /* @__PURE__ */ React.createElement("img", { src: "https://dtydrnezzaykiaglwxfv.supabase.co/storage/v1/object/public/formacao/samorclean_logo.jpg", onError: function(e) {
     e.target.style.display = "none";
   }, style: { width: 76, height: 76, objectFit: "contain", borderRadius: 10 } })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 36, fontWeight: 900, color: "#fff", letterSpacing: -1 } }, "SamorClean"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#38B6D8", fontWeight: 700, letterSpacing: 2.5, marginTop: 6 } }, "GEST\xC3O OPERACIONAL"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.35)", marginTop: 10 } }, "Seleciona a \xE1rea de acesso")), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, width: "100%", maxWidth: 480, marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { onClick: function() {
