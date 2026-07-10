@@ -3501,6 +3501,7 @@ function Employee(props) {
       });
       // Load provisional notes for this client
       const now = new Date().toISOString();
+      alert("DEBUG client_id: [" + job.client_id + "]");
       db.list("client_notes", "?select=*&client_id=eq." + encodeURIComponent(job.client_id) + "&partilhada=is.true&servicos_restantes=gt.0&expires_at=gte." + now).then(async function(rows) {
         if (rows && rows.length) {
           setNotasProvisórias(rows);
