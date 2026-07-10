@@ -4326,31 +4326,33 @@ function PortalArmazem() {
   const [pin, setPin] = useState("");
   const [pinErr, setPinErr] = useState(false);
   const [done, setDone] = useState(null);
-  const [lastPicagem, setLastPicagem] = useState(null);
+  const [lastTipo, setLastTipo] = useState(null);
+  const [checking, setChecking] = useState(false);
   useEffect(function() {
     db.list("funcionarios", "?select=*&order=name").then(function(rows) {
-      setEmps(rows || EMPS);
+      setEmps(rows && rows.length ? rows : EMPS);
       setLoading(false);
     });
   }, []);
   async function tryPin() {
-    if (!sel) return;
+    if (!sel || pin.length < 6 || checking) return;
+    setChecking(true);
     if (pin === sel.pin) {
       const rows = await db.list("picagens_armazem", "?select=*&funcionario_id=eq." + encodeURIComponent(sel.id) + "&order=created_at.desc&limit=1");
       const last = rows && rows.length > 0 ? rows[0] : null;
-      setLastPicagem(last);
+      setLastTipo(last ? last.tipo : null);
       setPinErr(false);
     } else {
       setPinErr(true);
       setPin("");
     }
+    setChecking(false);
   }
   async function registar(tipo) {
-    const row = { funcionario_id: sel.id, funcionario_nome: sel.name, tipo };
     await fetch(SUPABASE_URL + "/rest/v1/picagens_armazem", {
       method: "POST",
       headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }),
-      body: JSON.stringify(row)
+      body: JSON.stringify({ funcionario_id: sel.id, funcionario_nome: sel.name, tipo })
     });
     const hora = (/* @__PURE__ */ new Date()).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
     setDone({ tipo, nome: sel.name.split(" ")[0], hora });
@@ -4358,40 +4360,46 @@ function PortalArmazem() {
       setDone(null);
       setSel(null);
       setPin("");
-      setLastPicagem(null);
+      setLastTipo(null);
+      setPinErr(false);
     }, 3e3);
   }
   const logoUrl = "https://dtydrnezzaykiaglwxfv.supabase.co/storage/v1/object/public/formacao/samorclean_logo.jpg";
   if (done) return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 80, marginBottom: 16 } }, done.tipo === "entrada" ? "\u{1F7E2}" : "\u{1F534}"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, fontWeight: 900, color: "#fff", marginBottom: 8 } }, done.tipo === "entrada" ? "Bom trabalho!" : "At\xE9 amanh\xE3!"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, color: "#38B6D8", fontWeight: 700 } }, done.nome), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "rgba(255,255,255,0.6)", marginTop: 8 } }, done.tipo === "entrada" ? "Entrada" : "Sa\xEDda", " registada \xE0s ", done.hora)));
-  if (lastPicagem !== null) {
-    const sugestao = lastPicagem && lastPicagem.tipo === "entrada" ? "saida" : "entrada";
-    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "rgba(255,255,255,0.06)", borderRadius: 20, padding: 32, maxWidth: 340, width: "100%", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 4 } }, "Ol\xE1, ", sel.name.split(" ")[0], "!"), lastPicagem && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 24 } }, "\xDAltima: ", lastPicagem.tipo, " \u2014 ", new Date(lastPicagem.hora || lastPicagem.created_at).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
+  if (lastTipo !== null) {
+    const sugestao = lastTipo === "entrada" ? "saida" : "entrada";
+    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "rgba(255,255,255,0.06)", borderRadius: 20, padding: 32, maxWidth: 340, width: "100%", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 4 } }, "Ol\xE1, ", sel.name.split(" ")[0], "!"), lastTipo && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 24 } }, "\xDAltima ac\xE7\xE3o: ", lastTipo), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
       registar("entrada");
     }, style: { background: sugestao === "entrada" ? "#16A34A" : "rgba(255,255,255,0.08)", border: "2px solid " + (sugestao === "entrada" ? "#16A34A" : "rgba(255,255,255,0.2)"), borderRadius: 14, padding: "20px 12px", color: "#fff", cursor: "pointer" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 36, marginBottom: 8 } }, "\u{1F7E2}"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 800 } }, "Entrada")), /* @__PURE__ */ React.createElement("button", { onClick: function() {
       registar("saida");
     }, style: { background: sugestao === "saida" ? "#EF4444" : "rgba(255,255,255,0.08)", border: "2px solid " + (sugestao === "saida" ? "#EF4444" : "rgba(255,255,255,0.2)"), borderRadius: 14, padding: "20px 12px", color: "#fff", cursor: "pointer" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 36, marginBottom: 8 } }, "\u{1F534}"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 800 } }, "Sa\xEDda"))), /* @__PURE__ */ React.createElement("button", { onClick: function() {
       setSel(null);
       setPin("");
-      setLastPicagem(null);
-    }, style: { marginTop: 16, background: "transparent", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 12, cursor: "pointer" } }, "Cancelar")));
+      setLastTipo(null);
+    }, style: { background: "transparent", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 12, cursor: "pointer" } }, "Cancelar")));
   }
-  if (sel) return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "rgba(255,255,255,0.06)", borderRadius: 20, padding: 32, maxWidth: 320, width: "100%", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: "#fff", marginBottom: 4 } }, sel.name.split(" ")[0]), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 24 } }, "Introduz o teu PIN"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 16 } }, [1, 2, 3, 4, 5, 6, 7, 8, 9, "", 0, "\u232B"].map(function(n, i) {
+  if (sel) return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "rgba(255,255,255,0.06)", borderRadius: 20, padding: 32, maxWidth: 320, width: "100%", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: "#fff", marginBottom: 2 } }, sel.name.split(" ")[0]), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 24 } }, "Introduz o teu PIN de 6 d\xEDgitos"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 16 } }, [1, 2, 3, 4, 5, 6, 7, 8, 9, "", 0, "\u232B"].map(function(n, i) {
     if (n === "") return /* @__PURE__ */ React.createElement("div", { key: i });
     return /* @__PURE__ */ React.createElement("button", { key: i, onClick: function() {
-      if (n === "\u232B") setPin(function(p) {
-        return p.slice(0, -1);
-      });
-      else if (pin.length < 6) setPin(function(p) {
-        return p + n;
-      });
+      if (n === "\u232B") {
+        setPin(function(p) {
+          return p.slice(0, -1);
+        });
+        setPinErr(false);
+      } else if (pin.length < 6) {
+        setPin(function(p) {
+          return p + n;
+        });
+        setPinErr(false);
+      }
     }, style: { background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 10, padding: "16px", color: "#fff", fontSize: 20, fontWeight: 700, cursor: "pointer" } }, n);
   })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "center", gap: 8, marginBottom: 16 } }, Array.from({ length: 6 }, function(_, i) {
     return /* @__PURE__ */ React.createElement("div", { key: i, style: { width: 12, height: 12, borderRadius: "50%", background: i < pin.length ? "#38B6D8" : "rgba(255,255,255,0.2)" } });
-  })), pinErr && /* @__PURE__ */ React.createElement("div", { style: { color: "#FCA5A5", fontSize: 12, marginBottom: 12 } }, "PIN incorrecto. Tenta novamente."), /* @__PURE__ */ React.createElement("button", { onClick: tryPin, disabled: pin.length < 6, style: { width: "100%", background: pin.length >= 6 ? "#38B6D8" : "rgba(255,255,255,0.1)", border: "none", borderRadius: 12, padding: "14px", color: "#fff", fontSize: 15, fontWeight: 800, cursor: pin.length >= 6 ? "pointer" : "not-allowed", marginBottom: 10 } }, pin.length >= 6 ? "Confirmar" : "Introduz o PIN (6 d\xEDgitos)"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+  })), pinErr && /* @__PURE__ */ React.createElement("div", { style: { color: "#FCA5A5", fontSize: 12, marginBottom: 12 } }, "PIN incorrecto. Tenta novamente."), /* @__PURE__ */ React.createElement("button", { onClick: tryPin, disabled: pin.length < 6 || checking, style: { width: "100%", background: pin.length >= 6 ? "#38B6D8" : "rgba(255,255,255,0.1)", border: "none", borderRadius: 12, padding: "14px", color: "#fff", fontSize: 15, fontWeight: 800, cursor: pin.length >= 6 && !checking ? "pointer" : "not-allowed", marginBottom: 10 } }, checking ? "A verificar..." : pin.length >= 6 ? "Confirmar" : "Introduz o PIN"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setSel(null);
     setPin("");
     setPinErr(false);
-  }, style: { background: "transparent", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 12, cursor: "pointer" } }, "Voltar")));
+  }, style: { background: "transparent", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 12, cursor: "pointer" } }, "\u2190 Voltar")));
   return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { maxWidth: 400, margin: "0 auto" } }, /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", marginBottom: 32, paddingTop: 20 } }, /* @__PURE__ */ React.createElement("img", { src: logoUrl, onError: function(e) {
     e.target.style.display = "none";
   }, style: { width: 60, height: 60, borderRadius: 12, objectFit: "contain", background: "#fff", padding: 8, marginBottom: 12 } }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#fff" } }, "Armaz\xE9m SamorClean"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#38B6D8", marginTop: 4 } }, "Registo de Entrada / Sa\xEDda"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 4 } }, "Selecciona o teu nome")), loading ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "rgba(255,255,255,0.4)" } }, "A carregar...") : /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } }, emps.map(function(e) {
@@ -4399,8 +4407,11 @@ function PortalArmazem() {
       setSel(e);
       setPin("");
       setPinErr(false);
+      setLastTipo(null);
     }, style: { background: "rgba(255,255,255,0.08)", border: "1.5px solid rgba(255,255,255,0.15)", borderRadius: 12, padding: "16px 10px", color: "#fff", cursor: "pointer", textAlign: "center" } }, /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 36, color: EC[e.id] || "#2E6DA4" }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, marginTop: 8 } }, e.name.split(" ")[0]));
-  }))));
+  })), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", marginTop: 24 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    window.history.back();
+  }, style: { background: "transparent", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 8, padding: "8px 20px", color: "rgba(255,255,255,0.5)", fontSize: 12, cursor: "pointer" } }, "\u2190 Sair"))));
 }
 function App() {
   const params = new URLSearchParams(window.location.search);
@@ -4408,14 +4419,13 @@ function App() {
   const ocasionalParam = params.get("ocasional");
   const funcionarioParam = params.get("funcion\xE1rio");
   const armazemParam = params.get("armazem");
+  if (armazemParam) return /* @__PURE__ */ React.createElement(PortalArmazem, null);
   const [mod, setMod] = useState(function() {
-    if (armazemParam) return "armazem";
     if (clienteParam || ocasionalParam) return "client";
     if (funcionarioParam) return "employee";
     return "sel";
   });
   const [gestor, setGestor] = useState(null);
-  if (mod === "armazem") return /* @__PURE__ */ React.createElement(PortalArmazem, null);
   if (mod === "manager-login") return /* @__PURE__ */ React.createElement(ManagerLogin, { onSuccess: function(g) {
     setGestor(g);
     setMod("manager");
