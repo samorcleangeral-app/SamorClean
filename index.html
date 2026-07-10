@@ -3957,21 +3957,30 @@ function ClientPortal(props) {
       }, 200);
     }
   }
+  const [todasNotas, setTodasNotas] = useState([]);
   function loadTeamData(empId) {
     setLoadingTeam(true);
-    db.list("servicos", "?select=*&date=eq." + today + "&order=t1").then(function(rows) {
-      const myJobs = (rows || []).filter(function(j) {
+    const now = new Date().toISOString();
+    Promise.all([
+      db.list("servicos", "?select=*&date=eq." + today + "&order=t1"),
+      db.list("client_notes", "?select=*&partilhada=is.true&servicos_restantes=gt.0&expires_at=gte." + now),
+      db.list("clientes", "?select=id,nota_interna"),
+    ]).then(function(results) {
+      const rows = results[0] || [];
+      const notasRows = results[1] || [];
+      const clientesRows = results[2] || [];
+      setTodasNotas(notasRows);
+      // Build permanent notes map
+      const permNotasMap = {};
+      clientesRows.forEach(function(c) { if (c.nota_interna) permNotasMap[c.id] = c.nota_interna; });
+      const myJobs = rows.filter(function(j) {
         return (j.team || []).indexOf(empId) !== -1;
+      }).map(function(j) {
+        return Object.assign({}, j, { _notaPerm: permNotasMap[j.client_id] || null });
       });
-      const thisJob = myJobs.filter(function(j) {
-        return j.client_id === clientId;
-      });
-      const otherJobs = myJobs.filter(function(j) {
-        return j.client_id !== clientId && j.status !== "completed";
-      });
-      const completedJobs = myJobs.filter(function(j) {
-        return j.status === "completed";
-      });
+      const thisJob = myJobs.filter(function(j) { return j.client_id === clientId; });
+      const otherJobs = myJobs.filter(function(j) { return j.client_id !== clientId && j.status !== "completed"; });
+      const completedJobs = myJobs.filter(function(j) { return j.status === "completed"; });
       setTeamJobs({ current: thisJob, next: otherJobs.slice(0, 1), completed: completedJobs });
       setLoadingTeam(false);
     });
@@ -4176,27 +4185,18 @@ function ClientPortal(props) {
       const pct = cl.length ? Math.round(done / cl.length * 100) : 0;
       const checklistComplete = cl.length === 0 || done === cl.length;
       const canCheckout = job.check_in && !job.check_out && currentEmp && job.check_in_emp === currentEmp.id && !checkedInThisSession[job.id];
-      const [notasProv, setNotasProv] = useState([]);
-      const [notaPerm, setNotaPerm] = useState(null);
+      const notaPerm = job._notaPerm || null;
+      const notasProv = todasNotas.filter(function(n) { return n.client_id === job.client_id; });
       useEffect(function() {
-        if (!isInteractive || !job.client_id) return;
-        db.list("clientes", "?select=nota_interna&id=eq." + encodeURIComponent(job.client_id)).then(function(rows) {
-          if (rows && rows.length) setNotaPerm(rows[0].nota_interna || null);
+        if (!isInteractive || notasProv.length === 0) return;
+        notasProv.forEach(function(n) {
+          var newCount = n.servicos_restantes - 1;
+          fetch(SUPABASE_URL + "/rest/v1/client_notes?id=eq." + n.id, {
+            method: "PATCH", headers: dbHeaders(),
+            body: JSON.stringify({ servicos_restantes: newCount, partilhada: newCount > 0 })
+          });
         });
-        const now = new Date().toISOString();
-        db.list("client_notes", "?select=*&client_id=eq." + encodeURIComponent(job.client_id) + "&partilhada=is.true&servicos_restantes=gt.0&expires_at=gte." + now).then(function(rows) {
-          if (rows && rows.length) {
-            setNotasProv(rows);
-            rows.forEach(function(n) {
-              var newCount = n.servicos_restantes - 1;
-              fetch(SUPABASE_URL + "/rest/v1/client_notes?id=eq." + n.id, {
-                method: "PATCH", headers: dbHeaders(),
-                body: JSON.stringify({ servicos_restantes: newCount, partilhada: newCount > 0 })
-              });
-            });
-          }
-        });
-      }, [job.id, isInteractive]);
+      }, [isInteractive]);
       async function togTask(task) {
         if (!isInteractive) return;
         const dt = (job.done_tasks || []).slice();
