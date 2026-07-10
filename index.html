@@ -4409,12 +4409,13 @@ function App() {
   const funcionarioParam = params.get("funcion\xE1rio");
   const armazemParam = params.get("armazem");
   const [mod, setMod] = useState(function() {
+    if (armazemParam) return "armazem";
     if (clienteParam || ocasionalParam) return "client";
     if (funcionarioParam) return "employee";
-    if (armazemParam) return "armazem";
     return "sel";
   });
   const [gestor, setGestor] = useState(null);
+  if (mod === "armazem") return /* @__PURE__ */ React.createElement(PortalArmazem, null);
   if (mod === "manager-login") return /* @__PURE__ */ React.createElement(ManagerLogin, { onSuccess: function(g) {
     setGestor(g);
     setMod("manager");
@@ -4429,7 +4430,6 @@ function App() {
     setMod("sel");
   } });
   if (mod === "client") return /* @__PURE__ */ React.createElement(ClientPortal, { clientId: clienteParam || ocasionalParam, isOcasional: !!ocasionalParam, onExit: null });
-  if (mod === "armazem") return /* @__PURE__ */ React.createElement(PortalArmazem, null);
   return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 48, textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 20, padding: 16, width: 96, height: 96, margin: "0 auto 20px", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" } }, /* @__PURE__ */ React.createElement("img", { src: "https://dtydrnezzaykiaglwxfv.supabase.co/storage/v1/object/public/formacao/samorclean_logo.jpg", onError: function(e) {
     e.target.style.display = "none";
   }, style: { width: 76, height: 76, objectFit: "contain", borderRadius: 10 } })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 36, fontWeight: 900, color: "#fff", letterSpacing: -1 } }, "SamorClean"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#38B6D8", fontWeight: 700, letterSpacing: 2.5, marginTop: 6 } }, "GEST\xC3O OPERACIONAL"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.35)", marginTop: 10 } }, "Seleciona a \xE1rea de acesso")), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, width: "100%", maxWidth: 480, marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { onClick: function() {
