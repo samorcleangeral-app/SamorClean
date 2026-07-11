@@ -3974,7 +3974,7 @@ function ClientPortal(props) {
       setTimeout(function() {
         if (pinMode === "client") {
           const match = contacts.find(function(c) {
-            return c.pin === n;
+            return String(c.pin) === n;
           });
           if (match) {
             setCurrentContact(match);
@@ -3988,7 +3988,7 @@ function ClientPortal(props) {
           }
         } else {
           const match = allEmps.find(function(e) {
-            return e.pin === n;
+            return String(e.pin) === n;
           });
           if (match) {
             setCurrentEmp(match);
