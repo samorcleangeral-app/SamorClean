@@ -828,7 +828,22 @@ function Routes() {
     }, 0)) + "\u20AC", c: "#7C3AED" }
   ].map(function(k) {
     return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 12 }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", fontWeight: 700, textTransform: "uppercase", marginBottom: 3 } }, k.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: k.c } }, k.v));
-  })), selJob && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 16 }, onClick: function() {
+  })), calView === "week" && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginTop: 10, padding: 14 }) },
+    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 10 } }, "Horas alocadas esta semana"),
+    /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 } }, emps.map(function(e) {
+      const ausente = dates.some(function(d) { return isEmpAusente(e.id, d); });
+      const horas = wJobs.filter(function(j) { return (j.team || []).indexOf(e.id) !== -1; }).reduce(function(s, j) { return s + (timeToMin(j.t2) - timeToMin(j.t1)) / 60; }, 0);
+      const cor = ausente ? "#EF4444" : horas > 0 ? empColor(e.id) : "#94A3B8";
+      const bg = ausente ? "#FEE2E2" : horas > 0 ? "#F8FAFC" : "#F8FAFC";
+      return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 8, background: bg, borderRadius: 8, padding: "8px 10px", border: "1px solid " + (ausente ? "#FECACA" : "#E2EBF4") } },
+        /* @__PURE__ */ React.createElement("div", { style: { width: 28, height: 28, borderRadius: "50%", background: ausente ? "#EF4444" : empColor(e.id), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 9, fontWeight: 800, flexShrink: 0 } }, e.av || e.name.slice(0, 2).toUpperCase()),
+        /* @__PURE__ */ React.createElement("div", null,
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: cor } }, e.name.split(" ")[0]),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: cor } }, ausente ? "Ausente" : horas > 0 ? horas.toFixed(1) + "h" : "0h")
+        )
+      );
+    }))
+  ), selJob && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 16 }, onClick: function() {
     setSelJob(null);
     setPopupAction(null);
   } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 18, width: "100%", maxWidth: 420, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }, onClick: function(e) {
