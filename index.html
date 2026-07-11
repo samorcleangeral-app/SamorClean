@@ -3712,7 +3712,6 @@ function Employee(props) {
       setPinErr(false);
     }, style: { background: "transparent", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 13, cursor: "pointer" } }, "Voltar")));
   }
-  const [popupEmpJob, setPopupEmpJob] = useState(null);
   function JobCard(props2) {
     const job = props2.job;
     const isHist = props2.isHist || false;
@@ -3721,56 +3720,10 @@ function Employee(props) {
       return isDone(job, t);
     }).length;
     const pct = cl.length ? Math.round(d / cl.length * 100) : 0;
-    return /* @__PURE__ */ React.createElement("div", { 
-      onClick: async function() {
-        var j = Object.assign({}, job);
-        var r1 = await db.list("clientes", "?select=nota_interna&id=eq." + encodeURIComponent(job.client_id));
-        j._notaPerm = r1 && r1[0] ? r1[0].nota_interna || null : null;
-        var r2 = await db.list("client_notes", "?select=*&client_id=eq." + encodeURIComponent(job.client_id) + "&partilhada=is.true&servicos_restantes=gt.0&expires_at=gte." + new Date().toISOString());
-        j._notasProv = r2 || [];
-        setPopupEmpJob(j);
-      },
-      style: Object.assign({}, card, { padding: 16, borderLeft: "4px solid " + (job.status === "completed" ? "#16A34A" : "#2E6DA4"), marginBottom: 12, cursor: "pointer" }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, job.cn), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, isHist ? (/* @__PURE__ */ new Date(job.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" }) + " \u2014 " : "", job.t1, " \u2014 ", job.t2)), /* @__PURE__ */ React.createElement(Bdg, { label: job.status === "completed" ? "Conclu\xEDdo" : "Agendado", bg: job.status === "completed" ? "#DCFCE7" : "#EFF6FF", tx: job.status === "completed" ? "#15803D" : "#2E6DA4" })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 8 } }, job.addr), cl.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, background: "#E2EBF4", borderRadius: 4, height: 5 } }, /* @__PURE__ */ React.createElement("div", { style: { background: job.status === "completed" ? "#16A34A" : "#2E6DA4", height: "100%", borderRadius: 4, width: pct + "%" } })), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#64748B", fontWeight: 600, flexShrink: 0 } }, d, "/", cl.length)), !job.check_in && job.status !== "completed" && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 8, background: "#F8FAFC", borderRadius: 8, padding: "8px 12px", fontSize: 11, color: "#94A3B8", textAlign: "center" } }, "Pica o QR code do cliente para registar presen\xE7a"), job.check_in && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 8, display: "flex", gap: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, background: "#DCFCE7", borderRadius: 8, padding: "6px 10px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#15803D", fontWeight: 700, textTransform: "uppercase" } }, "Entrada"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: "#15803D" } }, job.check_in)), job.check_out && /* @__PURE__ */ React.createElement("div", { style: { flex: 1, background: "#FEE2E2", borderRadius: 8, padding: "6px 10px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#DC2626", fontWeight: 700, textTransform: "uppercase" } }, "Sa\xEDda"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: "#DC2626" } }, job.check_out))));
+    return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { padding: 16, borderLeft: "4px solid " + (job.status === "completed" ? "#16A34A" : "#2E6DA4"), marginBottom: 12 }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, job.cn), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, isHist ? (/* @__PURE__ */ new Date(job.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" }) + " \u2014 " : "", job.t1, " \u2014 ", job.t2)), /* @__PURE__ */ React.createElement(Bdg, { label: job.status === "completed" ? "Conclu\xEDdo" : "Agendado", bg: job.status === "completed" ? "#DCFCE7" : "#EFF6FF", tx: job.status === "completed" ? "#15803D" : "#2E6DA4" })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 8 } }, job.addr), cl.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, background: "#E2EBF4", borderRadius: 4, height: 5 } }, /* @__PURE__ */ React.createElement("div", { style: { background: job.status === "completed" ? "#16A34A" : "#2E6DA4", height: "100%", borderRadius: 4, width: pct + "%" } })), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#64748B", fontWeight: 600, flexShrink: 0 } }, d, "/", cl.length)), !job.check_in && job.status !== "completed" && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 8, background: "#F8FAFC", borderRadius: 8, padding: "8px 12px", fontSize: 11, color: "#94A3B8", textAlign: "center" } }, "Pica o QR code do cliente para registar presen\xE7a"), job.check_in && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 8, display: "flex", gap: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, background: "#DCFCE7", borderRadius: 8, padding: "6px 10px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#15803D", fontWeight: 700, textTransform: "uppercase" } }, "Entrada"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: "#15803D" } }, job.check_in)), job.check_out && /* @__PURE__ */ React.createElement("div", { style: { flex: 1, background: "#FEE2E2", borderRadius: 8, padding: "6px 10px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#DC2626", fontWeight: 700, textTransform: "uppercase" } }, "Sa\xEDda"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: "#DC2626" } }, job.check_out))));
   }
   const absPct = absStats.total > 0 ? Math.round((absStats.faltas + absStats.parciais * 0.5) / absStats.total * 100) : 0;
-  return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#F4F8FB" } },
-    popupEmpJob ? React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 500, display: "flex", alignItems: "flex-end", justifyContent: "center" }, onClick: function() { setPopupEmpJob(null); } },
-      React.createElement("div", { style: { background: "#fff", borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 500, maxHeight: "85vh", overflowY: "auto", paddingBottom: 32 }, onClick: function(e) { e.stopPropagation(); } },
-        React.createElement("div", { style: { background: "#1A3A5C", borderRadius: "20px 20px 0 0", padding: "20px 20px 16px", position: "relative" } },
-          React.createElement("button", { onClick: function() { setPopupEmpJob(null); }, style: { position: "absolute", top: 14, right: 14, background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "50%", width: 30, height: 30, color: "#fff", fontSize: 16, cursor: "pointer" } }, "\u2715"),
-          React.createElement("div", { style: { color: "#fff", fontWeight: 900, fontSize: 18, marginBottom: 2 } }, popupEmpJob.cn),
-          React.createElement("div", { style: { color: "rgba(255,255,255,0.6)", fontSize: 12 } }, popupEmpJob.t1, " \u2014 ", popupEmpJob.t2),
-          popupEmpJob.addr && React.createElement("div", { style: { color: "rgba(255,255,255,0.5)", fontSize: 11, marginTop: 2 } }, "\uD83D\uDCCD ", popupEmpJob.addr)
-        ),
-        React.createElement("div", { style: { padding: "16px 20px" } },
-          popupEmpJob._notaPerm && React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 10, padding: "12px 14px", marginBottom: 10, borderLeft: "4px solid #2E6DA4" } },
-            React.createElement("div", { style: { fontSize: 10, color: "#2E6DA4", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "\uD83D\uDCCC Nota permanente"),
-            React.createElement("div", { style: { fontSize: 13, color: "#1A3A5C", lineHeight: 1.5 } }, popupEmpJob._notaPerm)
-          ),
-          (popupEmpJob._notasProv || []).map(function(np, i) {
-            return React.createElement("div", { key: i, style: { background: "#FFF7ED", borderRadius: 10, padding: "12px 14px", marginBottom: 10, borderLeft: "4px solid #F59E0B" } },
-              React.createElement("div", { style: { fontSize: 10, color: "#92400E", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "\u26A0 Nota do cliente"),
-              React.createElement("div", { style: { fontSize: 13, color: "#78350F", lineHeight: 1.5 } }, np.nota)
-            );
-          }),
-          popupEmpJob.notes && React.createElement("div", { style: { background: "#F0FDF4", borderRadius: 10, padding: "12px 14px", marginBottom: 10, borderLeft: "4px solid #16A34A" } },
-            React.createElement("div", { style: { fontSize: 10, color: "#15803D", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "\uD83D\uDCCB Nota da gest\xE3o"),
-            React.createElement("div", { style: { fontSize: 13, color: "#14532D", lineHeight: 1.5 } }, popupEmpJob.notes)
-          ),
-          React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 } },
-            React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 10, padding: "10px", textAlign: "center" } },
-              React.createElement("div", { style: { fontSize: 9, color: "#64748B", fontWeight: 700, textTransform: "uppercase" } }, "Entrada"),
-              React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: popupEmpJob.check_in ? "#16A34A" : "#CBD5E1" } }, popupEmpJob.check_in || "--:--")
-            ),
-            React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 10, padding: "10px", textAlign: "center" } },
-              React.createElement("div", { style: { fontSize: 9, color: "#64748B", fontWeight: 700, textTransform: "uppercase" } }, "Sa\xEDda"),
-              React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: popupEmpJob.check_out ? "#EF4444" : "#CBD5E1" } }, popupEmpJob.check_out || "--:--")
-            )
-          ),
-          React.createElement("button", { onClick: function() { setPopupEmpJob(null); }, style: { width: "100%", background: "#1A3A5C", border: "none", borderRadius: 10, padding: "12px", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" } }, "Fechar")
-        )
-      )
-    ) : null, React.createElement("div", { style: { background: "#1A3A5C", padding: "16px 20px 20px" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement(Av, { init: emp.av, size: 40, color: "#38B6D8" }), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 15 } }, "Ol\xE1, ", emp.name.split(" ")[0], "!"), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.45)", fontSize: 11 } }, emp.role))), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+  return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#F4F8FB" } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#1A3A5C", padding: "16px 20px 20px" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement(Av, { init: emp.av, size: 40, color: "#38B6D8" }), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 15 } }, "Ol\xE1, ", emp.name.split(" ")[0], "!"), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.45)", fontSize: 11 } }, emp.role))), /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setPhase("login");
     setEmp(null);
     setSEmp(null);
@@ -3974,7 +3927,7 @@ function ClientPortal(props) {
       setTimeout(function() {
         if (pinMode === "client") {
           const match = contacts.find(function(c) {
-            return String(c.pin) === n;
+            return c.pin === n;
           });
           if (match) {
             setCurrentContact(match);
@@ -3988,7 +3941,7 @@ function ClientPortal(props) {
           }
         } else {
           const match = allEmps.find(function(e) {
-            return String(e.pin) === n;
+            return e.pin === n;
           });
           if (match) {
             setCurrentEmp(match);
@@ -4277,14 +4230,7 @@ function ClientPortal(props) {
           alert("Erro ao terminar servi\xE7o: " + err.slice(0, 100));
         }
       }
-      return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { padding: 16, marginBottom: 12, borderLeft: "4px solid " + (job.status === "completed" ? "#16A34A" : isInteractive ? "#2E6DA4" : "#94A3B8"), cursor: "pointer" }), onClick: async function() {
-        var j = Object.assign({}, job);
-        var r1 = await db.list("clientes", "?select=nota_interna&id=eq." + encodeURIComponent(job.client_id));
-        j._notaPerm = r1 && r1[0] ? r1[0].nota_interna || null : null;
-        var r2 = await db.list("client_notes", "?select=*&client_id=eq." + encodeURIComponent(job.client_id) + "&partilhada=is.true&servicos_restantes=gt.0&expires_at=gte." + new Date().toISOString());
-        j._notasProv = r2 || [];
-        setPopupJob(j);
-      } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, job.cn), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, job.t1, " \u2014 ", job.t2), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } }, job.addr)), /* @__PURE__ */ React.createElement(Bdg, { label: job.status === "completed" ? "Conclu\xEDdo" : isInteractive ? "Este local" : "Seguinte", bg: job.status === "completed" ? "#DCFCE7" : isInteractive ? "#EFF6FF" : "#F8FAFC", tx: job.status === "completed" ? "#15803D" : isInteractive ? "#2E6DA4" : "#64748B" })), isInteractive && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 8, padding: "8px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#64748B", fontWeight: 700, textTransform: "uppercase" } }, "Entrada"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: job.check_in ? "#16A34A" : "#CBD5E1" } }, job.check_in || "--:--")), /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 8, padding: "8px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#64748B", fontWeight: 700, textTransform: "uppercase" } }, "Sa\xEDda"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: job.check_out ? "#EF4444" : "#CBD5E1" } }, job.check_out || "--:--"))), !job.check_in && /* @__PURE__ */ React.createElement("button", { onClick: doCheckin, style: Object.assign({}, btnG, { width: "100%", marginBottom: 10, textAlign: "center" }) }, "Registar entrada"), cl.length > 0 && job.check_in && !job.check_out && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, "Checklist"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: checklistComplete ? "#16A34A" : "#F59E0B" } }, done, "/", cl.length)), /* @__PURE__ */ React.createElement("div", { style: { background: "#E2EBF4", borderRadius: 4, height: 5, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { background: checklistComplete ? "#16A34A" : "#2E6DA4", height: "100%", borderRadius: 4, width: pct + "%" } })), cl.map(function(task, i) {
+      return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { padding: 16, marginBottom: 12, borderLeft: "4px solid " + (job.status === "completed" ? "#16A34A" : isInteractive ? "#2E6DA4" : "#94A3B8") }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, job.cn), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, job.t1, " \u2014 ", job.t2), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } }, job.addr)), /* @__PURE__ */ React.createElement(Bdg, { label: job.status === "completed" ? "Conclu\xEDdo" : isInteractive ? "Este local" : "Seguinte", bg: job.status === "completed" ? "#DCFCE7" : isInteractive ? "#EFF6FF" : "#F8FAFC", tx: job.status === "completed" ? "#15803D" : isInteractive ? "#2E6DA4" : "#64748B" })), isInteractive && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 8, padding: "8px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#64748B", fontWeight: 700, textTransform: "uppercase" } }, "Entrada"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: job.check_in ? "#16A34A" : "#CBD5E1" } }, job.check_in || "--:--")), /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 8, padding: "8px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#64748B", fontWeight: 700, textTransform: "uppercase" } }, "Sa\xEDda"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: job.check_out ? "#EF4444" : "#CBD5E1" } }, job.check_out || "--:--"))), !job.check_in && /* @__PURE__ */ React.createElement("button", { onClick: doCheckin, style: Object.assign({}, btnG, { width: "100%", marginBottom: 10, textAlign: "center" }) }, "Registar entrada"), cl.length > 0 && job.check_in && !job.check_out && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, "Checklist"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: checklistComplete ? "#16A34A" : "#F59E0B" } }, done, "/", cl.length)), /* @__PURE__ */ React.createElement("div", { style: { background: "#E2EBF4", borderRadius: 4, height: 5, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { background: checklistComplete ? "#16A34A" : "#2E6DA4", height: "100%", borderRadius: 4, width: pct + "%" } })), cl.map(function(task, i) {
         const ok = (job.done_tasks || []).indexOf(task) !== -1;
         return /* @__PURE__ */ React.createElement("div", { key: i, onClick: function() {
           togTask(task);
@@ -4314,50 +4260,11 @@ function ClientPortal(props) {
         }
       } })))));
     };
-    const [popupJob, setPopupJob] = useState(null);
     const jobs = teamJobs || { current: [], next: [], completed: [] };
     const currentJobs = Array.isArray(jobs) ? [] : jobs.current || [];
     const nextJobs = Array.isArray(jobs) ? [] : jobs.next || [];
     const completedJobs = Array.isArray(jobs) ? [] : jobs.completed || [];
-    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#F4F8FB", maxWidth: 500, margin: "0 auto" } },
-      popupJob ? React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 500, display: "flex", alignItems: "flex-end", justifyContent: "center" }, onClick: function() { setPopupJob(null); } },
-        React.createElement("div", { style: { background: "#fff", borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 500, maxHeight: "85vh", overflowY: "auto", paddingBottom: 32 }, onClick: function(e) { e.stopPropagation(); } },
-          React.createElement("div", { style: { background: "#1A3A5C", borderRadius: "20px 20px 0 0", padding: "20px 20px 16px", position: "relative" } },
-            React.createElement("button", { onClick: function() { setPopupJob(null); }, style: { position: "absolute", top: 14, right: 14, background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "50%", width: 30, height: 30, color: "#fff", fontSize: 16, cursor: "pointer" } }, "\u2715"),
-            React.createElement("div", { style: { color: "#fff", fontWeight: 900, fontSize: 18, marginBottom: 2 } }, popupJob.cn),
-            React.createElement("div", { style: { color: "rgba(255,255,255,0.6)", fontSize: 12 } }, popupJob.t1, " \u2014 ", popupJob.t2),
-            popupJob.addr && React.createElement("div", { style: { color: "rgba(255,255,255,0.5)", fontSize: 11, marginTop: 2 } }, "\uD83D\uDCCD ", popupJob.addr)
-          ),
-          React.createElement("div", { style: { padding: "16px 20px" } },
-            popupJob._notaPerm && React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 10, padding: "12px 14px", marginBottom: 10, borderLeft: "4px solid #2E6DA4" } },
-              React.createElement("div", { style: { fontSize: 10, color: "#2E6DA4", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "\uD83D\uDCCC Nota permanente"),
-              React.createElement("div", { style: { fontSize: 13, color: "#1A3A5C", lineHeight: 1.5 } }, popupJob._notaPerm)
-            ),
-            (popupJob._notasProv || []).map(function(np, i) {
-              return React.createElement("div", { key: i, style: { background: "#FFF7ED", borderRadius: 10, padding: "12px 14px", marginBottom: 10, borderLeft: "4px solid #F59E0B" } },
-                React.createElement("div", { style: { fontSize: 10, color: "#92400E", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "\u26A0 Nota do cliente"),
-                React.createElement("div", { style: { fontSize: 13, color: "#78350F", lineHeight: 1.5 } }, np.nota)
-              );
-            }),
-            popupJob.notes && React.createElement("div", { style: { background: "#F0FDF4", borderRadius: 10, padding: "12px 14px", marginBottom: 10, borderLeft: "4px solid #16A34A" } },
-              React.createElement("div", { style: { fontSize: 10, color: "#15803D", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "\uD83D\uDCCB Nota da gest\xE3o"),
-              React.createElement("div", { style: { fontSize: 13, color: "#14532D", lineHeight: 1.5 } }, popupJob.notes)
-            ),
-            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 } },
-              React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 10, padding: "10px", textAlign: "center" } },
-                React.createElement("div", { style: { fontSize: 9, color: "#64748B", fontWeight: 700, textTransform: "uppercase" } }, "Entrada"),
-                React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: popupJob.check_in ? "#16A34A" : "#CBD5E1" } }, popupJob.check_in || "--:--")
-              ),
-              React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 10, padding: "10px", textAlign: "center" } },
-                React.createElement("div", { style: { fontSize: 9, color: "#64748B", fontWeight: 700, textTransform: "uppercase" } }, "Sa\xEDda"),
-                React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: popupJob.check_out ? "#EF4444" : "#CBD5E1" } }, popupJob.check_out || "--:--")
-              )
-            ),
-            React.createElement("button", { onClick: function() { setPopupJob(null); }, style: { width: "100%", background: "#1A3A5C", border: "none", borderRadius: 10, padding: "12px", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" } }, "Fechar")
-          )
-        )
-      ) : null,
-      /* @__PURE__ */ React.createElement("div", { style: { background: "#1A3A5C", padding: "20px 20px 24px" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ React.createElement("img", { src: logoUrl, onError: function(e) {
+    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#F4F8FB", maxWidth: 500, margin: "0 auto" } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#1A3A5C", padding: "20px 20px 24px" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ React.createElement("img", { src: logoUrl, onError: function(e) {
       e.target.src = logoFallback;
     }, style: { width: 32, height: 32, borderRadius: 8, objectFit: "contain", background: "#fff" } }), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 14 } }, "SamorClean"), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.5)", fontSize: 11 } }, currentEmp ? currentEmp.name : ""))), /* @__PURE__ */ React.createElement("button", { onClick: function() {
       setPhase("welcome");
