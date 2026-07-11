@@ -368,6 +368,7 @@ function Routes() {
   const [jobs, setJobs] = useState([]);
   const [emps, setEmps] = useState([]);
   const [clients, setClients] = useState([]);
+  const [ausencias, setAusencias] = useState([]);
   const [loading, setLoading] = useState(true);
   const [wk, setWk] = useState(0);
   const [calView, setCalView] = useState("week");
@@ -380,6 +381,7 @@ function Routes() {
   const [showGen, setShowGen] = useState(false);
   const [preview, setPreview] = useState([]);
   const [generating, setGenerating] = useState(false);
+  const [genWarnings, setGenWarnings] = useState([]);
   const [nj, setNj] = useState({ cn: "", addr: "", svc: "", date: "", t1: "08:00", t2: "10:00", team: [], val: "" });
   const START_H = 7;
   const END_H = 20;
@@ -414,11 +416,13 @@ function Routes() {
     Promise.all([
       db.list("servicos", "?select=*&order=date"),
       db.list("funcionarios", "?select=*&order=id"),
-      db.list("clientes", "?select=*&order=id")
+      db.list("clientes", "?select=*&order=id"),
+      db.list("ausencias", "?select=*")
     ]).then(function(r) {
       setJobs(r[0] || []);
       setEmps(r[1] && r[1].length ? r[1] : EMPS);
       setClients(r[2] || []);
+      setAusencias(r[3] || []);
       setLoading(false);
     });
   }, []);
@@ -542,9 +546,19 @@ function Routes() {
     });
     setNj(Object.assign({}, nj, { team: t }));
   }
+  function isEmpAusente(empId, dateStr) {
+    return ausencias.some(function(a) {
+      if (a.funcionario_id !== empId) return false;
+      if (!a.data_inicio) return false;
+      const start = a.data_inicio;
+      const end = a.data_fim || a.data_inicio;
+      return dateStr >= start && dateStr <= end;
+    });
+  }
   function generatePreview() {
     const nextDates = getWeekDates(wk === 0 ? 1 : wk);
     const previews = [];
+    const warnings = [];
     clients.forEach(function(c) {
       const sch = c.schedule || [];
       if (!sch.length || c.freq === "Pontual") return;
@@ -562,6 +576,20 @@ function Routes() {
           return s + Math.max(0, (timeToMin(dd.time_end) - timeToMin(dd.time_start)) / 60);
         }, 0);
         const share = weekTotal > 0 ? visitHrs / weekTotal : 1;
+        // Filter out absent employees
+        const teamOriginal = d.team_ids || (c.equipa_habitual || []);
+        const teamDisponivel = teamOriginal.filter(function(eid) {
+          return !isEmpAusente(eid, date);
+        });
+        const ausentesNeste = teamOriginal.filter(function(eid) {
+          return isEmpAusente(eid, date);
+        });
+        if (ausentesNeste.length > 0) {
+          ausentesNeste.forEach(function(eid) {
+            const e = emps.find(function(x) { return x.id === eid; });
+            warnings.push({ cn: c.name, date: date, empName: e ? e.name.split(" ")[0] : eid });
+          });
+        }
         previews.push({
           id: "J" + Date.now() + Math.random().toString(36).slice(2, 6),
           client_id: c.id,
@@ -571,7 +599,8 @@ function Routes() {
           date,
           t1: d.time_start || "08:00",
           t2: d.time_end || "10:00",
-          team: d.team_ids || (c.equipa_habitual || []),
+          team: teamDisponivel,
+          _ausentesNeste: ausentesNeste,
           status: "pending",
           cl: c.checklist || [],
           prods: [],
@@ -583,6 +612,7 @@ function Routes() {
       });
     });
     setPreview(previews);
+    setGenWarnings(warnings);
     setShowGen(true);
   }
   async function confirmGenerate() {
@@ -868,13 +898,48 @@ function Routes() {
     setPopupAction(null);
   }, style: Object.assign({}, btnG, { width: "100%", textAlign: "center", marginTop: 12 }) }, "Confirmar equipa"))))), showGen && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 20 }, onClick: function() {
     setShowGen(false);
-  } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 24, maxWidth: 480, width: "100%", maxHeight: "80vh", overflowY: "auto" }, onClick: function(e) {
+  } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 24, maxWidth: 520, width: "100%", maxHeight: "85vh", overflowY: "auto" }, onClick: function(e) {
     e.stopPropagation();
-  } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C", marginBottom: 4 } }, "Pr\xE9-visualiza\xE7\xE3o da semana"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 16 } }, preview.length, " servi\xE7os a criar"), preview.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24 } }, "Nenhum servi\xE7o a gerar.") : preview.map(function(j, i) {
-    return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #F1F5F9", fontSize: 13 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, color: "#1A3A5C" } }, j.cn), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, (/* @__PURE__ */ new Date(j.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" }), " \u2022 ", j.t1, "\u2013", j.t2)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#2E6DA4", fontWeight: 700 } }, fmt(j.val || 0), "\u20AC"));
-  }), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 16 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
-    setShowGen(false);
-  }, style: Object.assign({}, btnX, { flex: 1, textAlign: "center" }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: confirmGenerate, disabled: generating || preview.length === 0, style: Object.assign({}, btnG, { flex: 2, textAlign: "center", opacity: preview.length === 0 ? 0.5 : 1 }) }, generating ? "A criar..." : "Confirmar " + preview.length + " servi\xE7os")))), showNew && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 20 }, onClick: function() {
+  } },
+    /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C", marginBottom: 4 } }, "Pré-visualização da semana"),
+    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 16 } }, preview.length, " serviços a criar"),
+    genWarnings.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF3C7", border: "1.5px solid #F59E0B", borderRadius: 10, padding: "12px 14px", marginBottom: 16 } },
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#92400E", marginBottom: 8 } }, "⚠ Colaboradores em ausência — realocação necessária:"),
+      genWarnings.map(function(w, i) {
+        return /* @__PURE__ */ React.createElement("div", { key: i, style: { fontSize: 12, color: "#78350F", marginBottom: 3 } }, "• ", w.empName, " — ", w.cn, " (", new Date(w.date + "T12:00:00").toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" }), ")");
+      })
+    ),
+    /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } },
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 8 } }, "Horas alocadas por colaborador:"),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 } }, emps.map(function(e) {
+        const ausente = getWeekDates(wk === 0 ? 1 : wk).some(function(d) { return isEmpAusente(e.id, d); });
+        const horas = preview.filter(function(j) { return (j.team || []).indexOf(e.id) !== -1; }).reduce(function(s, j) { return s + (timeToMin(j.t2) - timeToMin(j.t1)) / 60; }, 0);
+        const cor = ausente ? "#EF4444" : horas > 0 ? "#2E6DA4" : "#94A3B8";
+        const bg = ausente ? "#FEE2E2" : horas > 0 ? "#EFF6FF" : "#F8FAFC";
+        return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 8, background: bg, borderRadius: 8, padding: "6px 10px" } },
+          /* @__PURE__ */ React.createElement("div", { style: { width: 24, height: 24, borderRadius: "50%", background: ausente ? "#EF4444" : empColor(e.id), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 9, fontWeight: 800 } }, e.av || e.name.slice(0, 2).toUpperCase()),
+          /* @__PURE__ */ React.createElement("div", null,
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: cor } }, e.name.split(" ")[0]),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: cor } }, ausente ? "Em ausência" : horas > 0 ? horas.toFixed(1) + "h alocadas" : "0h")
+          )
+        );
+      }))
+    ),
+    preview.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24 } }, "Nenhum serviço a gerar.") : preview.map(function(j, i) {
+      const temAusentes = (j._ausentesNeste || []).length > 0;
+      return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #F1F5F9", fontSize: 13, background: temAusentes ? "#FFFBEB" : "transparent" } },
+        /* @__PURE__ */ React.createElement("div", null,
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, color: "#1A3A5C" } }, j.cn, temAusentes && /* @__PURE__ */ React.createElement("span", { style: { color: "#F59E0B", marginLeft: 6, fontSize: 11 } }, "⚠ sem equipa completa")),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, new Date(j.date + "T12:00:00").toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" }), " • ", j.t1, "–", j.t2)
+        ),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#2E6DA4", fontWeight: 700 } }, fmt(j.val || 0), "€")
+      );
+    }),
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 16 } },
+      /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowGen(false); }, style: Object.assign({}, btnX, { flex: 1, textAlign: "center" }) }, "Cancelar"),
+      /* @__PURE__ */ React.createElement("button", { onClick: confirmGenerate, disabled: generating || preview.length === 0, style: Object.assign({}, btnG, { flex: 2, textAlign: "center", opacity: preview.length === 0 ? 0.5 : 1 }) }, generating ? "A criar..." : "Confirmar " + preview.length + " serviços")
+    )
+  )), showNew && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 20 }, onClick: function() {
     setShowNew(false);
   } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 24, maxWidth: 480, width: "100%", maxHeight: "85vh", overflowY: "auto" }, onClick: function(e) {
     e.stopPropagation();
