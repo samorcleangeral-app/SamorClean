@@ -1195,7 +1195,7 @@ function Clients() {
   const [form, setForm] = useState({ name: "", type: "Empresa", contact: "", phone: "", email: "", address: "", service: SVCS[0], freq: FREQS[0], notes: "", checklist: [""], schedule: [], hours_contracted: 0, price_per_hour: 13.66, iva_type: "normal" });
   const [saved, setSaved] = useState(false);
   const [contacts, setContacts] = useState([]);
-  const [newContact, setNewContact] = useState({ name: "", pin: "" });
+  const [newContact, setNewContact] = useState({ name: "", pin: "", cargo: "", phone: "", email: "" });
   const [contactErr, setContactErr] = useState("");
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState(null);
@@ -1215,7 +1215,9 @@ function Clients() {
       hours_contracted: sel.hours_contracted || 0,
       price_per_hour: sel.price_per_hour || 13.66,
       iva_type: sel.iva_type || "normal",
-      checklist: sel.checklist && sel.checklist.length ? sel.checklist.slice() : [""]
+      checklist: sel.checklist && sel.checklist.length ? sel.checklist.slice() : [""],
+      schedule: sel.schedule ? sel.schedule.map(function(s) { return Object.assign({}, s); }) : [],
+      equipa_habitual: sel.equipa_habitual ? sel.equipa_habitual.slice() : []
     });
     setEditing(true);
   }
@@ -1223,7 +1225,9 @@ function Clients() {
     const patch = Object.assign({}, editForm, {
       checklist: editForm.checklist.filter(function(t) {
         return t.trim() !== "";
-      })
+      }),
+      schedule: editForm.schedule || [],
+      equipa_habitual: editForm.equipa_habitual || []
     });
     const updated = await db.update("clientes", sel.id, patch);
     if (updated) {
@@ -1312,10 +1316,10 @@ function Clients() {
       setContactErr("Esse PIN j\xE1 est\xE1 a ser usado por " + dup.name + ".");
       return;
     }
-    const inserted = await db.insert("client_contacts", { client_id: sel.id, name: newContact.name.trim(), pin: newContact.pin });
+    const inserted = await db.insert("client_contacts", { client_id: sel.id, name: newContact.name.trim(), pin: newContact.pin, cargo: newContact.cargo || "", phone: newContact.phone || "", email: newContact.email || "" });
     if (inserted) {
       setContacts(contacts.concat([inserted]));
-      setNewContact({ name: "", pin: "" });
+      setNewContact({ name: "", pin: "", cargo: "", phone: "", email: "" });
     } else {
       setContactErr("Erro ao guardar. Verifica a liga\xE7\xE3o.");
     }
@@ -1520,14 +1524,10 @@ function Clients() {
     return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 24 } }, /* @__PURE__ */ React.createElement("button", { style: btnX, onClick: function() {
       setView("detail");
     } }, "Voltar"), /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "QR Code \u2014 ", sel.name)), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 } }, /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 32 }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "QR Permanente do Cliente"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 16 } }, "Para colocar no local \u2014 acesso exclusivo com PIN"), /* @__PURE__ */ React.createElement("img", { src: "https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=" + encodeURIComponent("https://samorcleangeral-app.github.io/SamorClean?cliente=" + sel.id) + "&color=1A3A5C&bgcolor=FFFFFF&margin=12&ecc=H", alt: "QR", style: { width: 160, height: 160, borderRadius: 8, display: "block", margin: "0 auto 12px" } }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 2 } }, sel.id), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#334155", fontWeight: 700, marginBottom: 16 } }, sel.name), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, justifyContent: "center" } }, /* @__PURE__ */ React.createElement("a", { href: "https://api.qrserver.com/v1/create-qr-code/?size=800x800&data=" + encodeURIComponent("https://samorcleangeral-app.github.io/SamorClean?cliente=" + sel.id) + "&color=1A3A5C&bgcolor=FFFFFF&margin=15&ecc=H", target: "_blank", rel: "noopener noreferrer", style: Object.assign({}, btnO, { fontSize: 12, display: "inline-block", textDecoration: "none" }) }, "Descarregar"), /* @__PURE__ */ React.createElement("button", { onClick: printQR, style: Object.assign({}, btn, { fontSize: 12 }) }, "Imprimir / PDF")))), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 6 } }, "Contactos com acesso ao portal"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 16, lineHeight: 1.6 } }, "Cada contacto tem o seu pr\xF3prio PIN de 6 d\xEDgitos. Todas as ac\xE7\xF5es ficam registadas com o nome de quem as fez."), contacts.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, contacts.map(function(c) {
-      return /* @__PURE__ */ React.createElement("div", { key: c.id, style: { display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "#F8FAFC", borderRadius: 8, marginBottom: 8, border: "1px solid #E2EBF4" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 36, height: 36, borderRadius: "50%", background: "#2E6DA4", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 13, flexShrink: 0 } }, c.name.slice(0, 2).toUpperCase()), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C" } }, c.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontFamily: "monospace" } }, "PIN: ", c.pin)), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+      return /* @__PURE__ */ React.createElement("div", { key: c.id, style: { display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 14px", background: "#F8FAFC", borderRadius: 8, marginBottom: 8, border: "1px solid #E2EBF4" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 36, height: 36, borderRadius: "50%", background: "#2E6DA4", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 13, flexShrink: 0 } }, c.name.slice(0, 2).toUpperCase()), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C" } }, c.name, c.cargo && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#64748B", fontWeight: 400, marginLeft: 6 } }, c.cargo)), c.phone && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, "📞 ", c.phone), c.email && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 1 } }, "✉ ", c.email), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontFamily: "monospace", marginTop: 2 } }, "PIN: ", c.pin)), /* @__PURE__ */ React.createElement("button", { onClick: function() {
         removeContact(c.id);
-      }, style: { background: "transparent", border: "1px solid #EF4444", color: "#EF4444", borderRadius: 6, padding: "4px 10px", fontSize: 11, cursor: "pointer" } }, "Remover"));
-    })), contactErr && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", borderRadius: 8, padding: "10px 14px", color: "#991B1B", fontSize: 12, marginBottom: 12 } }, contactErr), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 120px 100px", gap: 10, alignItems: "flex-end" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Nome do contacto"), /* @__PURE__ */ React.createElement("input", { style: inp, value: newContact.name, onChange: function(e) {
-      setNewContact(Object.assign({}, newContact, { name: e.target.value }));
-    }, placeholder: "Ex: Maria Santos" })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "PIN (6 d\xEDgitos)"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { fontFamily: "monospace", fontSize: 16, letterSpacing: 4 }), value: newContact.pin, onChange: function(e) {
-      setNewContact(Object.assign({}, newContact, { pin: e.target.value.replace(/[^0-9]/g, "").slice(0, 6) }));
-    }, placeholder: "000000", maxLength: 6 })), /* @__PURE__ */ React.createElement("button", { onClick: addContact, style: Object.assign({}, btnG, { width: "100%", padding: "10px 0" }) }, "Adicionar"))));
+      }, style: { background: "transparent", border: "1px solid #EF4444", color: "#EF4444", borderRadius: 6, padding: "4px 10px", fontSize: 11, cursor: "pointer", flexShrink: 0 } }, "Remover"));
+    })), contactErr && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", borderRadius: 8, padding: "10px 14px", color: "#991B1B", fontSize: 12, marginBottom: 12 } }, contactErr), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Nome *"), /* @__PURE__ */ React.createElement("input", { style: inp, value: newContact.name, onChange: function(e) { setNewContact(Object.assign({}, newContact, { name: e.target.value })); }, placeholder: "Ex: Maria Santos" })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Cargo"), /* @__PURE__ */ React.createElement("input", { style: inp, value: newContact.cargo, onChange: function(e) { setNewContact(Object.assign({}, newContact, { cargo: e.target.value })); }, placeholder: "Ex: Directora" })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Telefone"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "tel", value: newContact.phone, onChange: function(e) { setNewContact(Object.assign({}, newContact, { phone: e.target.value })); }, placeholder: "Ex: 912 345 678" })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Email"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "email", value: newContact.email, onChange: function(e) { setNewContact(Object.assign({}, newContact, { email: e.target.value })); }, placeholder: "Ex: maria@empresa.pt" }))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 120px 100px", gap: 10, alignItems: "flex-end" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "PIN de acesso ao portal (6 d\xEDgitos)"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { fontFamily: "monospace", fontSize: 16, letterSpacing: 4 }), value: newContact.pin, onChange: function(e) { setNewContact(Object.assign({}, newContact, { pin: e.target.value.replace(/[^0-9]/g, "").slice(0, 6) })); }, placeholder: "000000", maxLength: 6 })), /* @__PURE__ */ React.createElement("div"), /* @__PURE__ */ React.createElement("button", { onClick: addContact, style: Object.assign({}, btnG, { width: "100%", padding: "10px 0" }) }, "Adicionar"))));
   }
   if (view === "new") {
     return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 24 } }, /* @__PURE__ */ React.createElement("button", { style: btnX, onClick: function() {
@@ -2617,19 +2617,176 @@ function Leads() {
 function QRArmazem() {
   const url = "https://samorcleangeral-app.github.io/SamorClean/?armazem=1";
   const qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=" + encodeURIComponent(url) + "&color=1A3A5C&bgcolor=FFFFFF&margin=15&ecc=H";
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0, marginBottom: 4 } }, "QR Code \u2014 Armaz\xE9m"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 24 } }, "Imprime e afixa no armaz\xE9m para registo de entrada e sa\xEDda dos colaboradores."), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 } }, /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 32 }) }, /* @__PURE__ */ React.createElement("img", { src: qrUrl, style: { width: 200, height: 200, margin: "0 auto 16px", display: "block" } }), /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C", marginBottom: 4 } }, "SamorClean \u2014 Armaz\xE9m"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 16 } }, "Registo de Entrada / Sa\xEDda"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-    window.open(qrUrl, "_blank");
-  }, style: Object.assign({}, btn, { marginBottom: 8, width: "100%", textAlign: "center" }) }, "Descarregar QR Code"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-    window.open(url, "_blank");
-  }, style: Object.assign({}, btnO, { width: "100%", textAlign: "center" }) }, "Testar portal")), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C", marginBottom: 16 } }, "Instru\xE7\xF5es"), [
-    { n: "1", t: "Imprime o QR code", d: "Clica em 'Descarregar QR Code' e imprime em tamanho A5 ou maior." },
-    { n: "2", t: "Afixa no armaz\xE9m", d: "Coloca numa zona vis\xEDvel \xE0 entrada do armaz\xE9m, acess\xEDvel a todos os colaboradores." },
-    { n: "3", t: "Colaborador pica", d: "O colaborador aponta a c\xE2mara do telem\xF3vel ao QR, selecciona o seu nome e introduz o PIN." },
-    { n: "4", t: "Escolhe entrada ou sa\xEDda", d: "A app sugere automaticamente o tipo correcto com base na \xFAltima picagem." },
-    { n: "5", t: "Registo guardado", d: "O registo fica guardado com hora exacta e vis\xEDvel na ficha do colaborador." }
-  ].map(function(s) {
-    return /* @__PURE__ */ React.createElement("div", { key: s.n, style: { display: "flex", gap: 12, marginBottom: 14, alignItems: "flex-start" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 28, height: 28, borderRadius: "50%", background: "#2E6DA4", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 } }, s.n), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C" } }, s.t), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, s.d)));
-  }), /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF3C7", borderRadius: 8, padding: "10px 12px", fontSize: 12, color: "#92400E", marginTop: 8 } }, /* @__PURE__ */ React.createElement("strong", null, "Normas:"), " A picagem no armaz\xE9m \xE9 obrigat\xF3ria todos os dias \u2014 entrada ao chegar e sa\xEDda ao partir. O n\xE3o cumprimento \xE9 registado na ficha do colaborador."))));
+  const [picagens, setPicagens] = useState([]);
+  const [loadingPic, setLoadingPic] = useState(true);
+  const [filtroDia, setFiltroDia] = useState(localDateStr());
+  const [filtroEmp, setFiltroEmp] = useState("Todos");
+  const [emps, setEmps] = useState([]);
+
+  useEffect(function() {
+    Promise.all([
+      db.list("picagens_armazem", "?select=*&order=created_at.desc&limit=200"),
+      db.list("funcionarios", "?select=id,name&order=name")
+    ]).then(function(r) {
+      setPicagens(r[0] || []);
+      setEmps(r[1] || []);
+      setLoadingPic(false);
+    });
+  }, []);
+
+  const picFiltradas = picagens.filter(function(p) {
+    const dia = (p.hora || p.created_at || "").slice(0, 10);
+    const matchDia = filtroDia ? dia === filtroDia : true;
+    const matchEmp = filtroEmp === "Todos" || p.funcionario_nome === filtroEmp;
+    return matchDia && matchEmp;
+  });
+
+  const resumoDia = {};
+  picFiltradas.forEach(function(p) {
+    const nome = p.funcionario_nome || "?";
+    if (!resumoDia[nome]) resumoDia[nome] = { entradas: 0, saidas: 0, ultima: null };
+    if (p.tipo === "entrada") resumoDia[nome].entradas++;
+    else resumoDia[nome].saidas++;
+    resumoDia[nome].ultima = p.hora || p.created_at;
+  });
+
+  return /* @__PURE__ */ React.createElement("div", null,
+    /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0, marginBottom: 4 } }, "QR Code \u2014 Armaz\xE9m"),
+    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 24 } }, "Imprime e afixa no armaz\xE9m para registo de entrada e sa\xEDda dos colaboradores."),
+    /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 } },
+      /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 32 }) },
+        /* @__PURE__ */ React.createElement("img", { src: qrUrl, style: { width: 200, height: 200, margin: "0 auto 16px", display: "block" } }),
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C", marginBottom: 4 } }, "SamorClean \u2014 Armaz\xE9m"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 16 } }, "Registo de Entrada / Sa\xEDda"),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { window.open(qrUrl, "_blank"); }, style: Object.assign({}, btn, { marginBottom: 8, width: "100%", textAlign: "center" }) }, "Descarregar QR Code"),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() {
+          const win = window.open("", "_blank");
+          win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>QR Armazém — SamorClean</title><style>
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body { font-family: Arial, sans-serif; padding: 0; color: #1A3A5C; }
+            .header { background: #1A3A5C; padding: 16px 24px; display: flex; align-items: center; gap: 16px; }
+            .header img { width: 50px; height: 50px; object-fit: contain; background: #fff; padding: 6px; border-radius: 8px; }
+            .header-text h1 { color: #fff; font-size: 16px; margin: 0; }
+            .header-text p { color: rgba(255,255,255,0.6); font-size: 10px; margin: 2px 0 0; }
+            .content { padding: 32px 40px; text-align: center; }
+            .titulo { font-size: 22px; font-weight: 900; color: #1A3A5C; margin-bottom: 4px; }
+            .subtitulo { font-size: 13px; color: #2E6DA4; font-weight: 700; margin-bottom: 6px; }
+            .intro { font-size: 11px; color: #64748B; margin-bottom: 20px; }
+            hr { border: none; border-top: 2px solid #2E6DA4; margin: 0 0 20px; }
+            .qr img { width: 200px; height: 200px; display: block; margin: 0 auto 10px; }
+            .link { font-size: 9px; color: #2E6DA4; font-weight: 700; margin-bottom: 20px; }
+            hr2 { display: block; border: none; border-top: 1px solid #2E6DA4; margin: 20px 0; }
+            .passos { text-align: left; margin: 20px 0; }
+            .passo { display: flex; gap: 12px; margin-bottom: 10px; align-items: flex-start; }
+            .num { width: 26px; height: 26px; border-radius: 50%; background: #2E6DA4; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; flex-shrink: 0; }
+            .passo-titulo { font-size: 11px; font-weight: 700; color: #1A3A5C; }
+            .passo-desc { font-size: 10px; color: #64748B; margin-top: 2px; }
+            .aviso { background: #FEF3C7; border: 1.5px solid #F59E0B; border-radius: 8px; padding: 10px 14px; font-size: 10px; color: #92400E; font-weight: 700; margin-top: 16px; }
+            .footer { position: fixed; bottom: 8px; left: 0; right: 0; text-align: center; font-size: 7px; color: #94A3B8; border-top: 1px solid #E2EBF4; padding-top: 6px; }
+            @media print { body { -webkit-print-color-adjust: exact; } }
+          </style></head><body>
+          <div class="header">
+            <img src="https://dtydrnezzaykiaglwxfv.supabase.co/storage/v1/object/public/formacao/samorclean_logo.jpg" onerror="this.style.display='none'"/>
+            <div class="header-text"><h1>SamorClean by Fragancelines, Lda</h1><p>Rua Manuel Maria Barbosa du Bocage, Lote 8, R/C Dto | 2135-023 Samora Correia | 910 637 588</p></div>
+          </div>
+          <div class="content">
+            <div class="titulo">REGISTO DE PRESENÇA</div>
+            <div class="subtitulo">Armazém SamorClean — Samora Correia</div>
+            <div class="intro">Pica o QR code abaixo para registar a tua entrada ou saída</div>
+            <hr/>
+            <div class="qr"><img src="${qrUrl}" alt="QR Code"/></div>
+            <div class="link">samorcleangeral-app.github.io/SamorClean/?armazem=1</div>
+            <hr style="border-top: 1px solid #2E6DA4; margin: 16px 0;"/>
+            <div class="passos">
+              <div style="font-size:13px;font-weight:800;color:#2E6DA4;margin-bottom:12px;">Como funciona</div>
+              ${[
+                ["1","Aponta a câmara do telemóvel para o QR code","O telemóvel reconhece automaticamente — não precisas de instalar nada."],
+                ["2","Selecciona o teu nome na lista","Aparece a lista de todos os colaboradores. Toca no teu nome."],
+                ["3","Introduz o teu PIN de 6 dígitos","O PIN é pessoal e confidencial. Não partilhes com ninguém."],
+                ["4","Escolhe Entrada ou Saída","A app sugere automaticamente a acção correcta com base na última picagem."],
+                ["5","Registo confirmado","Aparece uma confirmação com a hora exacta. O registo fica guardado automaticamente."]
+              ].map(function(p) {
+                return '<div class="passo"><div class="num">'+p[0]+'</div><div><div class="passo-titulo">'+p[1]+'</div><div class="passo-desc">'+p[2]+'</div></div></div>';
+              }).join("")}
+            </div>
+            <div class="aviso">⚠ A picagem no armazém é OBRIGATÓRIA todos os dias de trabalho — à chegada e à saída. O não cumprimento é registado na ficha individual e pode afectar o prémio de assiduidade.</div>
+          </div>
+          <div class="footer">SamorClean by Fragancelines, Lda | NIF: 516 814 281 | samorclean.geral@gmail.com | 910 637 588</div>
+          <script>window.onload=function(){window.print();}<\/script>
+          </body></html>`);
+          win.document.close();
+        }, style: Object.assign({}, btnO, { width: "100%", textAlign: "center" }) }, "🖨 Imprimir / PDF"),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { window.open(url, "_blank"); }, style: Object.assign({}, btnX, { width: "100%", textAlign: "center", marginTop: 8 }) }, "Testar portal")
+      ),
+      /* @__PURE__ */ React.createElement("div", { style: card },
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C", marginBottom: 16 } }, "Instru\xE7\xF5es"),
+        [
+          { n: "1", t: "Imprime o QR code", d: "Clica em 'Descarregar QR Code' e imprime em tamanho A5 ou maior." },
+          { n: "2", t: "Afixa no armaz\xE9m", d: "Coloca numa zona vis\xEDvel \xE0 entrada do armaz\xE9m, acess\xEDvel a todos os colaboradores." },
+          { n: "3", t: "Colaborador pica", d: "O colaborador aponta a c\xE2mara do telem\xF3vel ao QR, selecciona o seu nome e introduz o PIN." },
+          { n: "4", t: "Escolhe entrada ou sa\xEDda", d: "A app sugere automaticamente o tipo correcto com base na \xFAltima picagem." },
+          { n: "5", t: "Registo guardado", d: "O registo fica guardado com hora exacta e vis\xEDvel abaixo." }
+        ].map(function(s) {
+          return /* @__PURE__ */ React.createElement("div", { key: s.n, style: { display: "flex", gap: 12, marginBottom: 14, alignItems: "flex-start" } },
+            /* @__PURE__ */ React.createElement("div", { style: { width: 28, height: 28, borderRadius: "50%", background: "#2E6DA4", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 } }, s.n),
+            /* @__PURE__ */ React.createElement("div", null,
+              /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C" } }, s.t),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, s.d)
+            )
+          );
+        }),
+        /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF3C7", borderRadius: 8, padding: "10px 12px", fontSize: 12, color: "#92400E", marginTop: 8 } },
+          /* @__PURE__ */ React.createElement("strong", null, "Normas:"), " A picagem no armaz\xE9m \xE9 obrigat\xF3ria todos os dias \u2014 entrada ao chegar e sa\xEDda ao partir."
+        )
+      )
+    ),
+    /* @__PURE__ */ React.createElement("div", { style: card },
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, "Hist\xF3rico de Picagens"),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center" } },
+          /* @__PURE__ */ React.createElement("input", { type: "date", value: filtroDia, onChange: function(e) { setFiltroDia(e.target.value); }, style: Object.assign({}, inp, { width: "auto", padding: "6px 10px" }) }),
+          /* @__PURE__ */ React.createElement("select", { value: filtroEmp, onChange: function(e) { setFiltroEmp(e.target.value); }, style: Object.assign({}, inp, { width: "auto", padding: "6px 10px" }) },
+            /* @__PURE__ */ React.createElement("option", null, "Todos"),
+            emps.map(function(e) { return /* @__PURE__ */ React.createElement("option", { key: e.id }, e.name); })
+          )
+        )
+      ),
+      Object.keys(resumoDia).length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 } },
+        Object.entries(resumoDia).map(function(entry) {
+          const nome = entry[0]; const r = entry[1];
+          return /* @__PURE__ */ React.createElement("div", { key: nome, style: { background: "#F0FDF4", borderRadius: 8, padding: "8px 12px", border: "1px solid #86EFAC" } },
+            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 12, color: "#15803D" } }, nome.split(" ")[0]),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, "🟢 ", r.entradas, "  🔴 ", r.saidas)
+          );
+        })
+      ),
+      loadingPic ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24 } }, "A carregar...") :
+      picFiltradas.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24 } }, "Sem picagens para o filtro seleccionado.") :
+      /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } },
+        /* @__PURE__ */ React.createElement("thead", null,
+          /* @__PURE__ */ React.createElement("tr", { style: { borderBottom: "2px solid #E2EBF4" } },
+            ["Colaborador", "Tipo", "Data", "Hora"].map(function(h) {
+              return /* @__PURE__ */ React.createElement("th", { key: h, style: { textAlign: "left", padding: "8px 10px", fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, h);
+            })
+          )
+        ),
+        /* @__PURE__ */ React.createElement("tbody", null,
+          picFiltradas.map(function(p) {
+            const dt = new Date(p.hora || p.created_at);
+            const isEntrada = p.tipo === "entrada";
+            return /* @__PURE__ */ React.createElement("tr", { key: p.id, style: { borderBottom: "1px solid #F1F5F9" } },
+              /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 600, color: "#1A3A5C" } }, p.funcionario_nome || "—"),
+              /* @__PURE__ */ React.createElement("td", { style: { padding: "10px" } },
+                /* @__PURE__ */ React.createElement("span", { style: { background: isEntrada ? "#DCFCE7" : "#FEE2E2", color: isEntrada ? "#15803D" : "#DC2626", borderRadius: 6, padding: "2px 10px", fontSize: 11, fontWeight: 700 } }, isEntrada ? "🟢 Entrada" : "🔴 Sa\xEDda")
+              ),
+              /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", color: "#64748B" } }, dt.toLocaleDateString("pt-PT", { day: "numeric", month: "short" })),
+              /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 700, color: "#1A3A5C" } }, dt.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }))
+            );
+          })
+        )
+      )
+    )
+  );
 }
 const ALL_MENUS = [
   { k: "home", l: "In\xEDcio" },
