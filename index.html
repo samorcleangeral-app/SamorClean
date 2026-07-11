@@ -3474,7 +3474,7 @@ function Employee(props) {
     setPin(n);
     if (n.length === 6) {
       setTimeout(function() {
-        if (n === sEmp.pin) {
+        if (n === String(sEmp.pin)) {
           setEmp(sEmp);
           setPinErr(false);
           if (clientContext) {
@@ -3941,7 +3941,7 @@ function ClientPortal(props) {
           }
         } else {
           const match = allEmps.find(function(e) {
-            return e.pin === n;
+            return String(e.pin) === n;
           });
           if (match) {
             setCurrentEmp(match);
