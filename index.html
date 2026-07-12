@@ -1184,6 +1184,44 @@ function NotasCliente(props) {
     })
   );
 }
+function FotosCliente(props) {
+  const clientId = props.clientId;
+  const [fotos, setFotos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [lightbox, setLightbox] = useState(null);
+  useEffect(function() {
+    db.list("servicos", "?select=date,fotos,cn&client_id=eq." + encodeURIComponent(clientId) + "&order=date.desc").then(function(rows) {
+      var all = [];
+      (rows || []).forEach(function(j) {
+        if (j.fotos && j.fotos.length) {
+          j.fotos.forEach(function(url) {
+            all.push({ url: url, date: j.date, cn: j.cn });
+          });
+        }
+      });
+      setFotos(all);
+      setLoading(false);
+    });
+  }, [clientId]);
+  if (loading) return /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24 } }, "A carregar fotos...");
+  if (fotos.length === 0) return /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24, fontSize: 13 } }, "Ainda não há fotos para este cliente.");
+  return /* @__PURE__ */ React.createElement("div", null,
+    lightbox && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column" }, onClick: function() { setLightbox(null); } },
+      /* @__PURE__ */ React.createElement("img", { src: lightbox.url, style: { maxWidth: "90vw", maxHeight: "80vh", borderRadius: 8, objectFit: "contain" } }),
+      /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontSize: 12, marginTop: 12, opacity: 0.7 } }, new Date(lightbox.date + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" })),
+      /* @__PURE__ */ React.createElement("button", { onClick: function() { setLightbox(null); }, style: { marginTop: 16, background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: 8, padding: "8px 20px", cursor: "pointer", fontSize: 13 } }, "Fechar")
+    ),
+    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 12 } }, fotos.length, " foto", fotos.length !== 1 ? "s" : "", " — clica para ampliar"),
+    /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8 } },
+      fotos.map(function(f, i) {
+        return /* @__PURE__ */ React.createElement("div", { key: i, style: { position: "relative", cursor: "pointer" }, onClick: function() { setLightbox(f); } },
+          /* @__PURE__ */ React.createElement("img", { src: f.url, style: { width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 8, border: "2px solid #E2EBF4" } }),
+          /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.5)", borderRadius: "0 0 6px 6px", padding: "3px 6px", fontSize: 9, color: "#fff", fontWeight: 600 } }, new Date(f.date + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }))
+        );
+      })
+    )
+  );
+}
 function Clients() {
   const [clients, setClients] = useState([]);
   const [emps, setEmps] = useState(EMPS);
@@ -1495,7 +1533,7 @@ function Clients() {
           return c.id === sel.id ? Object.assign({}, c, { nota_interna: n }) : c;
         });
       });
-    } })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Notas do cliente"), /* @__PURE__ */ React.createElement(NotasCliente, { clientId: sel.id })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Hist\xF3rico de visitas e picagens"), /* @__PURE__ */ React.createElement(HistoricoVisitas, { cliente: sel, emps }))));
+    } })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Notas do cliente"), /* @__PURE__ */ React.createElement(NotasCliente, { clientId: sel.id })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Hist\xF3rico de visitas e picagens"), /* @__PURE__ */ React.createElement(HistoricoVisitas, { cliente: sel, emps })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "\uD83D\uDDBC\uFE0F Galeria de Fotos"), /* @__PURE__ */ React.createElement(FotosCliente, { clientId: sel.id }))));
   }
   if (view === "qr" && sel) {
     let printQR = function() {
