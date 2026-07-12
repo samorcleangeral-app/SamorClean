@@ -559,9 +559,10 @@ function Routes() {
     const nextDates = getWeekDates(wk === 0 ? 1 : wk);
     const previews = [];
     const warnings = [];
+    var skipped = [];
     clients.forEach(function(c) {
       const sch = c.schedule || [];
-      if (!sch.length || c.freq === "Pontual") return;
+      if (!sch.length || c.freq === "Pontual") { skipped.push(c.name + " (sem agenda ou pontual)"); return; }
       sch.forEach(function(d) {
         const dayIdx = d.day;
         if (dayIdx < 0 || dayIdx > 5) return;
@@ -570,7 +571,7 @@ function Routes() {
         const exists = jobs.some(function(j) {
           return j.client_id === c.id && j.date === date;
         });
-        if (exists) return;
+        if (exists) { skipped.push(c.name + " em " + date + " (já existe)"); return; }
         const visitHrs = Math.max(0, (timeToMin(d.time_end) - timeToMin(d.time_start)) / 60);
         const weekTotal = sch.reduce(function(s, dd) {
           return s + Math.max(0, (timeToMin(dd.time_end) - timeToMin(dd.time_start)) / 60);
@@ -617,14 +618,20 @@ function Routes() {
   }
   async function confirmGenerate() {
     setGenerating(true);
+    var inserted = 0;
     for (let i = 0; i < preview.length; i++) {
-      await db.insert("servicos", preview[i]);
+      var job = Object.assign({}, preview[i]);
+      delete job._ausentesNeste;
+      delete job.id;
+      const result = await db.insert("servicos", job);
+      if (result) inserted++;
     }
     const allJobs = await db.list("servicos", "?select=*&order=date");
     setJobs(allJobs || []);
     setShowGen(false);
     setPreview([]);
     setGenerating(false);
+    alert("Inseridos: " + inserted + " de " + preview.length);
   }
   function exportEmpPDF(emp) {
     const myJobs = wJobs.filter(function(j) {
