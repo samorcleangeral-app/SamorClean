@@ -2127,14 +2127,18 @@ function Employees() {
   }
   return null;
 }
-const FORM_CATS = ["Geral", "LALF", "App", "Seguran\xE7a", "Higiene", "Outro"];
-const FORM_ROLES = ["Todos", "T\xE9cnico/a de Limpeza", "Respons\xE1vel de Equipa", "Administrativo"];
+const FORM_CATS = ["Documentação Interna", "Documentação de Colaborador", "LALF", "App", "Segurança", "Higiene", "Geral", "Outro"];
+const FORM_ROLES = ["Todos", "Técnico/a de Limpeza", "Responsável de Equipa", "Administrativo"];
 function Formacao() {
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ name: "", cat: "Geral", role: "Todos" });
+  const [form, setForm] = useState({ name: "", cat: "Documentação Interna", role: "Todos", empId: "" });
+  const [emps, setEmps] = useState([]);
+  useEffect(function() {
+    db.list("funcionarios", "?select=id,name&order=name").then(function(rows) { setEmps(rows || []); });
+  }, []);
   const [file, setFile] = useState(null);
   const [filtCat, setFiltCat] = useState("Todos");
   useEffect(function() {
@@ -2169,7 +2173,8 @@ function Formacao() {
     const ins = await db.insert("formacao_docs", {
       name: form.name.trim(),
       category: form.cat,
-      role: form.role,
+      role: form.empId ? "individual" : form.role,
+      emp_id: form.empId || null,
       file_url: fileUrl,
       file_name: file.name,
       file_size: file.size
@@ -2180,7 +2185,7 @@ function Formacao() {
       });
     }
     setShowAdd(false);
-    setForm({ name: "", cat: "Geral", role: "Todos" });
+    setForm({ name: "", cat: "Documentação Interna", role: "Todos", empId: "" });
     setFile(null);
     setUploading(false);
   }
@@ -2207,7 +2212,7 @@ function Formacao() {
   const filtered = filtCat === "Todos" ? docs : docs.filter(function(d) {
     return d.category === filtCat;
   });
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Forma\xE7\xE3o"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, docs.length, " documento", docs.length !== 1 ? "s" : "", " dispon\xEDveis")), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Recursos"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, docs.length, " documento", docs.length !== 1 ? "s" : "", " dispon\xEDveis")), /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setShowAdd(true);
   }, style: btn }, "+ Novo documento")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" } }, ["Todos"].concat(FORM_CATS).map(function(c) {
     return /* @__PURE__ */ React.createElement("button", { key: c, onClick: function() {
@@ -2223,11 +2228,11 @@ function Formacao() {
     setForm(Object.assign({}, form, { cat: e.target.value }));
   } }, FORM_CATS.map(function(c) {
     return /* @__PURE__ */ React.createElement("option", { key: c }, c);
-  }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Destinat\xE1rio"), /* @__PURE__ */ React.createElement("select", { style: inp, value: form.role, onChange: function(e) {
-    setForm(Object.assign({}, form, { role: e.target.value }));
+  }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Destinatário"), /* @__PURE__ */ React.createElement("select", { style: inp, value: form.role, onChange: function(e) {
+    setForm(Object.assign({}, form, { role: e.target.value, empId: "" }));
   } }, FORM_ROLES.map(function(r) {
     return /* @__PURE__ */ React.createElement("option", { key: r }, r);
-  })))), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 20 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Ficheiro PDF"), /* @__PURE__ */ React.createElement("input", { type: "file", accept: ".pdf", onChange: function(e) {
+  })))), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Envio individual (opcional)"), /* @__PURE__ */ React.createElement("select", { style: inp, value: form.empId, onChange: function(e) { setForm(Object.assign({}, form, { empId: e.target.value, role: e.target.value ? "individual" : form.role })); } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "— Nenhum (usa destinatário acima) —"), emps.map(function(e) { return /* @__PURE__ */ React.createElement("option", { key: e.id, value: e.id }, e.name); }))), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 20 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Ficheiro PDF"), /* @__PURE__ */ React.createElement("input", { type: "file", accept: ".pdf", onChange: function(e) {
     setFile(e.target.files[0]);
   }, style: { width: "100%", padding: "8px", border: "1.5px solid #E2EBF4", borderRadius: 8, fontSize: 13 } }), file && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 4 } }, file.name, " \u2014 ", fmtSize(file.size))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setShowAdd(false);
@@ -2795,7 +2800,7 @@ const ALL_MENUS = [
   { k: "clients", l: "Clientes" },
   { k: "pedidos", l: "Pedidos Extra" },
   { k: "avaliacoes", l: "Avalia\xE7\xF5es" },
-  { k: "formacao", l: "Forma\xE7\xE3o" },
+  { k: "formacao", l: "Documentos RH" },
   { k: "relatorio", l: "Relat\xF3rio Mensal" },
   { k: "employees", l: "Funcion\xE1rios" }
 ];
@@ -3387,7 +3392,7 @@ function Manager(props) {
     { k: "pedidos_colab", l: "\u{1F4E5} Pedidos Equipa" },
     { k: "pedidos", l: "Pedidos Extra" },
     { k: "avaliacoes", l: "Avalia\xE7\xF5es" },
-    { k: "formacao", l: "Forma\xE7\xE3o" },
+    { k: "formacao", l: "Documentos RH" },
     { k: "relatorio", l: "Relat\xF3rio Mensal" },
     { k: "employees", l: "Funcion\xE1rios" },
     { k: "gestores", l: "\u2699 Utilizadores" },
@@ -3601,6 +3606,7 @@ function EmpPedidos(props) {
 }
 function EmpFormacao(props) {
   const empRole = props.empRole || "";
+  const empId = props.empId || "";
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtCat, setFiltCat] = useState("Todos");
@@ -3611,31 +3617,48 @@ function EmpFormacao(props) {
       return r.json();
     }).then(function(data) {
       const filtered2 = (data || []).filter(function(d) {
+        if (d.emp_id) return d.emp_id === empId;
         return d.role === "Todos" || d.role === empRole;
       });
       setDocs(filtered2);
       setLoading(false);
     });
-  }, [empRole]);
-  const cats = ["Todos"].concat([...new Set(docs.map(function(d) {
-    return d.category;
-  }))]);
-  const filtered = filtCat === "Todos" ? docs : docs.filter(function(d) {
-    return d.category === filtCat;
-  });
+  }, [empRole, empId]);
+  const cats = ["Todos"].concat([...new Set(docs.map(function(d) { return d.category; }))]);
+  const filtered = filtCat === "Todos" ? docs : docs.filter(function(d) { return d.category === filtCat; });
   function fmtSize(bytes) {
     if (!bytes) return "";
     if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + "KB";
     return (bytes / (1024 * 1024)).toFixed(1) + "MB";
   }
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...");
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, padding: "12px 16px", background: "#EFF6FF", border: "1px solid #BFDBFE" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#1E40AF", fontWeight: 600, lineHeight: 1.6 } }, '\u{1F4DA} Aqui encontras os documentos de forma\xE7\xE3o da SamorClean. Clica em "Abrir" para ler ou descarregar.')), cats.length > 1 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" } }, cats.map(function(c) {
-    return /* @__PURE__ */ React.createElement("button", { key: c, onClick: function() {
-      setFiltCat(c);
-    }, style: { padding: "5px 12px", borderRadius: 8, border: "1.5px solid " + (filtCat === c ? "#2E6DA4" : "#E2EBF4"), background: filtCat === c ? "#EFF6FF" : "#fff", color: filtCat === c ? "#2E6DA4" : "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, c);
-  })), filtered.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, marginBottom: 8 } }, "Sem documentos dispon\xEDveis"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12 } }, "O gestor ainda n\xE3o adicionou documentos de forma\xE7\xE3o.")) : filtered.map(function(doc) {
-    return /* @__PURE__ */ React.createElement("div", { key: doc.id, style: Object.assign({}, card, { marginBottom: 10, display: "flex", alignItems: "center", gap: 14, padding: 14 }) }, /* @__PURE__ */ React.createElement("div", { style: { width: 40, height: 40, borderRadius: 8, background: "#FEE2E2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 18 } }, "\u{1F4C4}"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 4 } }, doc.name), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("span", { style: { background: "#EFF6FF", color: "#2E6DA4", borderRadius: 5, padding: "1px 7px", fontSize: 10, fontWeight: 700 } }, doc.category), doc.file_size && /* @__PURE__ */ React.createElement("span", { style: { color: "#94A3B8", fontSize: 10 } }, fmtSize(doc.file_size)))), /* @__PURE__ */ React.createElement("a", { href: doc.file_url, target: "_blank", rel: "noopener noreferrer", style: Object.assign({}, btnG, { fontSize: 12, textDecoration: "none", padding: "8px 14px", flexShrink: 0 }) }, "Abrir"));
-  }));
+  return /* @__PURE__ */ React.createElement("div", null,
+    /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, padding: "12px 16px", background: "#EFF6FF", border: "1px solid #BFDBFE" }) },
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#1E40AF", fontWeight: 600, lineHeight: 1.6 } }, "\uD83D\uDCDA Aqui encontras os documentos e recursos da SamorClean. Clica em \"Abrir\" para ler ou descarregar.")
+    ),
+    cats.length > 1 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" } },
+      cats.map(function(c) {
+        return /* @__PURE__ */ React.createElement("button", { key: c, onClick: function() { setFiltCat(c); }, style: { padding: "5px 12px", borderRadius: 8, border: "1.5px solid " + (filtCat === c ? "#2E6DA4" : "#E2EBF4"), background: filtCat === c ? "#EFF6FF" : "#fff", color: filtCat === c ? "#2E6DA4" : "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, c);
+      })
+    ),
+    filtered.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) },
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, marginBottom: 8 } }, "Sem documentos dispon\xEDveis"),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12 } }, "O gestor ainda n\xE3o adicionou documentos.")
+    ) : filtered.map(function(doc) {
+      return /* @__PURE__ */ React.createElement("div", { key: doc.id, style: Object.assign({}, card, { marginBottom: 10, display: "flex", alignItems: "center", gap: 14, padding: 14 }) },
+        /* @__PURE__ */ React.createElement("div", { style: { width: 40, height: 40, borderRadius: 8, background: "#FEE2E2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 18 } }, "\uD83D\uDCC4"),
+        /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 4 } }, doc.name),
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
+            /* @__PURE__ */ React.createElement("span", { style: { background: "#EFF6FF", color: "#2E6DA4", borderRadius: 5, padding: "1px 7px", fontSize: 10, fontWeight: 700 } }, doc.category),
+            doc.emp_id && /* @__PURE__ */ React.createElement("span", { style: { background: "#F0FDF4", color: "#15803D", borderRadius: 5, padding: "1px 7px", fontSize: 10, fontWeight: 700 } }, "Individual"),
+            doc.file_size && /* @__PURE__ */ React.createElement("span", { style: { color: "#94A3B8", fontSize: 10 } }, fmtSize(doc.file_size))
+          )
+        ),
+        /* @__PURE__ */ React.createElement("a", { href: doc.file_url, target: "_blank", rel: "noopener noreferrer", style: Object.assign({}, btnG, { fontSize: 12, textDecoration: "none", padding: "8px 14px", flexShrink: 0 }) }, "Abrir")
+      );
+    })
+  );
 }
 function Employee(props) {
   const onExit = props.onExit;
@@ -4005,7 +4028,7 @@ function Employee(props) {
   ].map(function(s) {
     return /* @__PURE__ */ React.createElement("div", { key: s.l, style: { background: "rgba(255,255,255,0.08)", borderRadius: 10, padding: "10px 8px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 18 } }, s.v), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.4)", fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginTop: 2 } }, s.l));
   }))), /* @__PURE__ */ React.createElement("div", { style: { padding: "16px 16px 32px" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 18 } }, ["hoje", "hist\xF3rico", "semana", "assiduidade", "formacao", "pedidos"].map(function(t) {
-    const labels = { hoje: "Hoje", "hist\xF3rico": "Hist\xF3rico", semana: "Semana", assiduidade: "Assiduidade", formacao: "Forma\xE7\xE3o", pedidos: "Pedidos" };
+    const labels = { hoje: "Hoje", "hist\xF3rico": "Hist\xF3rico", semana: "Semana", assiduidade: "Assiduidade", formacao: "Documentos RH", pedidos: "Pedidos" };
     return /* @__PURE__ */ React.createElement("button", { key: t, onClick: function() {
       setDashTab(t);
     }, style: { flex: 1, padding: "9px 4px", borderRadius: 8, border: "none", background: dashTab === t ? "#2E6DA4" : "#fff", color: dashTab === t ? "#fff" : "#64748B", fontWeight: 700, fontSize: 11, cursor: "pointer", boxShadow: dashTab === t ? "none" : "0 1px 4px rgba(0,0,0,0.07)" } }, labels[t]);
@@ -4021,7 +4044,7 @@ function Employee(props) {
     { l: "Faltas parciais", v: absStats.parciais, c: "#F59E0B" }
   ].map(function(r) {
     return /* @__PURE__ */ React.createElement("div", { key: r.l, style: { display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#64748B" } }, r.l), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 15, fontWeight: 800, color: r.c } }, r.v));
-  }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 12, lineHeight: 1.6 } }, "Falta total = 1 ponto. Falta parcial (sa\xEDda antecipada) = 0.5 pontos."))), dashTab === "formacao" && /* @__PURE__ */ React.createElement(EmpFormacao, { empRole: emp ? emp.role : "" }), dashTab === "pedidos" && emp && /* @__PURE__ */ React.createElement(EmpPedidos, { empId: emp.id, empName: emp.name })));
+  }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 12, lineHeight: 1.6 } }, "Falta total = 1 ponto. Falta parcial (sa\xEDda antecipada) = 0.5 pontos."))), dashTab === "formacao" && /* @__PURE__ */ React.createElement(EmpFormacao, { empRole: emp ? emp.role : "", empId: emp ? emp.id : "" }), dashTab === "pedidos" && emp && /* @__PURE__ */ React.createElement(EmpPedidos, { empId: emp.id, empName: emp.name })));
 }
 function NotaForm(props) {
   const clientId = props.clientId;
