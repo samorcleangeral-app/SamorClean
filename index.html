@@ -2346,6 +2346,115 @@ function Formacao() {
     }, style: Object.assign({}, btnR, { fontSize: 12, padding: "8px 12px" }) }, "Del")));
   }));
 }
+function NotasOperacionais() {
+  const [notas, setNotas] = useState([]);
+  const [emps, setEmps] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({ texto: "", tipo: "permanente", destinatario: "todos", emp_id: "", expires_at: "" });
+  const [showAdd, setShowAdd] = useState(false);
+  useEffect(function() {
+    Promise.all([
+      db.list("notas_operacionais", "?select=*&order=created_at.desc"),
+      db.list("funcionarios", "?select=id,name&order=name")
+    ]).then(function(r) {
+      setNotas(r[0] || []);
+      setEmps(r[1] || []);
+      setLoading(false);
+    });
+  }, []);
+  async function addNota() {
+    if (!form.texto.trim()) return;
+    const data = {
+      texto: form.texto.trim(),
+      tipo: form.tipo,
+      destinatario: form.emp_id ? "individual" : "todos",
+      emp_id: form.emp_id || null,
+      expires_at: form.tipo === "provisoria" && form.expires_at ? new Date(form.expires_at + "T23:59:59").toISOString() : null
+    };
+    const inserted = await db.insert("notas_operacionais", data);
+    if (inserted) {
+      setNotas(function(p) { return [inserted].concat(p); });
+      setForm({ texto: "", tipo: "permanente", destinatario: "todos", emp_id: "", expires_at: "" });
+      setShowAdd(false);
+    }
+  }
+  async function deleteNota(id) {
+    if (!window.confirm("Apagar esta nota?")) return;
+    await fetch(SUPABASE_URL + "/rest/v1/notas_operacionais?id=eq." + id, { method: "DELETE", headers: dbHeaders() });
+    setNotas(function(p) { return p.filter(function(n) { return n.id !== id; }); });
+  }
+  const now = new Date().toISOString();
+  const notasActivas = notas.filter(function(n) { return !n.expires_at || n.expires_at >= now; });
+  const notasExpiradas = notas.filter(function(n) { return n.expires_at && n.expires_at < now; });
+  return /* @__PURE__ */ React.createElement("div", null,
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 } },
+      /* @__PURE__ */ React.createElement("div", null,
+        /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Notas Operacionais"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, notasActivas.length, " nota", notasActivas.length !== 1 ? "s" : "", " activa", notasActivas.length !== 1 ? "s" : "")
+      ),
+      /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowAdd(true); }, style: Object.assign({}, btnG, { fontSize: 13 }) }, "+ Nova nota")
+    ),
+    showAdd && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, padding: 20 }) },
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Nova nota operacional"),
+      /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } },
+        /* @__PURE__ */ React.createElement("label", { style: lbl }, "Texto da nota"),
+        /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 80, resize: "vertical" }), value: form.texto, onChange: function(e) { setForm(Object.assign({}, form, { texto: e.target.value })); }, placeholder: "Ex: Esta semana usar produto X na limpeza dos vidros..." })
+      ),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 } },
+        /* @__PURE__ */ React.createElement("div", null,
+          /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tipo"),
+          /* @__PURE__ */ React.createElement("select", { style: inp, value: form.tipo, onChange: function(e) { setForm(Object.assign({}, form, { tipo: e.target.value })); } },
+            /* @__PURE__ */ React.createElement("option", { value: "permanente" }, "Permanente"),
+            /* @__PURE__ */ React.createElement("option", { value: "provisoria" }, "Provis\xF3ria")
+          )
+        ),
+        /* @__PURE__ */ React.createElement("div", null,
+          /* @__PURE__ */ React.createElement("label", { style: lbl }, "Destinat\xE1rio"),
+          /* @__PURE__ */ React.createElement("select", { style: inp, value: form.emp_id, onChange: function(e) { setForm(Object.assign({}, form, { emp_id: e.target.value })); } },
+            /* @__PURE__ */ React.createElement("option", { value: "" }, "Toda a equipa"),
+            emps.map(function(e) { return /* @__PURE__ */ React.createElement("option", { key: e.id, value: e.id }, e.name); })
+          )
+        ),
+        form.tipo === "provisoria" && /* @__PURE__ */ React.createElement("div", null,
+          /* @__PURE__ */ React.createElement("label", { style: lbl }, "V\xE1lida at\xE9"),
+          /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: form.expires_at, onChange: function(e) { setForm(Object.assign({}, form, { expires_at: e.target.value })); } })
+        )
+      ),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10 } },
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowAdd(false); }, style: Object.assign({}, btnX, { flex: 1, textAlign: "center" }) }, "Cancelar"),
+        /* @__PURE__ */ React.createElement("button", { onClick: addNota, disabled: !form.texto.trim(), style: Object.assign({}, btnG, { flex: 2, textAlign: "center", opacity: !form.texto.trim() ? 0.5 : 1 }) }, "Guardar nota")
+      )
+    ),
+    loading ? /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...") :
+    notasActivas.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Sem notas operacionais activas.") :
+    /* @__PURE__ */ React.createElement("div", null,
+      notasActivas.map(function(n) {
+        const isPerm = n.tipo === "permanente";
+        const emp = n.emp_id ? emps.find(function(e) { return e.id === n.emp_id; }) : null;
+        return /* @__PURE__ */ React.createElement("div", { key: n.id, style: Object.assign({}, card, { marginBottom: 10, borderLeft: "4px solid " + (isPerm ? "#2E6DA4" : "#F59E0B") }) },
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 } },
+            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" } },
+              /* @__PURE__ */ React.createElement(Bdg, { label: isPerm ? "\uD83D\uDCCC Permanente" : "\u23F0 Provis\xF3ria", bg: isPerm ? "#EFF6FF" : "#FEF3C7", tx: isPerm ? "#2E6DA4" : "#92400E" }),
+              emp ? /* @__PURE__ */ React.createElement(Bdg, { label: "\uD83D\uDC64 " + emp.name.split(" ")[0], bg: "#F0FDF4", tx: "#15803D" }) : /* @__PURE__ */ React.createElement(Bdg, { label: "\uD83D\uDC65 Toda a equipa", bg: "#F8FAFC", tx: "#64748B" }),
+              n.expires_at && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "V\xE1lida at\xE9 ", new Date(n.expires_at).toLocaleDateString("pt-PT", { day: "numeric", month: "short" }))
+            ),
+            /* @__PURE__ */ React.createElement("button", { onClick: function() { deleteNota(n.id); }, style: { background: "transparent", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 16 } }, "\u{1F5D1}")
+          ),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#334155", lineHeight: 1.6 } }, n.texto)
+        );
+      }),
+      notasExpiradas.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 20 } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", marginBottom: 10 } }, "Expiradas"),
+        notasExpiradas.map(function(n) {
+          return /* @__PURE__ */ React.createElement("div", { key: n.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 14px", background: "#F8FAFC", borderRadius: 8, marginBottom: 6, opacity: 0.6 } },
+            /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#64748B" } }, n.texto.slice(0, 60) + (n.texto.length > 60 ? "..." : "")),
+            /* @__PURE__ */ React.createElement("button", { onClick: function() { deleteNota(n.id); }, style: { background: "transparent", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 14 } }, "\u{1F5D1}")
+          );
+        })
+      )
+    )
+  );
+}
 function PedidosColab(props) {
   const onUpdate = props.onUpdate || function() {
   };
@@ -2906,6 +3015,7 @@ const ALL_MENUS = [
   { k: "pedidos", l: "Pedidos Extra" },
   { k: "avaliacoes", l: "Avalia\xE7\xF5es" },
   { k: "formacao", l: "Documentos RH" },
+  { k: "notas_op", l: "Notas Operacionais" },
   { k: "relatorio", l: "Relat\xF3rio Mensal" },
   { k: "employees", l: "Funcion\xE1rios" }
 ];
@@ -3642,7 +3752,7 @@ function Manager(props) {
     return (b.rating || 0) - (a.rating || 0);
   }).map(function(e, i) {
     return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: i === 0 ? "#F59E0B" : i === 1 ? "#94A3B8" : "#CD7C54", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 11, flexShrink: 0 } }, i + 1), /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 30, color: ["#2E6DA4", "#0F766E", "#7C3AED", "#C2410C"][i] || "#64748B" }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, e.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, e.role)), /* @__PURE__ */ React.createElement(Stars, { r: e.rating }));
-  })))) : null, view === "finance" ? /* @__PURE__ */ React.createElement(Finance, null) : null, view === "routes" ? /* @__PURE__ */ React.createElement(Routes, null) : null, view === "clients" ? /* @__PURE__ */ React.createElement(Clients, null) : null, view === "fornecedores" ? /* @__PURE__ */ React.createElement(Fornecedores, null) : null, view === "pedidos_colab" ? /* @__PURE__ */ React.createElement(PedidosColab, { onUpdate: function(n) {
+  })))) : null, view === "notas_op" ? /* @__PURE__ */ React.createElement(NotasOperacionais, null) : null, view === "finance" ? /* @__PURE__ */ React.createElement(Finance, null) : null, view === "routes" ? /* @__PURE__ */ React.createElement(Routes, null) : null, view === "clients" ? /* @__PURE__ */ React.createElement(Clients, null) : null, view === "fornecedores" ? /* @__PURE__ */ React.createElement(Fornecedores, null) : null, view === "pedidos_colab" ? /* @__PURE__ */ React.createElement(PedidosColab, { onUpdate: function(n) {
     setPedidosColabPendentes(n);
   } }) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "leads" ? /* @__PURE__ */ React.createElement(Leads, null) : null, view === "avaliacoes" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "formacao" ? /* @__PURE__ */ React.createElement(Formacao, null) : null, view === "relatorio" ? /* @__PURE__ */ React.createElement(RelatorioMensal, null) : null, view === "gestores" ? /* @__PURE__ */ React.createElement(GestoresAdmin, null) : null, view === "armazem_qr" ? /* @__PURE__ */ React.createElement(QRArmazem, null) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, null) : null));
 }
@@ -3827,6 +3937,7 @@ function Employee(props) {
     });
   }, []);
   const [notasEmpPreload, setNotasEmpPreload] = useState([]);
+  const [notasOp, setNotasOp] = useState([]);
   const [picagensArmazem, setPicagensArmazem] = useState([]);
   const [alertaArmazem, setAlertaArmazem] = useState([]);
   useEffect(function() {
@@ -3850,7 +3961,8 @@ function Employee(props) {
         db.list("client_notes", "?select=*&partilhada=is.true&servicos_restantes=gt.0&expires_at=gte." + nowStr),
         db.list("picagens_armazem", "?select=*&funcionario_id=eq." + encodeURIComponent(emp.id) + "&order=created_at.desc"),
         db.list("servicos", "?select=date,dispensa_armazem,team&date=gte." + firstDayMonthStr + "&date=lte." + today),
-        db.list("ausencias", "?select=*&funcionario_id=eq." + encodeURIComponent(emp.id))
+        db.list("ausencias", "?select=*&funcionario_id=eq." + encodeURIComponent(emp.id)),
+        db.list("notas_operacionais", "?select=*&order=created_at.desc")
       ]).then(function(results) {
         setJobs(results[0] || []);
         setHistJobs(results[1] || []);
@@ -3860,6 +3972,14 @@ function Employee(props) {
         setPicagensArmazem(picagens);
         const allServicos = results[5] || [];
         const ausencias = results[6] || [];
+        const allNotasOp = results[7] || [];
+        const nowOpStr = new Date().toISOString();
+        const minhasNotasOp = allNotasOp.filter(function(n) {
+          if (n.expires_at && n.expires_at < nowOpStr) return false;
+          if (n.emp_id && n.emp_id !== emp.id) return false;
+          return true;
+        });
+        setNotasOp(minhasNotasOp);
         // Calculate absStats from past 7 days jobs
         const allPast = results[1] || [];
         const myPast = allPast.filter(function(j) {
@@ -4229,11 +4349,48 @@ function Employee(props) {
     return /* @__PURE__ */ React.createElement("button", { key: t, onClick: function() {
       setDashTab(t);
     }, style: { flex: 1, padding: "9px 4px", borderRadius: 8, border: "none", background: dashTab === t ? "#2E6DA4" : "#fff", color: dashTab === t ? "#fff" : "#64748B", fontWeight: 700, fontSize: 11, cursor: "pointer", boxShadow: dashTab === t ? "none" : "0 1px 4px rgba(0,0,0,0.07)" } }, labels[t]);
-  })), dashTab === "hoje" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 14 } }, (/* @__PURE__ */ new Date()).toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long" })), loadingJobs ? /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar servi\xE7os...") : myJ.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16 } }, "Sem servi\xE7os para hoje")) : myJ.map(function(job) {
+  })), dashTab === "hoje" && /* @__PURE__ */ React.createElement("div", null,
+    notasOp.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } },
+      notasOp.map(function(n) {
+        const isPerm = n.tipo === "permanente";
+        return /* @__PURE__ */ React.createElement("div", { key: n.id, style: { background: isPerm ? "#EFF6FF" : "#FFF7ED", borderRadius: 10, padding: "12px 14px", marginBottom: 8, borderLeft: "4px solid " + (isPerm ? "#2E6DA4" : "#F59E0B") } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: isPerm ? "#2E6DA4" : "#92400E", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, isPerm ? "\uD83D\uDCCC Nota da gest\xE3o" : "\u26A0 Nota provis\xF3ria da gest\xE3o"),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#334155", lineHeight: 1.5 } }, n.texto)
+        );
+      })
+    ),
+    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 14 } }, (/* @__PURE__ */ new Date()).toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long" })), loadingJobs ? /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar servi\xE7os...") : myJ.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16 } }, "Sem servi\xE7os para hoje")) : myJ.map(function(job) {
     return /* @__PURE__ */ React.createElement(JobCard, { key: job.id, job });
   })), dashTab === "hist\xF3rico" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 14 } }, "\xDAltimos 7 dias"), loadingJobs ? /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...") : myHist.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16 } }, "Sem hist\xF3rico")) : myHist.map(function(job) {
     return /* @__PURE__ */ React.createElement(JobCard, { key: job.id, job, isHist: true });
-  })), dashTab === "semana" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 14 } }, "Pr\xF3ximos servi\xE7os agendados"), loadingJobs ? /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...") : myWeek.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16 } }, "Sem servi\xE7os agendados"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, marginTop: 8 } }, "Quando o gestor gerar a semana, aparece aqui.")) : myWeek.map(function(job) {
+  })), dashTab === "semana" && /* @__PURE__ */ React.createElement("div", null,
+    myWeek.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, padding: 14 }) },
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 10 } }, "Resumo da semana"),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 10 } }, [
+        { l: "Servi\xE7os", v: myWeek.length, c: "#2E6DA4" },
+        { l: "Horas totais", v: myWeek.reduce(function(s, j) { return s + (parseInt((j.t2||"0:0").split(":")[0])*60+parseInt((j.t2||"0:0").split(":")[1]) - parseInt((j.t1||"0:0").split(":")[0])*60-parseInt((j.t1||"0:0").split(":")[1])) / 60; }, 0).toFixed(1) + "h", c: "#0F766E" },
+        { l: "Conclu\xEDdos", v: myWeek.filter(function(j) { return j.status === "completed"; }).length, c: "#16A34A" }
+      ].map(function(k) {
+        return /* @__PURE__ */ React.createElement("div", { key: k.l, style: { background: "#F8FAFC", borderRadius: 8, padding: "10px", textAlign: "center" } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#64748B", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, k.l),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 900, color: k.c } }, k.v)
+        );
+      })),
+      ["Seg", "Ter", "Qua", "Qui", "Sex", "S\xE1b"].map(function(dia, idx) {
+        var diasNomes = ["monday","tuesday","wednesday","thursday","friday","saturday"];
+        var jobsDia = myWeek.filter(function(j) {
+          var d = new Date(j.date + "T12:00:00");
+          return d.getDay() === (idx === 5 ? 6 : idx + 1);
+        });
+        if (jobsDia.length === 0) return null;
+        var horasDia = jobsDia.reduce(function(s, j) { return s + (parseInt((j.t2||"0:0").split(":")[0])*60+parseInt((j.t2||"0:0").split(":")[1]) - parseInt((j.t1||"0:0").split(":")[0])*60-parseInt((j.t1||"0:0").split(":")[1])) / 60; }, 0);
+        return /* @__PURE__ */ React.createElement("div", { key: dia, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", borderBottom: "1px solid #F1F5F9" } },
+          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#64748B", fontWeight: 600 } }, dia),
+          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: "#2E6DA4" } }, jobsDia.length, " serv. \u2014 ", horasDia.toFixed(1), "h")
+        );
+      })
+    ),
+    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 14 } }, "Pr\xF3ximos servi\xE7os agendados"), loadingJobs ? /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...") : myWeek.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16 } }, "Sem servi\xE7os agendados"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, marginTop: 8 } }, "Quando o gestor gerar a semana, aparece aqui.")) : myWeek.map(function(job) {
     return /* @__PURE__ */ React.createElement(JobCard, { key: job.id, job, isHist: true });
   })), dashTab === "assiduidade" && /* @__PURE__ */ React.createElement("div", null,
     alertaArmazem.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF3C7", border: "1.5px solid #F59E0B", borderRadius: 10, padding: "12px 16px", marginBottom: 14 } },
