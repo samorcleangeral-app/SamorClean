@@ -228,6 +228,7 @@ function Finance() {
   const [clientsMap, setClientsMap] = useState({});
   const [despesas, setDespesas] = useState([]);
   const [clientes, setClientes] = useState([]);
+  const [alertasFreq, setAlertasFreq] = useState([]);
   const now = /* @__PURE__ */ new Date();
   const dayOfMonth = now.getDate();
   const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
@@ -236,11 +237,13 @@ function Finance() {
     const monthStart = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
     const monthEnd = localDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
     const sixMonthsAgo = localDateStr(new Date(now.getFullYear(), now.getMonth() - 5, 1));
+    const past60 = localDateStr(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 60));
     Promise.all([
       db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd + "&status=eq.completed"),
       db.list("servicos", "?select=*&date=gte." + sixMonthsAgo + "&status=eq.completed"),
-      db.list("clientes", "?select=id,name,iva_type"),
-      db.list("despesas", "?select=*&data=gte." + monthStart + "&data=lte." + monthEnd)
+      db.list("clientes", "?select=id,name,freq,iva_type"),
+      db.list("despesas", "?select=*&data=gte." + monthStart + "&data=lte." + monthEnd),
+      db.list("servicos", "?select=client_id,date&date=gte." + past60 + "&order=date.desc")
     ]).then(function(results) {
       setMonthJobs(results[0] || []);
       setLast6Months(results[1] || []);
@@ -251,6 +254,34 @@ function Finance() {
       setClientsMap(cm);
       setClientes(results[2] || []);
       setDespesas(results[3] || []);
+      // Calculate alertas for quinzenal/mensal clients
+      const recentJobs = results[4] || [];
+      const lastJobByClient = {};
+      recentJobs.forEach(function(j) {
+        if (!lastJobByClient[j.client_id]) lastJobByClient[j.client_id] = j.date;
+      });
+      const todayStr = localDateStr(now);
+      const alertas = [];
+      (results[2] || []).forEach(function(c) {
+        var freqLower = (c.freq || '').toLowerCase();
+        if (freqLower !== 'quinzenal' && freqLower !== 'mensal') return;
+        const diasIntervalo = freqLower === 'quinzenal' ? 14 : 30;
+        const lastDate = lastJobByClient[c.id];
+        if (!lastDate) {
+          alertas.push({ name: c.name, freq: c.freq, diasRestantes: 0, lastDate: null });
+          return;
+        }
+        const last = new Date(lastDate + 'T12:00:00');
+        const nextDate = new Date(last);
+        nextDate.setDate(nextDate.getDate() + diasIntervalo);
+        const nextStr = localDateStr(nextDate);
+        const diff = Math.ceil((nextDate - now) / (24 * 3600 * 1000));
+        if (diff <= 3) {
+          alertas.push({ name: c.name, freq: c.freq, diasRestantes: diff, lastDate, nextDate: nextStr });
+        }
+      });
+      alertas.sort(function(a, b) { return a.diasRestantes - b.diasRestantes; });
+      setAlertasFreq(alertas);
       setLoading(false);
     });
   }, []);
@@ -328,7 +359,22 @@ function Finance() {
     return m.fat;
   }).concat([1]));
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar dados financeiros...");
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 20 } }, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Dashboard Financeiro"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, now.toLocaleDateString("pt-PT", { month: "long", year: "numeric" }))), isLastWeek && /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", border: "1.5px solid #2E6DA4", borderRadius: 10, padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 20 } }, "\u{1F4CB}"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#2E6DA4" } }, "\xC9 altura de faturar!"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, "Estamos na \xFAltima semana do m\xEAs. Emite as faturas dos clientes deste m\xEAs."))), emAtraso.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, emAtraso.map(function(j) {
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 20 } }, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Dashboard Financeiro"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, now.toLocaleDateString("pt-PT", { month: "long", year: "numeric" }))), isLastWeek && /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", border: "1.5px solid #2E6DA4", borderRadius: 10, padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 20 } }, "\u{1F4CB}"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#2E6DA4" } }, "\xC9 altura de faturar!"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, "Estamos na \xFAltima semana do m\xEAs. Emite as faturas dos clientes deste m\xEAs."))),
+    alertasFreq.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#FFF7ED", border: "1.5px solid #F59E0B", borderRadius: 10, padding: "12px 16px", marginBottom: 16 } },
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#92400E", marginBottom: 8 } }, "\u23F0 Clientes quinzenais/mensais a agendar:"),
+      alertasFreq.map(function(a, i) {
+        var cor = a.diasRestantes <= 0 ? "#DC2626" : a.diasRestantes === 1 ? "#F97316" : "#F59E0B";
+        var msg = a.diasRestantes <= 0 ? "Hoje!" : a.diasRestantes === 1 ? "Falta 1 dia" : "Faltam " + a.diasRestantes + " dias";
+        return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < alertasFreq.length - 1 ? "1px solid #FDE68A" : "none" } },
+          /* @__PURE__ */ React.createElement("div", null,
+            /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, fontSize: 13, color: "#78350F" } }, a.name),
+            /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#92400E", marginLeft: 8 } }, a.freq),
+            a.lastDate && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8", marginLeft: 8 } }, "\xDAltimo: ", new Date(a.lastDate + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }))
+          ),
+          /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 12, color: cor } }, msg)
+        );
+      })
+    ), emAtraso.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, emAtraso.map(function(j) {
     const diffDays = Math.floor((now - /* @__PURE__ */ new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3));
     const cor = diffDays >= 30 ? "#DC2626" : diffDays >= 15 ? "#F97316" : "#F59E0B";
     const bg = diffDays >= 30 ? "#FEE2E2" : diffDays >= 15 ? "#FFF7ED" : "#FEF3C7";
@@ -341,8 +387,9 @@ function Finance() {
     { l: "Em d\xEDvida", v: fmt(divida) + "\u20AC", c: "#DC2626" }
   ].map(function(k) {
     return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 14, borderTop: "3px solid " + k.c }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 8 } }, k.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 900, color: k.c } }, k.v), k.s && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 4 } }, k.s));
-  })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Custos"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 20 } }, [
+  })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Custos"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 } }, [
     { l: "Total custos", v: fmt(totalCustos) + "\u20AC", c: "#EF4444" },
+    { l: "Combust\xEDvel", v: fmt(custosCat["Combust\xEDvel"] || 0) + "\u20AC", c: "#F97316" },
     { l: "IVA dedut\xEDvel", v: fmt(totalIVADedutivel) + "\u20AC", c: "#16A34A" },
     { l: "Por pagar", v: fmt(custosPorPagar) + "\u20AC", c: "#F59E0B" }
   ].map(function(k) {
@@ -3386,18 +3433,21 @@ function Manager(props) {
   const [pedidosColabPendentes, setPedidosColabPendentes] = useState(0);
   const [monthFat, setMonthFat] = useState(0);
   const [monthDivida, setMonthDivida] = useState(0);
+  const [alertasFreqHome, setAlertasFreqHome] = useState([]);
   useEffect(function() {
     const now = /* @__PURE__ */ new Date();
     const monthStart = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
     const monthEnd = localDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+    const past60 = localDateStr(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 60));
     Promise.all([
-      db.list("clientes", "?select=id,iva_type"),
+      db.list("clientes", "?select=id,name,freq,iva_type"),
       db.list("servicos", "?select=*&order=date&date=eq." + today),
       db.list("servicos", "?select=*&order=date&limit=4"),
       db.list("funcionarios", "?select=*&order=id"),
       db.list("pedidos_extra", "?select=id&status=eq.pendente"),
       db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd + "&status=eq.completed"),
-      db.list("pedidos_colaboradores", "?select=id&estado=eq.pendente")
+      db.list("pedidos_colaboradores", "?select=id&estado=eq.pendente"),
+      db.list("servicos", "?select=client_id,date&date=gte." + past60 + "&order=date.desc")
     ]).then(function(results) {
       setClientCount(results[0] ? results[0].length : 0);
       setTodayJobs(results[1] || []);
@@ -3414,16 +3464,30 @@ function Manager(props) {
         const ivaT = j.iva_override || (cm[j.client_id] ? cm[j.client_id].iva_type : "normal") || "normal";
         return ivaT === "autoliquida\xE7\xE3o" ? j.val || 0 : (j.val || 0) * 1.23;
       }
-      const fat = monthJobs.reduce(function(s, j) {
-        return s + withIva(j);
-      }, 0);
-      const rec = monthJobs.filter(function(j) {
-        return j.paid;
-      }).reduce(function(s, j) {
-        return s + withIva(j);
-      }, 0);
+      const fat = monthJobs.reduce(function(s, j) { return s + withIva(j); }, 0);
+      const rec = monthJobs.filter(function(j) { return j.paid; }).reduce(function(s, j) { return s + withIva(j); }, 0);
       setMonthFat(fat);
       setMonthDivida(fat - rec);
+      // Alertas quinzenal/mensal
+      const recentJobs = results[7] || [];
+      const lastJobByClient = {};
+      recentJobs.forEach(function(j) {
+        if (!lastJobByClient[j.client_id]) lastJobByClient[j.client_id] = j.date;
+      });
+      const alertas = [];
+      (results[0] || []).forEach(function(c) {
+        var freqLower = (c.freq || '').toLowerCase();
+        if (freqLower !== 'quinzenal' && freqLower !== 'mensal') return;
+        const diasIntervalo = freqLower === 'quinzenal' ? 14 : 30;
+        const lastDate = lastJobByClient[c.id];
+        if (!lastDate) { alertas.push({ name: c.name, freq: c.freq, diasRestantes: 0, lastDate: null }); return; }
+        const nextDate = new Date(lastDate + 'T12:00:00');
+        nextDate.setDate(nextDate.getDate() + diasIntervalo);
+        const diff = Math.ceil((nextDate - now) / (24 * 3600 * 1000));
+        if (diff <= 3) alertas.push({ name: c.name, freq: c.freq, diasRestantes: diff, lastDate });
+      });
+      alertas.sort(function(a, b) { return a.diasRestantes - b.diasRestantes; });
+      setAlertasFreqHome(alertas);
       setLoading(false);
     });
   }, []);
@@ -3541,7 +3605,23 @@ function Manager(props) {
     } }
   ].map(function(k) {
     return /* @__PURE__ */ React.createElement("div", { key: k.l, onClick: k.go, style: Object.assign({}, card, { marginBottom: 0, padding: 18, borderTop: "3px solid " + k.c, cursor: "pointer" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 } }, k.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: k.c } }, k.v));
-  })), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 } }, /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Proximos servicos"), recentJobs.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8", padding: "12px 0" } }, "Sem servicos registados ainda.") : recentJobs.slice(0, 4).map(function(j) {
+  })), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 } },
+    alertasFreqHome.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1", background: "#FFF7ED", border: "1.5px solid #F59E0B" }) },
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#92400E", marginBottom: 8 } }, "\u23F0 Clientes quinzenais/mensais a agendar:"),
+      alertasFreqHome.map(function(a, i) {
+        var cor = a.diasRestantes <= 0 ? "#DC2626" : a.diasRestantes === 1 ? "#F97316" : "#F59E0B";
+        var msg = a.diasRestantes <= 0 ? "Hoje!" : a.diasRestantes === 1 ? "Falta 1 dia" : "Faltam " + a.diasRestantes + " dias";
+        return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < alertasFreqHome.length - 1 ? "1px solid #FDE68A" : "none" } },
+          /* @__PURE__ */ React.createElement("div", null,
+            /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, fontSize: 13, color: "#78350F" } }, a.name),
+            /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#92400E", marginLeft: 8 } }, a.freq),
+            a.lastDate && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8", marginLeft: 8 } }, "\xDAltimo: ", new Date(a.lastDate + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }))
+          ),
+          /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 12, color: cor } }, msg)
+        );
+      })
+    ),
+    /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Proximos servicos"), recentJobs.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8", padding: "12px 0" } }, "Sem servicos registados ainda.") : recentJobs.slice(0, 4).map(function(j) {
     return /* @__PURE__ */ React.createElement("div", { key: j.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 6, height: 6, borderRadius: "50%", background: j.status === "completed" ? "#16A34A" : "#F59E0B", flexShrink: 0 } }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, j.cn), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, (/* @__PURE__ */ new Date(j.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" }), " ", j.t1)), /* @__PURE__ */ React.createElement(Bdg, { label: j.status === "completed" ? "Feito" : "Pendente", bg: j.status === "completed" ? "#DCFCE7" : "#FEF3C7", tx: j.status === "completed" ? "#15803D" : "#92400E" }));
   }), /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setView("routes");
