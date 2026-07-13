@@ -2688,6 +2688,89 @@ function Formacao() {
     }, style: Object.assign({}, btnR, { fontSize: 12, padding: "8px 12px" }) }, "Del")));
   }));
 }
+function QuadroOperacional() {
+  const [jobs, setJobs] = useState([]);
+  const [emps, setEmps] = useState([]);
+  const [notas, setNotas] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState(new Date());
+  useEffect(function() {
+    function load() {
+      var nowStr = new Date().toISOString();
+      Promise.all([
+        db.list("servicos", "?select=*&date=eq." + today + "&order=t1"),
+        db.list("funcionarios", "?select=*&order=name"),
+        db.list("notas_operacionais", "?select=*&order=created_at.desc")
+      ]).then(function(r) {
+        setJobs(r[0] || []);
+        setEmps(r[1] || []);
+        setNotas((r[2] || []).filter(function(n) { return !n.expires_at || n.expires_at >= nowStr; }));
+        setLoading(false);
+        setLastUpdate(new Date());
+      });
+    }
+    load();
+    var interval = setInterval(load, 60000); // refresh every minute
+    return function() { clearInterval(interval); };
+  }, []);
+
+  const ESTADO_COR = { pending: "#F59E0B", completed: "#16A34A" };
+  const ESTADO_BG = { pending: "#FEF3C7", completed: "#DCFCE7" };
+  const ESTADO_L = { pending: "Agendado", completed: "Conclu\xEDdo" };
+
+  return /* @__PURE__ */ React.createElement("div", null,
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 } },
+      /* @__PURE__ */ React.createElement("div", null,
+        /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Quadro Operacional"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", marginTop: 3 } }, new Date().toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long" }), " \u2014 actualizado \xE0s ", lastUpdate.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }))
+      ),
+      /* @__PURE__ */ React.createElement("button", { onClick: function() { setLoading(true); setJobs([]); setLastUpdate(new Date()); Promise.all([db.list("servicos", "?select=*&date=eq." + today + "&order=t1"), db.list("funcionarios", "?select=*&order=name"), db.list("notas_operacionais", "?select=*&order=created_at.desc")]).then(function(r) { setJobs(r[0]||[]); setEmps(r[1]||[]); setNotas(r[2]||[]); setLoading(false); setLastUpdate(new Date()); }); }, style: Object.assign({}, btn, { fontSize: 12 }) }, "\u21BB Actualizar")
+    ),
+    notas.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 20 } },
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 8 } }, "Notas Operacionais Activas"),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px,1fr))", gap: 8 } },
+        notas.map(function(n) {
+          var isPerm = n.tipo === "permanente";
+          return /* @__PURE__ */ React.createElement("div", { key: n.id, style: { background: isPerm ? "#EFF6FF" : "#FFF7ED", borderRadius: 8, padding: "10px 12px", borderLeft: "3px solid " + (isPerm ? "#2E6DA4" : "#F59E0B") } },
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: isPerm ? "#2E6DA4" : "#92400E", fontWeight: 700, textTransform: "uppercase", marginBottom: 3 } }, isPerm ? "\uD83D\uDCCC Permanente" : "\u26A0 Provis\xF3ria"),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#334155", lineHeight: 1.4 } }, n.texto)
+          );
+        })
+      )
+    ),
+    loading ? /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...") :
+    jobs.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, "Sem servi\xE7os agendados para hoje.") :
+    /* @__PURE__ */ React.createElement("div", null,
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 8 } }, "Escala do Dia — ", jobs.length, " servi\xE7os"),
+      jobs.map(function(j) {
+        var team = (j.team || []).map(function(eid) { return emps.find(function(e) { return e.id === eid; }); }).filter(Boolean);
+        var cor = ESTADO_COR[j.status] || "#64748B";
+        var bg = ESTADO_BG[j.status] || "#F8FAFC";
+        var emCurso = j.check_in && !j.check_out && j.status !== "completed";
+        return /* @__PURE__ */ React.createElement("div", { key: j.id, style: Object.assign({}, card, { marginBottom: 10, padding: 16, borderLeft: "4px solid " + (emCurso ? "#2E6DA4" : cor) }) },
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 } },
+            /* @__PURE__ */ React.createElement("div", null,
+              /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, j.cn),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, j.t1, " \u2014 ", j.t2, j.addr ? " \u2022 " + j.addr : "")
+            ),
+            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 } },
+              /* @__PURE__ */ React.createElement(Bdg, { label: emCurso ? "\uD83D\uDFE2 Em curso" : ESTADO_L[j.status] || j.status, bg: emCurso ? "#DBEAFE" : bg, tx: emCurso ? "#1D4ED8" : cor }),
+              j.check_in && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#16A34A", fontWeight: 700 } }, "\u23F1 ", j.check_in, j.check_out ? " \u2192 " + j.check_out : " (em curso)")
+            )
+          ),
+          team.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
+            team.map(function(e) {
+              return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 5, background: "#F1F5F9", borderRadius: 6, padding: "3px 8px" } },
+                /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 18, color: "#2E6DA4" }),
+                /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#334155" } }, e.name.split(" ")[0])
+              );
+            })
+          )
+        );
+      })
+    )
+  );
+}
 function NotasOperacionais() {
   const [notas, setNotas] = useState([]);
   const [emps, setEmps] = useState([]);
@@ -3358,6 +3441,7 @@ const ALL_MENUS = [
   { k: "avaliacoes", l: "Avalia\xE7\xF5es" },
   { k: "formacao", l: "Documentos RH" },
   { k: "notas_op", l: "Notas Operacionais" },
+  { k: "quadro_op", l: "Quadro Operacional" },
   { k: "relatorio", l: "Relat\xF3rio Mensal" },
   { k: "employees", l: "Funcion\xE1rios" }
 ];
@@ -3971,6 +4055,7 @@ function Manager(props) {
     { k: "avaliacoes", l: "Avalia\xE7\xF5es" },
     { k: "formacao", l: "Documentos RH" },
     { k: "notas_op", l: "\uD83D\uDCCB Notas Operacionais" },
+    { k: "quadro_op", l: "\uD83D\uDCCA Quadro Operacional" },
     { k: "relatorio", l: "Relat\xF3rio Mensal" },
     { k: "employees", l: "Funcion\xE1rios" },
     { k: "gestores", l: "\u2699 Utilizadores" },
@@ -4098,7 +4183,7 @@ function Manager(props) {
     return (b.rating || 0) - (a.rating || 0);
   }).map(function(e, i) {
     return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: i === 0 ? "#F59E0B" : i === 1 ? "#94A3B8" : "#CD7C54", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 11, flexShrink: 0 } }, i + 1), /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 30, color: ["#2E6DA4", "#0F766E", "#7C3AED", "#C2410C"][i] || "#64748B" }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, e.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, e.role)), /* @__PURE__ */ React.createElement(Stars, { r: e.rating }));
-  })))) : null, view === "notas_op" ? /* @__PURE__ */ React.createElement(NotasOperacionais, null) : null, view === "finance" ? /* @__PURE__ */ React.createElement(Finance, null) : null, view === "routes" ? /* @__PURE__ */ React.createElement(Routes, null) : null, view === "clients" ? /* @__PURE__ */ React.createElement(Clients, null) : null, view === "fornecedores" ? /* @__PURE__ */ React.createElement(Fornecedores, null) : null, view === "pedidos_colab" ? /* @__PURE__ */ React.createElement(PedidosColab, { onUpdate: function(n) {
+  })))) : null, view === "quadro_op" ? /* @__PURE__ */ React.createElement(QuadroOperacional, null) : null, view === "notas_op" ? /* @__PURE__ */ React.createElement(NotasOperacionais, null) : null, view === "finance" ? /* @__PURE__ */ React.createElement(Finance, null) : null, view === "routes" ? /* @__PURE__ */ React.createElement(Routes, null) : null, view === "clients" ? /* @__PURE__ */ React.createElement(Clients, null) : null, view === "fornecedores" ? /* @__PURE__ */ React.createElement(Fornecedores, null) : null, view === "pedidos_colab" ? /* @__PURE__ */ React.createElement(PedidosColab, { onUpdate: function(n) {
     setPedidosColabPendentes(n);
   } }) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "leads" ? /* @__PURE__ */ React.createElement(Leads, null) : null, view === "avaliacoes" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "formacao" ? /* @__PURE__ */ React.createElement(Formacao, null) : null, view === "relatorio" ? /* @__PURE__ */ React.createElement(RelatorioMensal, null) : null, view === "gestores" ? /* @__PURE__ */ React.createElement(GestoresAdmin, null) : null, view === "armazem_qr" ? /* @__PURE__ */ React.createElement(QRArmazem, null) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, null) : null));
 }
