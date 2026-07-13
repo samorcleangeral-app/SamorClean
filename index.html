@@ -425,8 +425,17 @@ function Finance() {
       return (parseFloat(rh.valor_dia) || 0) / horasDia;
     } else {
       var salario = parseFloat(rh.salario_base) || 0;
-      var custoMensal = salario + diasUteisDoMes * 6 + salario * 0.0833 + salario * 0.0833 + salario * 0.2375 + salario * 0.015;
-      return diasUteisDoMes > 0 ? custoMensal / diasUteisDoMes / horasDia : 0;
+      // Calculate dias uteis locally to avoid scope issues
+      var diasUteis = 0;
+      var dd = new Date(now.getFullYear(), now.getMonth(), 1);
+      while (dd.getMonth() === now.getMonth()) {
+        var dow = dd.getDay();
+        if (dow !== 0 && dow !== 6) diasUteis++;
+        dd.setDate(dd.getDate() + 1);
+      }
+      if (diasUteis === 0) diasUteis = 22;
+      var custoMensal = salario + diasUteis * 6 + salario * 0.0833 + salario * 0.0833 + salario * 0.2375 + salario * 0.015;
+      return custoMensal / diasUteis / horasDia;
     }
   }
 
