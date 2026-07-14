@@ -4462,7 +4462,7 @@ function Employee(props) {
         db.list("servicos", "?select=date,dispensa_armazem,team&date=gte." + firstDayMonthStr + "&date=lte." + today),
         db.list("ausencias", "?select=*&funcionario_id=eq." + encodeURIComponent(emp.id)),
         db.list("notas_operacionais", "?select=*&order=created_at.desc"),
-        db.list("pedidos_colaboradores", "?select=id,estado,created_at&funcionario_id=eq." + encodeURIComponent(emp.id) + "&estado=neq.pendente&created_at=gte." + new Date(Date.now() - 7*24*3600*1000).toISOString())
+        db.list("pedidos_colaboradores", "?select=id,estado,created_at&funcionario_id=eq." + encodeURIComponent(emp.id) + "&estado=neq.pendente&visto=is.false")
       ]).then(function(results) {
         setJobs(results[0] || []);
         setHistJobs(results[1] || []);
@@ -4482,7 +4482,10 @@ function Employee(props) {
         });
         setNotasOp(minhasNotasOp);
         setPedidosRespondidos((results[8] || []).length);
-        // Calculate absStats from past 7 days jobs
+        // Calculate absStats from month jobs (not just 7 days)
+        const allMonthJobs = results[0].concat(results[1] || []).filter(function(j) {
+          return (j.team || []).indexOf(emp.id) !== -1 && j.date >= firstDayMonthStr;
+        });
         const allPast = results[1] || [];
         const myPast = allPast.filter(function(j) {
           return (j.team || []).indexOf(emp.id) !== -1;
@@ -4490,35 +4493,50 @@ function Employee(props) {
         // Check if a date falls within a férias ausência
         function isFeriasDia(dateStr) {
           return ausencias.some(function(a) {
-            if (a.tipo !== "férias") return false;
+            if ((a.tipo || "").toLowerCase() === "férias") return false;
             var start = a.data_inicio;
             var end = a.data_fim || a.data_inicio;
             return dateStr >= start && dateStr <= end;
           });
         }
-        // Check if a date falls within ANY non-ferias ausência (penaliza prémio)
-        function isAusenciaPenalizante(dateStr) {
-          return ausencias.some(function(a) {
-            if (a.tipo === "férias") return false;
-            var start = a.data_inicio;
-            var end = a.data_fim || a.data_inicio;
-            return dateStr >= start && dateStr <= end;
-          });
-        }
-        const faltas = myPast.filter(function(j) {
-          return !j.check_in && j.status === "completed" && !isFeriasDia(j.date);
+        // Faltas de serviço no mês (check-in ou check-out em falta)
+        const faltasServico = allMonthJobs.filter(function(j) {
+          return j.status === "completed" && (!j.check_in || !j.check_out);
         }).length;
-        const parciais = myPast.filter(function(j) {
-          return j.early_leave && j.early_leave.indexOf && j.early_leave.indexOf(emp.id) !== -1 && !isFeriasDia(j.date);
-        }).length;
-        // Premio: sem faltas E sem ausências penalizantes no mês actual
+        // Esquecimentos de armazém no mês
+        var diasComServico = {};
+        allServicos.forEach(function(j) {
+          if ((j.team || []).indexOf(emp.id) !== -1) {
+            diasComServico[j.date] = j.dispensa_armazem || diasComServico[j.date] === true;
+          }
+        });
+        var diasComPicagem = {};
+        picagens.forEach(function(p) {
+          var dia = (p.hora || p.created_at || "").slice(0, 10);
+          diasComPicagem[dia] = true;
+        });
+        var esquecimentosArmazem = 0;
+        Object.keys(diasComServico).forEach(function(dia) {
+          if (!diasComServico[dia] && !diasComPicagem[dia] && dia < today && dia >= firstDayMonthStr) {
+            esquecimentosArmazem++;
+          }
+        });
+        // Ausências penalizantes no mês
         const temAusenciaPenalizanteMes = ausencias.some(function(a) {
-          if (a.tipo === "férias") return false;
+          if ((a.tipo || "").toLowerCase() === "férias") return false;
           var start = a.data_inicio;
           var end = a.data_fim || a.data_inicio;
           return start <= today && end >= firstDayMonthStr;
         });
-        setAbsStats({ total: myPast.length, faltas, parciais, temAusenciaPenalizanteMes });
+        // Premio perdido?
+        var perdeuPremio = temAusenciaPenalizanteMes || esquecimentosArmazem >= 5 || faltasServico >= 10;
+        const faltas = myPast.filter(function(j) {
+          return !j.check_in && j.status === "completed";
+        }).length;
+        const parciais = myPast.filter(function(j) {
+          return j.early_leave && j.early_leave.indexOf && j.early_leave.indexOf(emp.id) !== -1;
+        }).length;
+        setAbsStats({ total: myPast.length, faltas, parciais, temAusenciaPenalizanteMes, faltasServico, esquecimentosArmazem, perdeuPremio });
         // Calculate alertas de esquecimento - dias com serviços mas sem picagem no armazém e sem dispensa
         var diasComServico = {};
         allServicos.forEach(function(j) {
@@ -4852,11 +4870,42 @@ function Employee(props) {
     const badgeCount = t === "pedidos" && pedidosRespondidos > 0 ? pedidosRespondidos : 0;
     return /* @__PURE__ */ React.createElement("button", { key: t, onClick: function() {
       setDashTab(t);
+      if (t === "pedidos" && pedidosRespondidos > 0 && emp) {
+        setPedidosRespondidos(0);
+        fetch(SUPABASE_URL + "/rest/v1/pedidos_colaboradores?funcionario_id=eq." + encodeURIComponent(emp.id) + "&estado=neq.pendente&visto=is.false", { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ visto: true }) });
+      }
     }, style: { flex: 1, padding: "9px 4px", borderRadius: 8, border: "none", background: dashTab === t ? "#2E6DA4" : "#fff", color: dashTab === t ? "#fff" : "#64748B", fontWeight: 700, fontSize: 11, cursor: "pointer", boxShadow: dashTab === t ? "none" : "0 1px 4px rgba(0,0,0,0.07)", position: "relative" } },
       labels[t],
       badgeCount > 0 && /* @__PURE__ */ React.createElement("span", { style: { position: "absolute", top: -4, right: -4, background: "#EF4444", color: "#fff", borderRadius: "50%", width: 16, height: 16, fontSize: 9, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" } }, badgeCount)
     );
   })), dashTab === "hoje" && /* @__PURE__ */ React.createElement("div", null,
+    (function() {
+      var temPicagemHoje = picagensArmazem.some(function(p) { return (p.hora || p.created_at || "").slice(0, 10) === today; });
+      var temServicosHoje = myJ.length > 0;
+      if (temServicosHoje && !temPicagemHoje) {
+        return /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", border: "2px solid #EF4444", borderRadius: 10, padding: "14px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 12 } },
+          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 28 } }, "\u26A0\uFE0F"),
+          /* @__PURE__ */ React.createElement("div", null,
+            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#DC2626" } }, "N\xE3o picaste no armaz\xE9m hoje!"),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#7F1D1D", marginTop: 2 } }, "Lembra-te de picar a entrada e sa\xEDda no QR do armaz\xE9m.")
+          )
+        );
+      }
+      if (temServicosHoje && temPicagemHoje) {
+        var temSaida = picagensArmazem.some(function(p) { return (p.hora || p.created_at || "").slice(0, 10) === today && p.tipo === "saida"; });
+        var ultimoServicoConcluido = myJ.every(function(j) { return j.status === "completed"; });
+        if (ultimoServicoConcluido && !temSaida) {
+          return /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF3C7", border: "2px solid #F59E0B", borderRadius: 10, padding: "14px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 12 } },
+            /* @__PURE__ */ React.createElement("span", { style: { fontSize: 28 } }, "\uD83D\uDD14"),
+            /* @__PURE__ */ React.createElement("div", null,
+              /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#92400E" } }, "N\xE3o te esqueças de picar a sa\xEDda!"),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#78350F", marginTop: 2 } }, "Os servi\xE7os est\xE3o conclu\xEDdos. Pica a sa\xEDda no QR do armaz\xE9m.")
+            )
+          );
+        }
+      }
+      return null;
+    })(),
     notasOp.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } },
       notasOp.map(function(n) {
         const isPerm = n.tipo === "permanente";
@@ -4973,12 +5022,31 @@ function Employee(props) {
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 48, fontWeight: 900, color: absPct === 0 ? "#16A34A" : absPct <= 10 ? "#F59E0B" : "#EF4444" } }, absPct, "%"),
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "#64748B", marginTop: 4 } }, "taxa de absentismo")
     ),
-    /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, padding: 20, display: "flex", alignItems: "center", gap: 16, borderLeft: "4px solid " + (absStats.faltas === 0 && absStats.parciais === 0 && !absStats.temAusenciaPenalizanteMes ? "#16A34A" : "#EF4444") }) },
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 36 } }, absStats.faltas === 0 && absStats.parciais === 0 && !absStats.temAusenciaPenalizanteMes ? "\uD83C\uDF1F" : "\u274C"),
-      /* @__PURE__ */ React.createElement("div", null,
-        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 2 } }, "Prémio de Assiduidade — 50€"),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: absStats.faltas === 0 && absStats.parciais === 0 && !absStats.temAusenciaPenalizanteMes ? "#16A34A" : "#EF4444", fontWeight: 700 } }, absStats.faltas === 0 && absStats.parciais === 0 && !absStats.temAusenciaPenalizanteMes ? "Tens direito ao prémio este mês! ✓" : "Perdeste o prémio este mês")
-      )
+    /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, padding: 20, borderLeft: "4px solid " + (!absStats.perdeuPremio ? "#16A34A" : "#EF4444") }) },
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 16, marginBottom: 14 } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 36 } }, !absStats.perdeuPremio ? "\uD83C\uDF1F" : "\u274C"),
+        /* @__PURE__ */ React.createElement("div", null,
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 2 } }, "Pr\xE9mio de Assiduidade \u2014 50\u20AC"),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: !absStats.perdeuPremio ? "#16A34A" : "#EF4444", fontWeight: 700 } }, !absStats.perdeuPremio ? "Tens direito ao pr\xE9mio este m\xEAs! \u2713" : "Perdeste o pr\xE9mio este m\xEAs")
+        )
+      ),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 12 } }, "Perdes o pr\xE9mio se tiveres 5+ esquecimentos de picagem no armaz\xE9m, 10+ faltas de picagem nos servi\xE7os, ou qualquer aus\xEAncia registada (excepto f\xE9rias)."),
+      [
+        { l: "Esquecimentos armazém", v: absStats.esquecimentosArmazem || 0, max: 5, c: (absStats.esquecimentosArmazem || 0) >= 5 ? "#EF4444" : (absStats.esquecimentosArmazem || 0) >= 3 ? "#F59E0B" : "#16A34A" },
+        { l: "Faltas de picagem serviços", v: absStats.faltasServico || 0, max: 10, c: (absStats.faltasServico || 0) >= 10 ? "#EF4444" : (absStats.faltasServico || 0) >= 6 ? "#F59E0B" : "#16A34A" }
+      ].map(function(b) {
+        var pct = Math.min(100, Math.round((b.v / b.max) * 100));
+        return /* @__PURE__ */ React.createElement("div", { key: b.l, style: { marginBottom: 10 } },
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 600, color: "#334155", marginBottom: 4 } },
+            /* @__PURE__ */ React.createElement("span", null, b.l),
+            /* @__PURE__ */ React.createElement("span", { style: { color: b.c, fontWeight: 800 } }, b.v, "/", b.max)
+          ),
+          /* @__PURE__ */ React.createElement("div", { style: { background: "#F1F5F9", borderRadius: 4, height: 8 } },
+            /* @__PURE__ */ React.createElement("div", { style: { background: b.c, height: "100%", borderRadius: 4, width: pct + "%", transition: "width 0.3s" } })
+          )
+        );
+      }),
+      absStats.temAusenciaPenalizanteMes && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", borderRadius: 6, padding: "6px 10px", fontSize: 11, color: "#DC2626", fontWeight: 700, marginTop: 6 } }, "\u26A0 Tens uma aus\xEAncia registada este m\xEAs que penaliza o pr\xE9mio.")
     ),
     /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Resumo (\xFAltimos 7 dias)"), [
     { l: "Servi\xE7os escalados", v: absStats.total, c: "#1A3A5C" },
@@ -4986,7 +5054,43 @@ function Employee(props) {
     { l: "Faltas parciais", v: absStats.parciais, c: "#F59E0B" }
   ].map(function(r) {
     return /* @__PURE__ */ React.createElement("div", { key: r.l, style: { display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#64748B" } }, r.l), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 15, fontWeight: 800, color: r.c } }, r.v));
-  }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 12, lineHeight: 1.6 } }, "Falta total = 1 ponto. Falta parcial (sa\xEDda antecipada) = 0.5 pontos.")), ausenciasEmp.length > 0 && /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Aus\xEAncias registadas"), ausenciasEmp.map(function(a) { var corTipo = (a.tipo || "").toLowerCase() === "f\xe9rias" ? "#16A34A" : a.tipo === "Baixa M\xe9dica" ? "#EF4444" : "#F59E0B"; return /* @__PURE__ */ React.createElement("div", { key: a.id, style: { display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("span", { style: { background: corTipo + "20", color: corTipo, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700, flexShrink: 0 } }, a.tipo), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 600, color: "#1A3A5C" } }, a.data_inicio, a.data_fim && a.data_fim !== a.data_inicio ? " \u2192 " + a.data_fim : ""), a.descricao && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 2 } }, a.descricao))); }))), dashTab === "formacao" && /* @__PURE__ */ React.createElement(EmpFormacao, { empRole: emp ? emp.role : "", empId: emp ? emp.id : "" }), dashTab === "pedidos" && emp && /* @__PURE__ */ React.createElement(EmpPedidos, { empId: emp.id, empName: emp.name })));
+  }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 12, lineHeight: 1.6 } }, "Falta total = 1 ponto. Falta parcial (sa\xEDda antecipada) = 0.5 pontos.")), ausenciasEmp.length > 0 && /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Aus\xEAncias registadas"), ausenciasEmp.map(function(a) { var corTipo = (a.tipo || "").toLowerCase() === "f\xe9rias" ? "#16A34A" : a.tipo === "Baixa M\xe9dica" ? "#EF4444" : "#F59E0B"; return /* @__PURE__ */ React.createElement("div", { key: a.id, style: { display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("span", { style: { background: corTipo + "20", color: corTipo, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700, flexShrink: 0 } }, a.tipo), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 600, color: "#1A3A5C" } }, a.data_inicio, a.data_fim && a.data_fim !== a.data_inicio ? " \u2192 " + a.data_fim : ""), a.descricao && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 2 } }, a.descricao))); }))),
+    picagensArmazem.length > 0 && /* @__PURE__ */ React.createElement("div", { style: card },
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 16 } }, "Hist\xF3rico de Picagens \u2014 Armaz\xe9m"),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 } },
+        (function() {
+          var byDay = {};
+          picagensArmazem.forEach(function(p) { var dia = (p.hora || p.created_at || "").slice(0, 10); if (!byDay[dia]) byDay[dia] = { entradas: 0, saidas: 0 }; if (p.tipo === "entrada") byDay[dia].entradas++; else byDay[dia].saidas++; });
+          return Object.keys(byDay).sort().reverse().slice(0, 7).map(function(dia) {
+            var r = byDay[dia];
+            return /* @__PURE__ */ React.createElement("div", { key: dia, style: { background: "#F0FDF4", borderRadius: 8, padding: "8px 12px", border: "1px solid #86EFAC" } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 11, color: "#15803D" } }, new Date(dia + "T12:00:00").toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" })),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 2 } }, "\uD83D\uDFE2 ", r.entradas, "  \uD83D\uDD34 ", r.saidas)
+            );
+          });
+        })()
+      ),
+      /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
+        /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { background: "#F8FAFC" } },
+          /* @__PURE__ */ React.createElement("th", { style: { padding: "8px 10px", textAlign: "left", color: "#64748B", fontWeight: 700, fontSize: 11 } }, "Data"),
+          /* @__PURE__ */ React.createElement("th", { style: { padding: "8px 10px", textAlign: "left", color: "#64748B", fontWeight: 700, fontSize: 11 } }, "Hora"),
+          /* @__PURE__ */ React.createElement("th", { style: { padding: "8px 10px", textAlign: "left", color: "#64748B", fontWeight: 700, fontSize: 11 } }, "Tipo")
+        )),
+        /* @__PURE__ */ React.createElement("tbody", null,
+          picagensArmazem.slice(0, 30).map(function(p, i) {
+            var dt = new Date(p.hora || p.created_at);
+            var tipo = p.tipo || "entrada";
+            return /* @__PURE__ */ React.createElement("tr", { key: p.id || i, style: { borderBottom: "1px solid #F1F5F9", background: i % 2 === 0 ? "#fff" : "#F8FAFC" } },
+              /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", color: "#334155" } }, dt.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" })),
+              /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", fontWeight: 700, color: "#1A3A5C" } }, dt.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })),
+              /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px" } },
+                /* @__PURE__ */ React.createElement("span", { style: { background: tipo === "entrada" ? "#DCFCE7" : "#FEE2E2", color: tipo === "entrada" ? "#15803D" : "#DC2626", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, tipo === "entrada" ? "\u2192 Entrada" : "\u2190 Sa\xEDda")
+              )
+            );
+          })
+        )
+      )
+    ), dashTab === "formacao" && /* @__PURE__ */ React.createElement(EmpFormacao, { empRole: emp ? emp.role : "", empId: emp ? emp.id : "" }), dashTab === "pedidos" && emp && /* @__PURE__ */ React.createElement(EmpPedidos, { empId: emp.id, empName: emp.name })));
 }
 function NotaForm(props) {
   const clientId = props.clientId;
