@@ -2692,85 +2692,153 @@ function QuadroOperacional() {
   const [jobs, setJobs] = useState([]);
   const [emps, setEmps] = useState([]);
   const [notas, setNotas] = useState([]);
+  const [selEmp, setSelEmp] = useState(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [notaForm, setNotaForm] = useState({ texto: "", tipo: "permanente", emp_id: "", expires_at: "" });
+  const [showAddNota, setShowAddNota] = useState(false);
+  function load() {
+    var nowStr = new Date().toISOString();
+    Promise.all([
+      db.list("servicos", "?select=*&date=eq." + today + "&order=t1"),
+      db.list("funcionarios", "?select=*&order=name"),
+      db.list("notas_operacionais", "?select=*&order=created_at.desc")
+    ]).then(function(r) {
+      var empList = r[1] || [];
+      setJobs(r[0] || []);
+      setEmps(empList);
+      setSelEmp(function(prev) { return prev || (empList.length > 0 ? empList[0] : null); });
+      setNotas((r[2] || []).filter(function(n) { return !n.expires_at || n.expires_at >= nowStr; }));
+      setLoading(false);
+      setLastUpdate(new Date());
+    });
+  }
   useEffect(function() {
-    function load() {
-      var nowStr = new Date().toISOString();
-      Promise.all([
-        db.list("servicos", "?select=*&date=eq." + today + "&order=t1"),
-        db.list("funcionarios", "?select=*&order=name"),
-        db.list("notas_operacionais", "?select=*&order=created_at.desc")
-      ]).then(function(r) {
-        setJobs(r[0] || []);
-        setEmps(r[1] || []);
-        setNotas((r[2] || []).filter(function(n) { return !n.expires_at || n.expires_at >= nowStr; }));
-        setLoading(false);
-        setLastUpdate(new Date());
-      });
-    }
     load();
-    var interval = setInterval(load, 60000); // refresh every minute
+    var interval = setInterval(load, 60000);
     return function() { clearInterval(interval); };
   }, []);
-
-  const ESTADO_COR = { pending: "#F59E0B", completed: "#16A34A" };
-  const ESTADO_BG = { pending: "#FEF3C7", completed: "#DCFCE7" };
-  const ESTADO_L = { pending: "Agendado", completed: "Conclu\xEDdo" };
-
+  async function addNota() {
+    if (!notaForm.texto.trim()) return;
+    var data = { texto: notaForm.texto.trim(), tipo: notaForm.tipo, destinatario: notaForm.emp_id ? "individual" : "todos", emp_id: notaForm.emp_id || null, expires_at: notaForm.tipo === "provisoria" && notaForm.expires_at ? new Date(notaForm.expires_at + "T23:59:59").toISOString() : null };
+    var inserted = await db.insert("notas_operacionais", data);
+    if (inserted) { setNotas(function(p) { return [inserted].concat(p); }); setNotaForm({ texto: "", tipo: "permanente", emp_id: "", expires_at: "" }); setShowAddNota(false); }
+  }
+  async function deleteNota(id) {
+    if (!window.confirm("Apagar esta nota?")) return;
+    await fetch(SUPABASE_URL + "/rest/v1/notas_operacionais?id=eq." + id, { method: "DELETE", headers: dbHeaders() });
+    setNotas(function(p) { return p.filter(function(n) { return n.id !== id; }); });
+  }
+  var myJobs = selEmp ? jobs.filter(function(j) { return (j.team || []).indexOf(selEmp.id) !== -1; }).sort(function(a, b) { return (a.t1 || "").localeCompare(b.t1 || ""); }) : [];
+  var myNotas = selEmp ? notas.filter(function(n) { return !n.emp_id || n.emp_id === selEmp.id; }) : notas;
   return /* @__PURE__ */ React.createElement("div", null,
-    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 } },
-      /* @__PURE__ */ React.createElement("div", null,
-        /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Quadro Operacional"),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", marginTop: 3 } }, new Date().toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long" }), " \u2014 actualizado \xE0s ", lastUpdate.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }))
-      ),
-      /* @__PURE__ */ React.createElement("button", { onClick: function() { setLoading(true); setJobs([]); setLastUpdate(new Date()); Promise.all([db.list("servicos", "?select=*&date=eq." + today + "&order=t1"), db.list("funcionarios", "?select=*&order=name"), db.list("notas_operacionais", "?select=*&order=created_at.desc")]).then(function(r) { setJobs(r[0]||[]); setEmps(r[1]||[]); setNotas(r[2]||[]); setLoading(false); setLastUpdate(new Date()); }); }, style: Object.assign({}, btn, { fontSize: 12 }) }, "\u21BB Actualizar")
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } },
+      /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Quadro Operacional"),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, lastUpdate.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setLoading(true); load(); }, style: Object.assign({}, btnO, { fontSize: 12, padding: "6px 12px" }) }, "\u21BB")
+      )
     ),
-    notas.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 20 } },
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 8 } }, "Notas Operacionais Activas"),
-      /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px,1fr))", gap: 8 } },
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" } },
+      emps.map(function(e) {
+        var emCurso = jobs.some(function(j) { return (j.team || []).indexOf(e.id) !== -1 && j.check_in && !j.check_out && j.status !== "completed"; });
+        var sel = selEmp && selEmp.id === e.id;
+        return /* @__PURE__ */ React.createElement("div", { key: e.id, onClick: function() { setSelEmp(e); }, style: { display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 10, border: "2px solid " + (sel ? "#2E6DA4" : "#E2EBF4"), background: sel ? "#EFF6FF" : "#fff", cursor: "pointer" } },
+          /* @__PURE__ */ React.createElement("div", { style: { position: "relative" } },
+            /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 28, color: sel ? "#2E6DA4" : "#94A3B8" }),
+            emCurso && /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", top: -2, right: -2, width: 8, height: 8, background: "#16A34A", borderRadius: "50%", border: "1.5px solid #fff" } })
+          ),
+          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: sel ? "#2E6DA4" : "#334155" } }, e.name.split(" ")[0])
+        );
+      })
+    ),
+    selEmp && /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 320px", gap: 16, alignItems: "start" } },
+      /* @__PURE__ */ React.createElement("div", null,
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 12 } }, new Date().toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long" })),
+        myNotas.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } },
+          myNotas.map(function(n) {
+            var isPerm = n.tipo === "permanente";
+            return /* @__PURE__ */ React.createElement("div", { key: n.id, style: { background: isPerm ? "#EFF6FF" : "#FFF7ED", borderRadius: 8, padding: "10px 12px", marginBottom: 6, borderLeft: "3px solid " + (isPerm ? "#2E6DA4" : "#F59E0B") } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: isPerm ? "#2E6DA4" : "#92400E", fontWeight: 700, textTransform: "uppercase", marginBottom: 2 } }, isPerm ? "\uD83D\uDCCC Permanente" : "\u26A0 Provis\xF3ria"),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#334155" } }, n.texto)
+            );
+          })
+        ),
+        loading ? /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...") :
+        myJobs.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 32, color: "#94A3B8" }) }, "Sem servi\xE7os para hoje.") :
+        myJobs.map(function(j) {
+          var colegas = (j.team || []).filter(function(eid) { return eid !== selEmp.id; }).map(function(eid) { return emps.find(function(e) { return e.id === eid; }); }).filter(Boolean);
+          var emCurso = j.check_in && !j.check_out && j.status !== "completed";
+          var cor = j.status === "completed" ? "#16A34A" : emCurso ? "#2E6DA4" : "#F59E0B";
+          return /* @__PURE__ */ React.createElement("div", { key: j.id, style: { display: "flex", gap: 12, alignItems: "stretch", marginBottom: 12 } },
+            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", width: 48, flexShrink: 0 } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 13, color: cor } }, j.t1),
+              /* @__PURE__ */ React.createElement("div", { style: { flex: 1, width: 2, background: cor, margin: "4px 0", borderRadius: 1 } }),
+              /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 600, fontSize: 11, color: "#94A3B8" } }, j.t2)
+            ),
+            /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { flex: 1, padding: "14px 16px", borderLeft: "4px solid " + cor, marginBottom: 0 }) },
+              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 } },
+                /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, j.cn),
+                /* @__PURE__ */ React.createElement(Bdg, { label: j.status === "completed" ? "Conclu\xEDdo" : emCurso ? "\uD83D\uDFE2 Em curso" : "Agendado", bg: j.status === "completed" ? "#DCFCE7" : emCurso ? "#DBEAFE" : "#FEF3C7", tx: j.status === "completed" ? "#15803D" : emCurso ? "#1D4ED8" : "#92400E" })
+              ),
+              j.addr && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 6 } }, "\uD83D\uDCCD ", j.addr),
+              colegas.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", marginBottom: 6 } },
+                /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "Com:"),
+                colegas.map(function(e) {
+                  return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 4, background: "#EFF6FF", borderRadius: 6, padding: "2px 8px" } },
+                    /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 16, color: "#2E6DA4" }),
+                    /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#2E6DA4" } }, e.name.split(" ")[0])
+                  );
+                })
+              ),
+              j.check_in && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } },
+                /* @__PURE__ */ React.createElement("div", { style: { background: "#DCFCE7", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700, color: "#15803D" } }, "\u23F1 ", j.check_in),
+                j.check_out && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700, color: "#DC2626" } }, "\u23F9 ", j.check_out)
+              )
+            )
+          );
+        })
+      ),
+      /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { padding: 16 }) },
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "Notas Operacionais"),
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowAddNota(!showAddNota); }, style: Object.assign({}, btnG, { fontSize: 11, padding: "5px 10px" }) }, showAddNota ? "Cancelar" : "+ Nova")
+        ),
+        showAddNota && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16, background: "#F8FAFC", borderRadius: 8, padding: 12 } },
+          /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 70, resize: "vertical", marginBottom: 8 }), value: notaForm.texto, onChange: function(e) { setNotaForm(Object.assign({}, notaForm, { texto: e.target.value })); }, placeholder: "Texto da nota..." }),
+          /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 } },
+            /* @__PURE__ */ React.createElement("select", { style: inp, value: notaForm.tipo, onChange: function(e) { setNotaForm(Object.assign({}, notaForm, { tipo: e.target.value })); } },
+              /* @__PURE__ */ React.createElement("option", { value: "permanente" }, "Permanente"),
+              /* @__PURE__ */ React.createElement("option", { value: "provisoria" }, "Provis\xF3ria")
+            ),
+            /* @__PURE__ */ React.createElement("select", { style: inp, value: notaForm.emp_id, onChange: function(e) { setNotaForm(Object.assign({}, notaForm, { emp_id: e.target.value })); } },
+              /* @__PURE__ */ React.createElement("option", { value: "" }, "Toda a equipa"),
+              emps.map(function(e) { return /* @__PURE__ */ React.createElement("option", { key: e.id, value: e.id }, e.name.split(" ")[0]); })
+            )
+          ),
+          notaForm.tipo === "provisoria" && /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { marginBottom: 8 }), type: "date", value: notaForm.expires_at, onChange: function(e) { setNotaForm(Object.assign({}, notaForm, { expires_at: e.target.value })); } }),
+          /* @__PURE__ */ React.createElement("button", { onClick: addNota, disabled: !notaForm.texto.trim(), style: Object.assign({}, btnG, { width: "100%", textAlign: "center", opacity: !notaForm.texto.trim() ? 0.5 : 1 }) }, "Guardar nota")
+        ),
+        notas.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", textAlign: "center", padding: "16px 0" } }, "Sem notas activas.") :
         notas.map(function(n) {
           var isPerm = n.tipo === "permanente";
-          return /* @__PURE__ */ React.createElement("div", { key: n.id, style: { background: isPerm ? "#EFF6FF" : "#FFF7ED", borderRadius: 8, padding: "10px 12px", borderLeft: "3px solid " + (isPerm ? "#2E6DA4" : "#F59E0B") } },
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: isPerm ? "#2E6DA4" : "#92400E", fontWeight: 700, textTransform: "uppercase", marginBottom: 3 } }, isPerm ? "\uD83D\uDCCC Permanente" : "\u26A0 Provis\xF3ria"),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#334155", lineHeight: 1.4 } }, n.texto)
+          var destEmp = n.emp_id ? emps.find(function(e) { return e.id === n.emp_id; }) : null;
+          return /* @__PURE__ */ React.createElement("div", { key: n.id, style: { borderBottom: "1px solid #F1F5F9", paddingBottom: 10, marginBottom: 10 } },
+            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 } },
+              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
+                /* @__PURE__ */ React.createElement(Bdg, { label: isPerm ? "\uD83D\uDCCC Perm." : "\u26A0 Prov.", bg: isPerm ? "#EFF6FF" : "#FEF3C7", tx: isPerm ? "#2E6DA4" : "#92400E" }),
+                destEmp ? /* @__PURE__ */ React.createElement(Bdg, { label: destEmp.name.split(" ")[0], bg: "#F0FDF4", tx: "#15803D" }) : /* @__PURE__ */ React.createElement(Bdg, { label: "Equipa", bg: "#F8FAFC", tx: "#64748B" })
+              ),
+              /* @__PURE__ */ React.createElement("button", { onClick: function() { deleteNota(n.id); }, style: { background: "transparent", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 13 } }, "\uD83D\uDDD1")
+            ),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#334155", lineHeight: 1.5 } }, n.texto)
           );
         })
       )
-    ),
-    loading ? /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...") :
-    jobs.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, "Sem servi\xE7os agendados para hoje.") :
-    /* @__PURE__ */ React.createElement("div", null,
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 8 } }, "Escala do Dia — ", jobs.length, " servi\xE7os"),
-      jobs.map(function(j) {
-        var team = (j.team || []).map(function(eid) { return emps.find(function(e) { return e.id === eid; }); }).filter(Boolean);
-        var cor = ESTADO_COR[j.status] || "#64748B";
-        var bg = ESTADO_BG[j.status] || "#F8FAFC";
-        var emCurso = j.check_in && !j.check_out && j.status !== "completed";
-        return /* @__PURE__ */ React.createElement("div", { key: j.id, style: Object.assign({}, card, { marginBottom: 10, padding: 16, borderLeft: "4px solid " + (emCurso ? "#2E6DA4" : cor) }) },
-          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 } },
-            /* @__PURE__ */ React.createElement("div", null,
-              /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, j.cn),
-              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, j.t1, " \u2014 ", j.t2, j.addr ? " \u2022 " + j.addr : "")
-            ),
-            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 } },
-              /* @__PURE__ */ React.createElement(Bdg, { label: emCurso ? "\uD83D\uDFE2 Em curso" : ESTADO_L[j.status] || j.status, bg: emCurso ? "#DBEAFE" : bg, tx: emCurso ? "#1D4ED8" : cor }),
-              j.check_in && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#16A34A", fontWeight: 700 } }, "\u23F1 ", j.check_in, j.check_out ? " \u2192 " + j.check_out : " (em curso)")
-            )
-          ),
-          team.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
-            team.map(function(e) {
-              return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 5, background: "#F1F5F9", borderRadius: 6, padding: "3px 8px" } },
-                /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 18, color: "#2E6DA4" }),
-                /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#334155" } }, e.name.split(" ")[0])
-              );
-            })
-          )
-        );
-      })
     )
   );
 }
+
 function NotasOperacionais() {
   const [notas, setNotas] = useState([]);
   const [emps, setEmps] = useState([]);
