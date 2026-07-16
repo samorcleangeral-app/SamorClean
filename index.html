@@ -4429,11 +4429,15 @@ function Employee(props) {
         window.location.href = "https://samorcleangeral-app.github.io/SamorClean/sessao-terminada.html";
       }
     }, 30000);
+    return function() { clearInterval(timer); };
+  }, [phase, lastActivity]);
+  useEffect(function() {
+    if (phase !== "dash") return;
     function resetTimer() { setLastActivity(Date.now()); }
     window.addEventListener("click", resetTimer);
     window.addEventListener("touchstart", resetTimer);
-    return function() { clearInterval(timer); window.removeEventListener("click", resetTimer); window.removeEventListener("touchstart", resetTimer); };
-  }, [phase, lastActivity]);
+    return function() { window.removeEventListener("click", resetTimer); window.removeEventListener("touchstart", resetTimer); };
+  }, [phase]);
   const [emp, setEmp] = useState(null);
   const [sEmp, setSEmp] = useState(null);
   const [pin, setPin] = useState("");
@@ -5078,15 +5082,21 @@ function ClientPortal(props) {
   const [clientLastActivity, setClientLastActivity] = useState(Date.now());
   const [clientTimedOut, setClientTimedOut] = useState(false);
   useEffect(function() {
-    if (phase === "welcome") return;
+    if (phase !== "client-portal") return;
     var timer = setInterval(function() {
-      if (Date.now() - clientLastActivity > 60000) { window.location.href = "https://samorcleangeral-app.github.io/SamorClean/sessao-terminada.html"; }
-    }, 15000);
-    function resetTimer() { setClientLastActivity(Date.now()); setClientTimedOut(false); }
+      if (Date.now() - clientLastActivity > 60000) {
+        window.location.href = "https://samorcleangeral-app.github.io/SamorClean/sessao-terminada.html";
+      }
+    }, 10000);
+    return function() { clearInterval(timer); };
+  }, [phase, clientLastActivity]);
+  useEffect(function() {
+    if (phase !== "client-portal") return;
+    function resetTimer() { setClientLastActivity(Date.now()); }
     window.addEventListener("click", resetTimer);
     window.addEventListener("touchstart", resetTimer);
-    return function() { clearInterval(timer); window.removeEventListener("click", resetTimer); window.removeEventListener("touchstart", resetTimer); };
-  }, [phase, clientLastActivity]);
+    return function() { window.removeEventListener("click", resetTimer); window.removeEventListener("touchstart", resetTimer); };
+  }, [phase]);
   const [client, setClient] = useState(null);
   const [contacts, setContacts] = useState([]);
   const [allEmps, setAllEmps] = useState(EMPS);
