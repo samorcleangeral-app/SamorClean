@@ -4426,7 +4426,7 @@ function Employee(props) {
     if (phase !== "dash") return;
     var timer = setInterval(function() {
       if (Date.now() - lastActivity > EMP_TIMEOUT) {
-        setPhase("login"); setEmp(null); setPin(""); setDashTab("hoje");
+        window.location.href = "https://samorcleangeral-app.github.io/SamorClean/sessao-terminada.html";
       }
     }, 30000);
     function resetTimer() { setLastActivity(Date.now()); }
@@ -5080,7 +5080,7 @@ function ClientPortal(props) {
   useEffect(function() {
     if (phase === "welcome") return;
     var timer = setInterval(function() {
-      if (Date.now() - clientLastActivity > 60000) { setClientTimedOut(true); }
+      if (Date.now() - clientLastActivity > 60000) { window.location.href = "https://samorcleangeral-app.github.io/SamorClean/sessao-terminada.html"; }
     }, 15000);
     function resetTimer() { setClientLastActivity(Date.now()); setClientTimedOut(false); }
     window.addEventListener("click", resetTimer);
