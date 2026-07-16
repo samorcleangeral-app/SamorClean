@@ -379,14 +379,32 @@ function Finance() {
     var tipo = rh.tipo_contrato || "Contrato";
     var detalhe = [];
     var total = 0;
-    // Verificar ausências que não sejam férias no mês
-    var ausencias = absData.filter(function(a) {
-      return a.funcionario_id === emp.id && (a.tipo || "").toLowerCase() !== "férias";
+    // Calculate absence days this month
+    var ausenciasEmp = absData.filter(function(a) { return a.funcionario_id === emp.id; });
+    var diasBaixa = 0;
+    var diasFerias = 0;
+    var temAusenciaPenalizante = false;
+    var monthStart2 = new Date(now.getFullYear(), now.getMonth(), 1);
+    var monthEnd2 = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    ausenciasEmp.forEach(function(a) {
+      var start = new Date((a.data_inicio || "") + "T12:00:00");
+      var end = new Date((a.data_fim || a.data_inicio || "") + "T12:00:00");
+      var tipoAus = (a.tipo || "").toLowerCase();
+      // Count working days in absence period within this month
+      var d = new Date(Math.max(start, monthStart2));
+      var dEnd = new Date(Math.min(end, monthEnd2));
+      var dias = 0;
+      while (d <= dEnd) {
+        if (d.getDay() !== 0 && d.getDay() !== 6) dias++;
+        d.setDate(d.getDate() + 1);
+      }
+      if (tipoAus === "férias") { diasFerias += dias; }
+      else if (tipoAus === "baixa médica" || tipoAus === "baixa") { diasBaixa += dias; if (dias > 3) diasBaixa = dias - 3; }
+      else { temAusenciaPenalizante = true; }
     });
-    var temAusencia = ausencias.length > 0;
-    var premio = temAusencia ? 0 : 50;
+    var temAusencia = temAusenciaPenalizante || diasBaixa > 0;
+    var premio = (temAusencia || diasFerias > 0) ? 0 : 50;
     if (tipo === "Recibo Verde") {
-      // Dias trabalhados = dias com serviços concluídos
       var diasTrabalhados = new Set();
       monthJobs.forEach(function(j) {
         if ((j.team || []).indexOf(emp.id) !== -1) diasTrabalhados.add(j.date);
@@ -398,18 +416,24 @@ function Finance() {
       total = custo;
     } else {
       var salario = parseFloat(rh.salario_base) || 0;
-      var subAlim = diasUteisDoMes * 6;
+      // Dias úteis efectivos (excluindo baixa - a SS paga)
+      var diasEfectivos = Math.max(0, diasUteisDoMes - diasBaixa);
+      // Sub. alimentação só nos dias que trabalhou (excluindo férias e baixa)
+      var diasAlim = Math.max(0, diasUteisDoMes - diasFerias - diasBaixa);
+      var subAlim = diasAlim * 6;
+      // Salário proporcional (sem os dias de baixa - SS paga)
+      var salarioEfectivo = diasBaixa > 0 ? salario * (diasEfectivos / Math.max(1, diasUteisDoMes)) : salario;
       var subFerias = salario * 0.0833;
       var subNatal = salario * 0.0833;
-      var ss = salario * 0.2375;
-      var seguro = salario * 0.015;
-      detalhe.push({ l: "Salário base", v: salario });
-      detalhe.push({ l: "Sub. alimentação (" + diasUteisDoMes + " dias × 6€)", v: subAlim });
+      var ss = salarioEfectivo * 0.2375;
+      var seguro = salarioEfectivo * 0.015;
+      detalhe.push({ l: "Salário base" + (diasBaixa > 0 ? " (prop. " + diasEfectivos + "/" + diasUteisDoMes + " dias)" : ""), v: salarioEfectivo });
+      detalhe.push({ l: "Sub. alimentação (" + diasAlim + " dias × 6€)" + (diasFerias > 0 || diasBaixa > 0 ? " *" : ""), v: subAlim });
       detalhe.push({ l: "Sub. férias (8,33%)", v: subFerias });
       detalhe.push({ l: "Sub. Natal (8,33%)", v: subNatal });
       detalhe.push({ l: "Seg. Social patronal (23,75%)", v: ss });
       detalhe.push({ l: "Seguro acidentes (1,5%)", v: seguro });
-      total = salario + subAlim + subFerias + subNatal + ss + seguro;
+      total = salarioEfectivo + subAlim + subFerias + subNatal + ss + seguro;
     }
     detalhe.push({ l: "Prémio assiduidade", v: premio });
     total += premio;
