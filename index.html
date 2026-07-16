@@ -245,7 +245,7 @@ function Finance() {
     Promise.all([
       db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd + "&status=eq.completed"),
       db.list("servicos", "?select=*&date=gte." + sixMonthsAgo + "&status=eq.completed"),
-      db.list("clientes", "?select=id,name,freq,iva_type,service"),
+      db.list("clientes", "?select=id,name,freq,iva_type,service&excluir_financeiro=is.false"),
       db.list("despesas", "?select=*&data=gte." + monthStart + "&data=lte." + monthEnd),
       db.list("servicos", "?select=client_id,date&date=gte." + past60 + "&order=date.desc"),
       db.list("funcionarios_rh", "?select=*"),
@@ -1644,6 +1644,7 @@ function Clients() {
       tipo_faturacao: sel.tipo_faturacao || "hora",
       valor_visita: sel.valor_visita || 0,
       ativo: sel.ativo !== false,
+      excluir_financeiro: sel.excluir_financeiro || false,
       iva_type: sel.iva_type || "normal",
       checklist: sel.checklist && sel.checklist.length ? sel.checklist.slice() : [""],
       schedule: sel.schedule ? sel.schedule.map(function(s) { return Object.assign({}, s); }) : [],
@@ -1858,7 +1859,7 @@ function Clients() {
     }, style: Object.assign({}, btnO, { flex: 1 }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: deleteClient, disabled: deleting, style: Object.assign({}, btnR, { flex: 1 }) }, deleting ? "A apagar..." : "Confirmar")))), editing && editForm ? /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C" } }, "Editar cliente"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
       setEditing(false);
       setEditForm(null);
-    }, style: btnX }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: function() { setEditForm(Object.assign({}, editForm, { ativo: editForm.ativo === false ? true : false })); }, style: { padding: "6px 12px", borderRadius: 8, border: "1.5px solid " + (editForm.ativo === false ? "#EF4444" : "#16A34A"), background: editForm.ativo === false ? "#FEE2E2" : "#DCFCE7", color: editForm.ativo === false ? "#DC2626" : "#15803D", fontWeight: 700, fontSize: 12, cursor: "pointer" } }, editForm.ativo === false ? "\u23F8 Inactivo" : "\u2713 Activo"), /* @__PURE__ */ React.createElement("button", { onClick: updateC, style: btnG }, "Guardar"))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } }, [["name", "Nome"], ["contact", "Respons\xE1vel"], ["phone", "Telefone"], ["email", "Email"], ["address", "Morada"]].map(function(f) {
+    }, style: btnX }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: function() { setEditForm(Object.assign({}, editForm, { ativo: editForm.ativo === false ? true : false })); }, style: { padding: "6px 12px", borderRadius: 8, border: "1.5px solid " + (editForm.ativo === false ? "#EF4444" : "#16A34A"), background: editForm.ativo === false ? "#FEE2E2" : "#DCFCE7", color: editForm.ativo === false ? "#DC2626" : "#15803D", fontWeight: 700, fontSize: 12, cursor: "pointer" } }, editForm.ativo === false ? "\u23F8 Inactivo" : "\u2713 Activo"), /* @__PURE__ */ React.createElement("button", { onClick: function() { setEditForm(Object.assign({}, editForm, { excluir_financeiro: !editForm.excluir_financeiro })); }, style: { padding: "6px 12px", borderRadius: 8, border: "1.5px solid " + (editForm.excluir_financeiro ? "#EF4444" : "#E2EBF4"), background: editForm.excluir_financeiro ? "#FEE2E2" : "#F8FAFC", color: editForm.excluir_financeiro ? "#DC2626" : "#94A3B8", fontWeight: 700, fontSize: 12, cursor: "pointer" } }, editForm.excluir_financeiro ? "\uD83D\uDEAB Exclu\xEDdo financeiro" : "\u2205 Excluir financeiro"), /* @__PURE__ */ React.createElement("button", { onClick: updateC, style: btnG }, "Guardar"))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } }, [["name", "Nome"], ["contact", "Respons\xE1vel"], ["phone", "Telefone"], ["email", "Email"], ["address", "Morada"]].map(function(f) {
       return /* @__PURE__ */ React.createElement("div", { key: f[0], style: { gridColumn: f[0] === "address" ? "1 / -1" : "auto" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, f[1]), /* @__PURE__ */ React.createElement("input", { style: inp, value: editForm[f[0]], onChange: function(e) {
         const u = Object.assign({}, editForm);
         u[f[0]] = e.target.value;
