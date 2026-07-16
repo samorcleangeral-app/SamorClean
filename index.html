@@ -455,7 +455,7 @@ function Finance() {
   // ── Custos operacionais para alocar proporcionalmente ──
   var totalDespesas = despesas.reduce(function(s, d) { return s + (parseFloat(d.valor) || 0); }, 0);
 
-  // Total horas de todos os serviços concluídos do mês
+  // Total horas de todos os serviços concluídos do mês (horas × equipa)
   var totalHorasMes = monthJobs.reduce(function(s, j) {
     var t1 = (j.t1 || "0:0").split(":"); var t2 = (j.t2 || "0:0").split(":");
     var horas = (parseInt(t2[0])*60+parseInt(t2[1]) - parseInt(t1[0])*60-parseInt(t1[1])) / 60;
@@ -479,7 +479,6 @@ function Finance() {
         if (empObj) custoMO += custoHoraReal(empObj) * horas;
       });
     });
-    // Alocar custos operacionais proporcionalmente às horas
     var proporcao = totalHorasMes > 0 ? horasCliente / totalHorasMes : 0;
     var custosOp = totalDespesas * proporcao;
     var custoTotal = custoMO + custosOp;
@@ -907,6 +906,7 @@ function Routes() {
     const warnings = [];
     var skipped = [];
     clients.forEach(function(c) {
+      if (c.ativo === false) { skipped.push(c.name + " (inactivo)"); return; }
       const sch = c.schedule || [];
       if (!sch.length || c.freq === "Pontual") { skipped.push(c.name + " (sem agenda ou pontual)"); return; }
       sch.forEach(function(d) {
@@ -1608,7 +1608,7 @@ function Clients() {
   const [sel, setSel] = useState(null);
   const [q, setQ] = useState("");
   const [ft, setFt] = useState("Todos");
-  const [form, setForm] = useState({ name: "", type: "Empresa", contact: "", phone: "", email: "", address: "", service: SVCS[0], freq: FREQS[0], notes: "", checklist: [""], schedule: [], hours_contracted: 0, price_per_hour: 13.66, iva_type: "normal", tipo_faturacao: "hora", valor_visita: 0 });
+  const [form, setForm] = useState({ name: "", type: "Empresa", contact: "", phone: "", email: "", address: "", service: SVCS[0], freq: FREQS[0], notes: "", checklist: [""], schedule: [], hours_contracted: 0, price_per_hour: 13.66, iva_type: "normal", tipo_faturacao: "hora", valor_visita: 0, ativo: true });
   const [newContacts, setNewContacts] = useState([{ name: "", cargo: "", phone: "", email: "", pin: "" }]);
   const [saved, setSaved] = useState(false);
   const [contacts, setContacts] = useState([]);
@@ -1633,6 +1633,7 @@ function Clients() {
       price_per_hour: sel.price_per_hour || 13.66,
       tipo_faturacao: sel.tipo_faturacao || "hora",
       valor_visita: sel.valor_visita || 0,
+      ativo: sel.ativo !== false,
       iva_type: sel.iva_type || "normal",
       checklist: sel.checklist && sel.checklist.length ? sel.checklist.slice() : [""],
       schedule: sel.schedule ? sel.schedule.map(function(s) { return Object.assign({}, s); }) : [],
@@ -1818,7 +1819,8 @@ function Clients() {
     }), /* @__PURE__ */ React.createElement("div", { style: { marginLeft: "auto", fontSize: 12, color: "#64748B" } }, filt.length, " resultados")), /* @__PURE__ */ React.createElement("div", null, filt.map(function(c) {
       const rec = (c.hours_contracted || 0) * (c.price_per_hour || 13.66);
       const freqCor = (c.freq || "").toLowerCase() === "semanal" ? "#16A34A" : (c.freq || "").toLowerCase() === "quinzenal" ? "#F59E0B" : (c.freq || "").toLowerCase() === "mensal" ? "#2E6DA4" : "#94A3B8";
-      return /* @__PURE__ */ React.createElement("div", { key: c.id, onClick: function() { setSel(c); setView("detail"); }, style: Object.assign({}, card, { cursor: "pointer", padding: "14px 18px", marginBottom: 8, display: "flex", alignItems: "center", gap: 16, borderLeft: "4px solid " + freqCor }) },
+      const inativo = c.ativo === false;
+      return /* @__PURE__ */ React.createElement("div", { key: c.id, onClick: function() { setSel(c); setView("detail"); }, style: Object.assign({}, card, { cursor: "pointer", padding: "14px 18px", marginBottom: 8, display: "flex", alignItems: "center", gap: 16, borderLeft: "4px solid " + (inativo ? "#CBD5E1" : freqCor), opacity: inativo ? 0.6 : 1 }) },
         /* @__PURE__ */ React.createElement("div", { style: { width: 40, height: 40, borderRadius: 10, background: freqCor + "20", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } },
           /* @__PURE__ */ React.createElement("span", { style: { fontSize: 18 } }, c.type === "Particular" ? "\uD83D\uDC64" : "\uD83C\uDFE2")
         ),
@@ -1846,7 +1848,7 @@ function Clients() {
     }, style: Object.assign({}, btnO, { flex: 1 }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: deleteClient, disabled: deleting, style: Object.assign({}, btnR, { flex: 1 }) }, deleting ? "A apagar..." : "Confirmar")))), editing && editForm ? /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C" } }, "Editar cliente"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
       setEditing(false);
       setEditForm(null);
-    }, style: btnX }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: updateC, style: btnG }, "Guardar"))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } }, [["name", "Nome"], ["contact", "Respons\xE1vel"], ["phone", "Telefone"], ["email", "Email"], ["address", "Morada"]].map(function(f) {
+    }, style: btnX }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: function() { setEditForm(Object.assign({}, editForm, { ativo: editForm.ativo === false ? true : false })); }, style: { padding: "6px 12px", borderRadius: 8, border: "1.5px solid " + (editForm.ativo === false ? "#EF4444" : "#16A34A"), background: editForm.ativo === false ? "#FEE2E2" : "#DCFCE7", color: editForm.ativo === false ? "#DC2626" : "#15803D", fontWeight: 700, fontSize: 12, cursor: "pointer" } }, editForm.ativo === false ? "\u23F8 Inactivo" : "\u2713 Activo"), /* @__PURE__ */ React.createElement("button", { onClick: updateC, style: btnG }, "Guardar"))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } }, [["name", "Nome"], ["contact", "Respons\xE1vel"], ["phone", "Telefone"], ["email", "Email"], ["address", "Morada"]].map(function(f) {
       return /* @__PURE__ */ React.createElement("div", { key: f[0], style: { gridColumn: f[0] === "address" ? "1 / -1" : "auto" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, f[1]), /* @__PURE__ */ React.createElement("input", { style: inp, value: editForm[f[0]], onChange: function(e) {
         const u = Object.assign({}, editForm);
         u[f[0]] = e.target.value;
@@ -2438,6 +2440,45 @@ function HistoricoFuncionario(props) {
     return /* @__PURE__ */ React.createElement("tr", { key: v.id, style: { borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("td", { style: { padding: "8px", fontWeight: 600, color: "#1A3A5C" } }, v.cn), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px", color: "#64748B", whiteSpace: "nowrap" } }, (/* @__PURE__ */ new Date(v.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "short", day: "2-digit", month: "short" })), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px", color: "#64748B", whiteSpace: "nowrap" } }, v.t1, " \u2014 ", v.t2), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px", fontWeight: v.check_in ? 700 : 400, color: v.check_in ? "#1A3A5C" : "#CBD5E1", whiteSpace: "nowrap" } }, v.check_in || "\u2014"), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px", fontWeight: v.check_out ? 700 : 400, color: v.check_out ? "#1A3A5C" : "#CBD5E1", whiteSpace: "nowrap" } }, v.check_out || "\u2014"), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px" } }, /* @__PURE__ */ React.createElement(DiffBadge, { diff: d })));
   })))));
 }
+function PedidosColabHistorico(props) {
+  const empId = props.empId;
+  const [pedidos, setPedidos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(function() {
+    db.list("pedidos_colaboradores", "?select=*&funcionario_id=eq." + encodeURIComponent(empId) + "&order=created_at.desc").then(function(rows) {
+      setPedidos(rows || []);
+      setLoading(false);
+    });
+  }, [empId]);
+  const TIPO_ICON = { ausencia: "\uD83D\uDCC5", fardamento: "\uD83D\uDC55", material: "\uD83E\uDDF9" };
+  const TIPO_LABEL = { ausencia: "Aus\xEAncia", fardamento: "Fardamento", material: "Material" };
+  const ESTADO_COR = { pendente: "#F59E0B", aprovado: "#16A34A", recusado: "#EF4444" };
+  const ESTADO_BG = { pendente: "#FEF3C7", aprovado: "#DCFCE7", recusado: "#FEE2E2" };
+  if (loading) return null;
+  if (pedidos.length === 0) return null;
+  var byTipo = { ausencia: [], material: [], fardamento: [] };
+  pedidos.forEach(function(p) { if (byTipo[p.tipo]) byTipo[p.tipo].push(p); });
+  return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginTop: 16 }) },
+    /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Hist\xF3rico de Pedidos"),
+    Object.keys(byTipo).filter(function(t) { return byTipo[t].length > 0; }).map(function(tipo) {
+      return /* @__PURE__ */ React.createElement("div", { key: tipo, style: { marginBottom: 16 } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 } }, TIPO_ICON[tipo], " ", TIPO_LABEL[tipo], " (", byTipo[tipo].length, ")"),
+        byTipo[tipo].map(function(p) {
+          var cor = ESTADO_COR[p.estado] || "#64748B";
+          var bg = ESTADO_BG[p.estado] || "#F8FAFC";
+          return /* @__PURE__ */ React.createElement("div", { key: p.id, style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "10px 0", borderBottom: "1px solid #F1F5F9" } },
+            /* @__PURE__ */ React.createElement("div", null,
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, p.descricao),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } }, new Date(p.created_at).toLocaleDateString("pt-PT", { day: "numeric", month: "short", year: "numeric" })),
+              p.resposta && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 3, fontStyle: "italic" } }, "Resp: ", p.resposta)
+            ),
+            /* @__PURE__ */ React.createElement("span", { style: { background: bg, color: cor, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700, flexShrink: 0 } }, p.estado)
+          );
+        })
+      );
+    })
+  );
+}
 function Employees() {
   const [emps, setEmps] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2560,13 +2601,13 @@ function Employees() {
     } }, "+ Novo Funcionario")), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar funcionário...", value: empSearch, onChange: function(e) { setEmpSearch(e.target.value); } }), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 } }, emps.filter(function(e) { return !empSearch || e.name.toLowerCase().indexOf(empSearch.toLowerCase()) !== -1 || (e.role || "").toLowerCase().indexOf(empSearch.toLowerCase()) !== -1; }).map(function(e) {
       return /* @__PURE__ */ React.createElement("div", { key: e.id, onClick: function() {
         openEdit(e);
-      }, style: Object.assign({}, card, { cursor: "pointer", padding: 18, borderLeft: "4px solid #2E6DA4", marginBottom: 0, display: "flex", alignItems: "center", gap: 14 }) }, /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 48, color: EC[e.id] || "#2E6DA4" }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, e.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, e.role), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 4, fontFamily: "monospace" } }, "PIN: ", e.pin)), e.rating ? /* @__PURE__ */ React.createElement(Stars, { r: e.rating }) : null);
+      }, style: Object.assign({}, card, { cursor: "pointer", padding: 18, borderLeft: "4px solid " + (e.ativo === false ? "#CBD5E1" : "#2E6DA4"), marginBottom: 0, display: "flex", alignItems: "center", gap: 14, opacity: e.ativo === false ? 0.6 : 1 }) }, /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 48, color: e.ativo === false ? "#94A3B8" : (EC[e.id] || "#2E6DA4") }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, e.name), e.ativo === false && /* @__PURE__ */ React.createElement("span", { style: { background: "#F1F5F9", color: "#94A3B8", borderRadius: 6, padding: "1px 7px", fontSize: 10, fontWeight: 700 } }, "Inactivo")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, e.role), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 4, fontFamily: "monospace" } }, "PIN: ", e.pin)), e.rating ? /* @__PURE__ */ React.createElement(Stars, { r: e.rating }) : null);
     })));
   }
   if (view === "detail" && sel && editForm) {
-    return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 24 } }, /* @__PURE__ */ React.createElement("button", { style: btnX, onClick: function() {
+    return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("button", { style: btnX, onClick: function() {
       setView("list");
-    } }, "Voltar"), /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, sel.name)), saved ? /* @__PURE__ */ React.createElement("div", { style: { background: "#DCFCE7", border: "1px solid #16A34A", color: "#15803D", borderRadius: 8, padding: "12px 18px", marginBottom: 20, fontWeight: 700 } }, "Guardado com sucesso!") : null, errMsg ? /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", border: "1px solid #EF4444", color: "#991B1B", borderRadius: 8, padding: "12px 18px", marginBottom: 20, fontWeight: 600 } }, errMsg) : null, /* @__PURE__ */ React.createElement(FichaRH, { sel, editForm, setEditForm, saveEdit, saving, emps, dates: [], wJobs: [] }));
+    } }, "Voltar"), /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0, flex: 1 } }, sel.name), /* @__PURE__ */ React.createElement("button", { onClick: async function() { var newAtivo = sel.ativo !== false ? false : true; await fetch(SUPABASE_URL + "/rest/v1/funcionarios?id=eq." + sel.id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ ativo: newAtivo }) }); setSel(Object.assign({}, sel, { ativo: newAtivo })); setEmps(function(p) { return p.map(function(e) { return e.id === sel.id ? Object.assign({}, e, { ativo: newAtivo }) : e; }); }); }, style: { padding: "8px 16px", borderRadius: 8, border: "1.5px solid " + (sel.ativo === false ? "#16A34A" : "#EF4444"), background: sel.ativo === false ? "#DCFCE7" : "#FEE2E2", color: sel.ativo === false ? "#15803D" : "#DC2626", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, sel.ativo === false ? "\u2713 Reactivar" : "\u23F8 Desactivar")), saved ? /* @__PURE__ */ React.createElement("div", { style: { background: "#DCFCE7", border: "1px solid #16A34A", color: "#15803D", borderRadius: 8, padding: "12px 18px", marginBottom: 20, fontWeight: 700 } }, "Guardado com sucesso!") : null, errMsg ? /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", border: "1px solid #EF4444", color: "#991B1B", borderRadius: 8, padding: "12px 18px", marginBottom: 20, fontWeight: 600 } }, errMsg) : null, /* @__PURE__ */ React.createElement(FichaRH, { sel, editForm, setEditForm, saveEdit, saving, emps, dates: [], wJobs: [] }), /* @__PURE__ */ React.createElement(PedidosColabHistorico, { empId: sel.id }));
   }
   if (view === "new") {
     return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 24 } }, /* @__PURE__ */ React.createElement("button", { style: btnX, onClick: function() {
@@ -2711,7 +2752,7 @@ function QuadroOperacional() {
     var nowStr = new Date().toISOString();
     Promise.all([
       db.list("servicos", "?select=*&date=eq." + today + "&order=t1"),
-      db.list("funcionarios", "?select=*&order=name"),
+      db.list("funcionarios", "?select=*&ativo=neq.false&order=name"),
       db.list("notas_operacionais", "?select=*&order=created_at.desc")
     ]).then(function(r) {
       var empList = r[1] || [];
@@ -2982,6 +3023,21 @@ function PedidosColab(props) {
       headers: dbHeaders(),
       body: JSON.stringify({ estado, resposta })
     });
+    // If approving an ausencia, auto-create record in ausencias table
+    if (estado === "aprovado" && selPedido && selPedido.tipo === "ausencia" && selPedido.detalhes) {
+      var det = selPedido.detalhes;
+      await fetch(SUPABASE_URL + "/rest/v1/ausencias", {
+        method: "POST",
+        headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }),
+        body: JSON.stringify({
+          funcionario_id: selPedido.funcionario_id,
+          tipo: det.tipo || "Outro",
+          data_inicio: det.data_inicio,
+          data_fim: det.data_fim || det.data_inicio,
+          descricao: det.descricao || selPedido.descricao || ""
+        })
+      });
+    }
     setPedidos(function(p) {
       return p.map(function(x) {
         return x.id === id ? Object.assign({}, x, { estado, resposta }) : x;
@@ -3882,54 +3938,104 @@ function Avaliacoes() {
   const [avs, setAvs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [clientsMap, setClientsMap] = useState({});
-  const [empsMap, setEmpsMap] = useState({});
-  const [filtro, setFiltro] = useState("todas");
+  const [selCliente, setSelCliente] = useState(null);
   useEffect(function() {
     Promise.all([
       db.list("avaliacoes", "?select=*&order=created_at.desc"),
-      db.list("clientes", "?select=id,name"),
-      db.list("funcionarios", "?select=id,name,av")
+      db.list("clientes", "?select=id,name")
     ]).then(function(results) {
       setAvs(results[0] || []);
       const cm = {};
-      (results[1] || []).forEach(function(c) {
-        cm[c.id] = c;
-      });
-      const em = {};
-      (results[2] || []).forEach(function(e) {
-        em[e.id] = e;
-      });
+      (results[1] || []).forEach(function(c) { cm[c.id] = c; });
       setClientsMap(cm);
-      setEmpsMap(em);
       setLoading(false);
     });
   }, []);
-  const negativas = avs.filter(function(a) {
-    return a.stars <= 2;
-  });
-  const filtradas = filtro === "negativas" ? negativas : avs;
-  function StarDisplay(props) {
-    const stars = props.stars || 0;
-    return /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 2 } }, [1, 2, 3, 4, 5].map(function(i) {
-      return /* @__PURE__ */ React.createElement("span", { key: i, style: { fontSize: 16, color: i <= stars ? "#F59E0B" : "#E2EBF4" } }, "\u2605");
-    }));
+  async function marcarVistas(clientId) {
+    const porVer = avs.filter(function(a) { return a.client_id === clientId && !a.vista; });
+    if (porVer.length === 0) return;
+    for (var i = 0; i < porVer.length; i++) {
+      await fetch(SUPABASE_URL + "/rest/v1/avaliacoes?id=eq." + encodeURIComponent(porVer[i].id), { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ vista: true }) });
+    }
+    setAvs(function(p) { return p.map(function(a) { return a.client_id === clientId ? Object.assign({}, a, { vista: true }) : a; }); });
   }
+  async function deleteAv(id) {
+    if (!window.confirm("Apagar esta avaliação?")) return;
+    await fetch(SUPABASE_URL + "/rest/v1/avaliacoes?id=eq." + encodeURIComponent(id), { method: "DELETE", headers: dbHeaders() });
+    setAvs(function(p) { return p.filter(function(a) { return a.id !== id; }); });
+  }
+  // Group by client
+  var byClient = {};
+  avs.forEach(function(a) {
+    if (!byClient[a.client_id]) byClient[a.client_id] = [];
+    byClient[a.client_id].push(a);
+  });
+  var clientList = Object.keys(byClient).map(function(cid) {
+    var clientAvs = byClient[cid];
+    var avg = clientAvs.reduce(function(s, a) { return s + (a.stars || 0); }, 0) / clientAvs.length;
+    var novas = clientAvs.filter(function(a) { return !a.vista; }).length;
+    return { id: cid, name: clientsMap[cid] ? clientsMap[cid].name : cid, avs: clientAvs, avg: avg, novas: novas };
+  }).sort(function(a, b) { return b.novas - a.novas || b.avs.length - a.avs.length; });
+  var totalNovas = avs.filter(function(a) { return !a.vista; }).length;
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar avalia\xE7\xF5es...");
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Avalia\xE7\xF5es"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, avs.length, " avalia\xE7\xE3o", avs.length !== 1 ? "\xF5es" : "", " no total")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } }, [["todas", "Todas"], ["negativas", "Negativas \u26A0"]].map(function(f) {
-    return /* @__PURE__ */ React.createElement("button", { key: f[0], onClick: function() {
-      setFiltro(f[0]);
-    }, style: Object.assign({}, filtro === f[0] ? { background: "#2E6DA4", color: "#fff" } : { background: "#fff", color: "#64748B" }, { border: "1.5px solid " + (filtro === f[0] ? "#2E6DA4" : "#E2EBF4"), borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }) }, f[1]);
-  }))), negativas.length > 0 && filtro === "todas" && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", border: "1px solid #FECACA", borderRadius: 12, padding: "12px 16px", marginBottom: 20, display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 20 } }, "\u26A0\uFE0F"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, color: "#991B1B", fontSize: 14 } }, negativas.length, " avalia\xE7\xE3o", negativas.length !== 1 ? "\xF5es" : "", " negativa", negativas.length !== 1 ? "s" : ""), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#DC2626" } }, "Clientes com 1-2 estrelas que merecem aten\xE7\xE3o"))), filtradas.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16, marginBottom: 8 } }, "Sem avalia\xE7\xF5es"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13 } }, "As avalia\xE7\xF5es dos clientes aparecem aqui assim que forem submetidas.")) : filtradas.map(function(a) {
-    const cliente = clientsMap[a.client_id];
-    const func = empsMap[a.funcionario_id];
-    const isNeg = a.stars <= 2;
-    return /* @__PURE__ */ React.createElement("div", { key: a.id, style: Object.assign({}, card, { marginBottom: 12, borderLeft: "4px solid " + (isNeg ? "#EF4444" : a.stars >= 4 ? "#16A34A" : "#F59E0B") }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, cliente ? cliente.name : "Cliente desconhecido"), a.contact_name && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, "por ", a.contact_name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } }, new Date(a.created_at).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }))), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right" } }, /* @__PURE__ */ React.createElement(StarDisplay, { stars: a.stars }), isNeg && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#EF4444", marginTop: 4 } }, "\u26A0 Aten\xE7\xE3o"))), func && /* @__PURE__ */ React.createElement("div", { style: { display: "inline-flex", alignItems: "center", gap: 8, marginBottom: 8, background: "#F8FAFC", borderRadius: 8, padding: "6px 10px" } }, /* @__PURE__ */ React.createElement(Av, { init: func.av, size: 20, color: "#2E6DA4" }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#334155", fontWeight: 600 } }, func.name)), a.comment && /* @__PURE__ */ React.createElement("div", { style: { background: isNeg ? "#FEF2F2" : "#F8FAFC", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#334155", lineHeight: 1.6, marginTop: 8, fontStyle: "italic" } }, '"', a.comment, '"'));
-  }));
+  if (selCliente) {
+    var clientAvs = byClient[selCliente.id] || [];
+    return /* @__PURE__ */ React.createElement("div", null,
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 20 } },
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setSelCliente(null); }, style: Object.assign({}, btnO, { padding: "8px 14px", fontSize: 13 }) }, "\u2190 Voltar"),
+        /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 20, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, selCliente.name)
+      ),
+      clientAvs.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Sem avalia\xE7\xF5es.") :
+      clientAvs.map(function(a) {
+        var isNeg = a.stars <= 2;
+        return /* @__PURE__ */ React.createElement("div", { key: a.id, style: Object.assign({}, card, { marginBottom: 10, borderLeft: "4px solid " + (isNeg ? "#EF4444" : a.stars >= 4 ? "#16A34A" : "#F59E0B") }) },
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 } },
+            /* @__PURE__ */ React.createElement("div", null,
+              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 3, marginBottom: 4 } }, [1,2,3,4,5].map(function(i) { return /* @__PURE__ */ React.createElement("span", { key: i, style: { fontSize: 18, color: i <= a.stars ? "#F59E0B" : "#E2EBF4" } }, "\u2605"); })),
+              a.contact_name && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, "por ", a.contact_name),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } }, new Date(a.created_at).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" }))
+            ),
+            /* @__PURE__ */ React.createElement("button", { onClick: function() { deleteAv(a.id); }, style: { background: "transparent", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 16 } }, "\uD83D\uDDD1")
+          ),
+          a.comment && /* @__PURE__ */ React.createElement("div", { style: { background: isNeg ? "#FEF2F2" : "#F8FAFC", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#334155", lineHeight: 1.6, fontStyle: "italic" } }, "\"", a.comment, "\"")
+        );
+      })
+    );
+  }
+  return /* @__PURE__ */ React.createElement("div", null,
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 } },
+      /* @__PURE__ */ React.createElement("div", null,
+        /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Avalia\xE7\xF5es"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, avs.length, " avalia\xE7\xE3o", avs.length !== 1 ? "\xF5es" : "", " \u2014 ", clientList.length, " clientes")
+      ),
+      totalNovas > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", borderRadius: 10, padding: "8px 16px", display: "flex", alignItems: "center", gap: 8 } },
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 18 } }, "\u26A0\uFE0F"),
+        /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, color: "#DC2626", fontSize: 13 } }, totalNovas, " nova", totalNovas !== 1 ? "s" : "", " por ver")
+      )
+    ),
+    clientList.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, "Sem avalia\xE7\xF5es ainda.") :
+    /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 14 } },
+      clientList.map(function(c) {
+        var corAvg = c.avg >= 4 ? "#16A34A" : c.avg >= 3 ? "#F59E0B" : "#EF4444";
+        return /* @__PURE__ */ React.createElement("div", { key: c.id, onClick: function() { setSelCliente(c); marcarVistas(c.id); }, style: Object.assign({}, card, { cursor: "pointer", padding: 18, position: "relative", borderTop: "3px solid " + corAvg }) },
+          c.novas > 0 && /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", top: -8, right: -8, background: "#EF4444", color: "#fff", borderRadius: "50%", width: 22, height: 22, fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid #fff" } }, c.novas),
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.name),
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 2, marginBottom: 8 } }, [1,2,3,4,5].map(function(i) { return /* @__PURE__ */ React.createElement("span", { key: i, style: { fontSize: 18, color: i <= Math.round(c.avg) ? "#F59E0B" : "#E2EBF4" } }, "\u2605"); })),
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+            /* @__PURE__ */ React.createElement("span", { style: { fontSize: 20, fontWeight: 900, color: corAvg } }, c.avg.toFixed(1)),
+            /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, c.avs.length, " avalia\xE7\xE3o", c.avs.length !== 1 ? "\xF5es" : "")
+          )
+        );
+      })
+    )
+  );
 }
+
 function PedidosExtra() {
   const [pedidos, setPedidos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [clientsMap, setClientsMap] = useState({});
+  const [selCliente, setSelCliente] = useState(null);
   const [swapJob, setSwapJob] = useState(null);
   const [swapPedido, setSwapPedido] = useState(null);
   const [clientJobs, setClientJobs] = useState([]);
@@ -3943,101 +4049,152 @@ function PedidosExtra() {
     ]).then(function(results) {
       setPedidos(results[0] || []);
       const cm = {};
-      (results[1] || []).forEach(function(c) {
-        cm[c.id] = c;
-      });
+      (results[1] || []).forEach(function(c) { cm[c.id] = c; });
       setClientsMap(cm);
       setLoading(false);
     });
   }, []);
   async function updateStatus(id, status) {
-    const res = await fetch(SUPABASE_URL + "/rest/v1/pedidos_extra?id=eq." + encodeURIComponent(id), {
-      method: "PATCH",
-      headers: dbHeaders(),
-      body: JSON.stringify({ status })
-    });
-    if (res.ok) {
-      setPedidos(function(p) {
-        return p.map(function(x) {
-          return x.id === id ? Object.assign({}, x, { status }) : x;
-        });
-      });
-    } else {
-      const err = await res.text();
-      console.error("updateStatus error:", err);
-      alert("Erro ao actualizar: " + err.slice(0, 200));
-    }
+    const res = await fetch(SUPABASE_URL + "/rest/v1/pedidos_extra?id=eq." + encodeURIComponent(id), { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ status }) });
+    if (res.ok) { setPedidos(function(p) { return p.map(function(x) { return x.id === id ? Object.assign({}, x, { status }) : x; }); }); }
+    else { const err = await res.text(); alert("Erro ao actualizar: " + err.slice(0, 200)); }
   }
   async function openSwap(p) {
     setSwapPedido(p);
     const jobs = await db.list("servicos", "?select=*&client_id=eq." + encodeURIComponent(p.client_id) + "&status=neq.completed&order=date");
-    setClientJobs(jobs || []);
-    setSelJob(null);
-    setTaskOut("");
-    setTaskIn(p.descricao || p.tipo || "");
-    setSwapJob(true);
+    setClientJobs(jobs || []); setSelJob(null); setTaskOut(""); setTaskIn(p.descricao || p.tipo || ""); setSwapJob(true);
   }
   async function confirmSwap() {
     if (!selJob || !taskOut || !taskIn) return;
-    const job = clientJobs.find(function(j) {
-      return j.id === selJob;
-    });
+    const job = clientJobs.find(function(j) { return j.id === selJob; });
     if (!job) return;
-    const newCl = (job.cl || []).filter(function(t) {
-      return t !== taskOut;
-    }).concat([taskIn]);
+    const newCl = (job.cl || []).filter(function(t) { return t !== taskOut; }).concat([taskIn]);
     await db.update("servicos", selJob, { cl: newCl });
     await updateStatus(swapPedido.id, "aprovado");
-    setSwapJob(null);
-    setSwapPedido(null);
+    setSwapJob(null); setSwapPedido(null);
     alert("Troca efectuada com sucesso!");
   }
-  const pendentes = pedidos.filter(function(p) {
-    return !p.status || p.status === "pendente";
+  // Group by client
+  var byClient = {};
+  pedidos.forEach(function(p) {
+    if (!byClient[p.client_id]) byClient[p.client_id] = [];
+    byClient[p.client_id].push(p);
   });
-  const resolvidos = pedidos.filter(function(p) {
-    return p.status && p.status !== "pendente";
-  });
+  var clientList = Object.keys(byClient).map(function(cid) {
+    var cps = byClient[cid];
+    var pendentes = cps.filter(function(p) { return !p.status || p.status === "pendente"; }).length;
+    return { id: cid, name: clientsMap[cid] ? clientsMap[cid].name : cid, pedidos: cps, pendentes: pendentes };
+  }).sort(function(a, b) { return b.pendentes - a.pendentes; });
+  var totalPendentes = pedidos.filter(function(p) { return !p.status || p.status === "pendente"; }).length;
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar pedidos...");
-  function PedidoCard(props) {
-    const p = props.pedido;
-    const isPendente = !p.status || p.status === "pendente";
-    const cl = clientsMap[p.client_id];
-    return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { borderLeft: "4px solid " + (isPendente ? "#F59E0B" : "#16A34A"), marginBottom: 12 }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, cl ? cl.name : p.client_id), p.contact_name && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, "Pedido por: ", p.contact_name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } }, new Date(p.created_at).toLocaleDateString("pt-PT", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }))), /* @__PURE__ */ React.createElement(Bdg, { label: p.status || "Pendente", bg: isPendente ? "#FEF3C7" : "#DCFCE7", tx: isPendente ? "#92400E" : "#15803D" })), /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, color: "#2E6DA4", fontSize: 14, marginBottom: 6 } }, p.tipo), p.descricao && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#475569", background: "#F8FAFC", borderRadius: 8, padding: "10px 12px", marginBottom: 12, lineHeight: 1.6 } }, p.descricao), isPendente && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
-      openSwap(p);
-    }, style: Object.assign({}, btnG, { flex: 1 }) }, "Trocar tarefa na checklist"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-      updateStatus(p.id, "aprovado");
-    }, style: Object.assign({}, btnO, { flex: 1 }) }, "Aprovar"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-      updateStatus(p.id, "recusado");
-    }, style: Object.assign({}, btnR, { flex: 1 }) }, "Recusar"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-      updateStatus(p.id, "visto");
-    }, style: Object.assign({}, btnX, { flex: 1 }) }, "Visto")));
+  if (selCliente) {
+    var clientePedidos = byClient[selCliente.id] || [];
+    var pendentes2 = clientePedidos.filter(function(p) { return !p.status || p.status === "pendente"; });
+    var resolvidos2 = clientePedidos.filter(function(p) { return p.status && p.status !== "pendente"; });
+    return /* @__PURE__ */ React.createElement("div", null,
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 20 } },
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setSelCliente(null); }, style: Object.assign({}, btnO, { padding: "8px 14px", fontSize: 13 }) }, "\u2190 Voltar"),
+        /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 20, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, selCliente.name)
+      ),
+      pendentes2.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 20 } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#F59E0B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 } }, "Pendentes (", pendentes2.length, ")"),
+        pendentes2.map(function(p) {
+          return /* @__PURE__ */ React.createElement("div", { key: p.id, style: Object.assign({}, card, { borderLeft: "4px solid #F59E0B", marginBottom: 12 }) },
+            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 } },
+              /* @__PURE__ */ React.createElement("div", null,
+                /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#2E6DA4" } }, p.tipo),
+                p.contact_name && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, "por ", p.contact_name),
+                /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } }, new Date(p.created_at).toLocaleDateString("pt-PT", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }))
+              ),
+              /* @__PURE__ */ React.createElement(Bdg, { label: "Pendente", bg: "#FEF3C7", tx: "#92400E" })
+            ),
+            p.descricao && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#475569", background: "#F8FAFC", borderRadius: 8, padding: "10px 12px", marginBottom: 12, lineHeight: 1.6 } }, p.descricao),
+            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+              /* @__PURE__ */ React.createElement("button", { onClick: function() { openSwap(p); }, style: Object.assign({}, btnG, { flex: 1 }) }, "Trocar tarefa"),
+              /* @__PURE__ */ React.createElement("button", { onClick: function() { updateStatus(p.id, "aprovado"); }, style: Object.assign({}, btnO, { flex: 1 }) }, "Aprovar"),
+              /* @__PURE__ */ React.createElement("button", { onClick: function() { updateStatus(p.id, "recusado"); }, style: Object.assign({}, btnR, { flex: 1 }) }, "Recusar"),
+              /* @__PURE__ */ React.createElement("button", { onClick: function() { updateStatus(p.id, "visto"); }, style: Object.assign({}, btnX, { flex: 1 }) }, "Visto")
+            )
+          );
+        })
+      ),
+      resolvidos2.length > 0 && /* @__PURE__ */ React.createElement("div", null,
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 } }, "Resolvidos (", resolvidos2.length, ")"),
+        resolvidos2.map(function(p) {
+          return /* @__PURE__ */ React.createElement("div", { key: p.id, style: Object.assign({}, card, { borderLeft: "4px solid #16A34A", marginBottom: 10, padding: "12px 16px" }) },
+            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+              /* @__PURE__ */ React.createElement("div", null,
+                /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#334155" } }, p.tipo),
+                p.contact_name && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, "por ", p.contact_name)
+              ),
+              /* @__PURE__ */ React.createElement(Bdg, { label: p.status, bg: "#DCFCE7", tx: "#15803D" })
+            )
+          );
+        })
+      ),
+      swapJob && swapPedido && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 20 } },
+        /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 28, width: "100%", maxWidth: 520, maxHeight: "80vh", overflowY: "auto" } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 18, color: "#1A3A5C", marginBottom: 4 } }, "Trocar tarefa na checklist"),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 20 } }, "Pedido de: ", swapPedido.contact_name || "Cliente", " \u2014 ", swapPedido.tipo),
+          /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } },
+            /* @__PURE__ */ React.createElement("label", { style: lbl }, "Escolhe o servi\xE7o onde aplicar a troca"),
+            /* @__PURE__ */ React.createElement("select", { style: inp, value: selJob || "", onChange: function(e) { setSelJob(e.target.value); } },
+              /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014 Selecciona um servi\xE7o \u2014"),
+              clientJobs.map(function(j) { return /* @__PURE__ */ React.createElement("option", { key: j.id, value: j.id }, (/* @__PURE__ */ new Date(j.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" }), " \u2014 ", j.t1, " \u2014 ", j.svc); })
+            )
+          ),
+          selJob && (function() {
+            const job = clientJobs.find(function(j) { return j.id === selJob; });
+            const cl = job ? job.cl || [] : [];
+            return /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } },
+              /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tarefa a remover da checklist"),
+              cl.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8" } }, "Este servi\xE7o n\xE3o tem checklist definida.") :
+              cl.map(function(t) { return /* @__PURE__ */ React.createElement("div", { key: t, onClick: function() { setTaskOut(t); }, style: { padding: "10px 14px", borderRadius: 8, border: "1.5px solid " + (taskOut === t ? "#EF4444" : "#E2EBF4"), background: taskOut === t ? "#FEE2E2" : "#F8FAFC", cursor: "pointer", fontSize: 13, marginBottom: 6, color: taskOut === t ? "#991B1B" : "#334155", fontWeight: taskOut === t ? 700 : 500 } }, t); })
+            );
+          })(),
+          /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 20 } },
+            /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tarefa nova a entrar"),
+            /* @__PURE__ */ React.createElement("input", { style: inp, value: taskIn, onChange: function(e) { setTaskIn(e.target.value); }, placeholder: "Ex: Limpar janelas exteriores" })
+          ),
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10 } },
+            /* @__PURE__ */ React.createElement("button", { onClick: function() { setSwapJob(null); setSwapPedido(null); }, style: Object.assign({}, btnX, { flex: 1 }) }, "Cancelar"),
+            /* @__PURE__ */ React.createElement("button", { onClick: confirmSwap, disabled: !selJob || !taskOut || !taskIn, style: Object.assign({}, btnG, { flex: 2, opacity: !selJob || !taskOut || !taskIn ? 0.5 : 1 }) }, "Confirmar troca")
+          )
+        )
+      )
+    );
   }
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 24 } }, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Pedidos Extra"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, pendentes.length, " pendente", pendentes.length !== 1 ? "s" : "")), pedidos.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16, marginBottom: 8 } }, "Sem pedidos extra"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13 } }, "Quando um cliente fizer um pedido pelo portal, aparece aqui.")) : /* @__PURE__ */ React.createElement("div", null, pendentes.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#F59E0B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 } }, "Pendentes (", pendentes.length, ")"), pendentes.map(function(p) {
-    return /* @__PURE__ */ React.createElement(PedidoCard, { key: p.id, pedido: p });
-  })), resolvidos.length > 0 && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 } }, "Resolvidos (", resolvidos.length, ")"), resolvidos.map(function(p) {
-    return /* @__PURE__ */ React.createElement(PedidoCard, { key: p.id, pedido: p });
-  }))), swapJob && swapPedido && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 20 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 28, width: "100%", maxWidth: 520, maxHeight: "80vh", overflowY: "auto" } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 18, color: "#1A3A5C", marginBottom: 4 } }, "Trocar tarefa na checklist"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 20 } }, "Pedido de: ", swapPedido.contact_name || "Cliente", " \u2014 ", swapPedido.tipo), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Escolhe o servi\xE7o onde aplicar a troca"), /* @__PURE__ */ React.createElement("select", { style: inp, value: selJob || "", onChange: function(e) {
-    setSelJob(e.target.value);
-  } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014 Selecciona um servi\xE7o \u2014"), clientJobs.map(function(j) {
-    return /* @__PURE__ */ React.createElement("option", { key: j.id, value: j.id }, (/* @__PURE__ */ new Date(j.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" }), " \u2014 ", j.t1, " \u2014 ", j.svc);
-  }))), selJob && (function() {
-    const job = clientJobs.find(function(j) {
-      return j.id === selJob;
-    });
-    const cl = job ? job.cl || [] : [];
-    return /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tarefa a remover da checklist"), cl.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8" } }, "Este servi\xE7o n\xE3o tem checklist definida.") : cl.map(function(t) {
-      return /* @__PURE__ */ React.createElement("div", { key: t, onClick: function() {
-        setTaskOut(t);
-      }, style: { padding: "10px 14px", borderRadius: 8, border: "1.5px solid " + (taskOut === t ? "#EF4444" : "#E2EBF4"), background: taskOut === t ? "#FEE2E2" : "#F8FAFC", cursor: "pointer", fontSize: 13, marginBottom: 6, color: taskOut === t ? "#991B1B" : "#334155", fontWeight: taskOut === t ? 700 : 500 } }, t);
-    }));
-  })(), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 20 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tarefa nova a entrar"), /* @__PURE__ */ React.createElement("input", { style: inp, value: taskIn, onChange: function(e) {
-    setTaskIn(e.target.value);
-  }, placeholder: "Ex: Limpar janelas exteriores" })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
-    setSwapJob(null);
-    setSwapPedido(null);
-  }, style: Object.assign({}, btnX, { flex: 1 }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: confirmSwap, disabled: !selJob || !taskOut || !taskIn, style: Object.assign({}, btnG, { flex: 2, opacity: !selJob || !taskOut || !taskIn ? 0.5 : 1 }) }, "Confirmar troca")))));
+  return /* @__PURE__ */ React.createElement("div", null,
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 } },
+      /* @__PURE__ */ React.createElement("div", null,
+        /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Pedidos Extra"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, totalPendentes, " pendente", totalPendentes !== 1 ? "s" : "", " \u2014 ", clientList.length, " clientes")
+      ),
+      totalPendentes > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF3C7", borderRadius: 10, padding: "8px 16px", display: "flex", alignItems: "center", gap: 8 } },
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 18 } }, "\uD83D\uDCE5"),
+        /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, color: "#92400E", fontSize: 13 } }, totalPendentes, " pedido", totalPendentes !== 1 ? "s" : "", " por resolver")
+      )
+    ),
+    clientList.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) },
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16, marginBottom: 8 } }, "Sem pedidos extra"),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13 } }, "Quando um cliente fizer um pedido pelo portal, aparece aqui.")
+    ) :
+    /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 14 } },
+      clientList.map(function(c) {
+        var temPendentes = c.pendentes > 0;
+        return /* @__PURE__ */ React.createElement("div", { key: c.id, onClick: function() { setSelCliente(c); }, style: Object.assign({}, card, { cursor: "pointer", padding: 18, position: "relative", borderTop: "3px solid " + (temPendentes ? "#F59E0B" : "#16A34A") }) },
+          temPendentes && /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", top: -8, right: -8, background: "#F59E0B", color: "#fff", borderRadius: "50%", width: 22, height: 22, fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid #fff" } }, c.pendentes),
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.name),
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+            /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 700, color: temPendentes ? "#F59E0B" : "#16A34A" } }, temPendentes ? c.pendentes + " pendente" + (c.pendentes !== 1 ? "s" : "") : "\u2713 Resolvido"),
+            /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, c.pedidos.length, " total")
+          )
+        );
+      })
+    )
+  );
 }
+
 function Manager(props) {
   const onExit = props.onExit;
   const gestor = props.gestor || { nivel: "director", menus: ["home", "finance", "routes", "clients", "pedidos", "avaliacoes", "formacao", "relatorio", "employees"] };
