@@ -399,7 +399,7 @@ function Finance() {
         d.setDate(d.getDate() + 1);
       }
       if (tipoAus === "férias") { diasFerias += dias; }
-      else if (tipoAus === "baixa médica" || tipoAus === "baixa") { diasBaixa += dias; if (dias > 3) diasBaixa = dias - 3; }
+      else if (tipoAus === "baixa médica" || tipoAus === "baixa m\xe9dica" || tipoAus === "baixa" || tipoAus.indexOf("baixa") !== -1) { diasBaixa += dias; if (diasBaixa > 3) diasBaixa = diasBaixa - 3; }
       else { temAusenciaPenalizante = true; }
     });
     var temAusencia = temAusenciaPenalizante || diasBaixa > 0;
