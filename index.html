@@ -5084,7 +5084,7 @@ function ClientPortal(props) {
   useEffect(function() {
     if (phase !== "client-portal") return;
     var timer = setInterval(function() {
-      if (Date.now() - clientLastActivity > 60000) {
+      if (Date.now() - clientLastActivity > 15000) {
         window.location.href = "https://samorcleangeral-app.github.io/SamorClean/sessao-terminada.html";
       }
     }, 10000);
