@@ -1815,12 +1815,22 @@ function Clients() {
       return /* @__PURE__ */ React.createElement("button", { key: t, onClick: function() {
         setFt(t);
       }, style: Object.assign({}, ft === t ? btn : btnO, { padding: "8px 14px", fontSize: 12 }) }, t);
-    }), /* @__PURE__ */ React.createElement("div", { style: { marginLeft: "auto", fontSize: 12, color: "#64748B" } }, filt.length, " resultados")), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 } }, filt.map(function(c) {
+    }), /* @__PURE__ */ React.createElement("div", { style: { marginLeft: "auto", fontSize: 12, color: "#64748B" } }, filt.length, " resultados")), /* @__PURE__ */ React.createElement("div", null, filt.map(function(c) {
       const rec = (c.hours_contracted || 0) * (c.price_per_hour || 13.66);
-      return /* @__PURE__ */ React.createElement("div", { key: c.id, onClick: function() {
-        setSel(c);
-        setView("detail");
-      }, style: Object.assign({}, card, { cursor: "pointer", padding: 18, borderLeft: "4px solid #2E6DA4", marginBottom: 0 }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, c.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 2 } }, c.id)), /* @__PURE__ */ React.createElement(Bdg, { label: c.type })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#334155", marginBottom: 2 } }, "Servi\xE7o: ", c.service), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#334155", marginBottom: 6 } }, "Freq: ", c.freq), rec > 0 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#16A34A" } }, fmt(rec), "/sem s/IVA"));
+      const freqCor = (c.freq || "").toLowerCase() === "semanal" ? "#16A34A" : (c.freq || "").toLowerCase() === "quinzenal" ? "#F59E0B" : (c.freq || "").toLowerCase() === "mensal" ? "#2E6DA4" : "#94A3B8";
+      return /* @__PURE__ */ React.createElement("div", { key: c.id, onClick: function() { setSel(c); setView("detail"); }, style: Object.assign({}, card, { cursor: "pointer", padding: "14px 18px", marginBottom: 8, display: "flex", alignItems: "center", gap: 16, borderLeft: "4px solid " + freqCor }) },
+        /* @__PURE__ */ React.createElement("div", { style: { width: 40, height: 40, borderRadius: 10, background: freqCor + "20", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } },
+          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 18 } }, c.type === "Particular" ? "\uD83D\uDC64" : "\uD83C\uDFE2")
+        ),
+        /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.name),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, c.service, c.address ? " \u2022 " + c.address : "")
+        ),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 } },
+          /* @__PURE__ */ React.createElement("span", { style: { background: freqCor + "20", color: freqCor, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, c.freq || "\u2014"),
+          rec > 0 && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#16A34A" } }, fmt(rec), "\u20AC/sem")
+        )
+      );
     })));
   }
   if (view === "detail" && sel) {
@@ -4781,8 +4791,7 @@ function Employee(props) {
     return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32 } },
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 64, marginBottom: 20 } }, "\uD83D\uDD12"),
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 8, textAlign: "center" } }, "Sess\xE3o expirada"),
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "rgba(255,255,255,0.6)", marginBottom: 32, textAlign: "center" } }, "Por seguran\xE7a, a sess\xE3o terminou ap\xF3s 5 minutos de inactividade."),
-      /* @__PURE__ */ React.createElement("button", { onClick: function() { setPhase("login"); setEmp(null); setPin(""); setLastActivity(Date.now()); }, style: { background: "#2E6DA4", border: "none", borderRadius: 12, padding: "14px 32px", color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer" } }, "Entrar novamente")
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "rgba(255,255,255,0.6)", textAlign: "center", lineHeight: 1.6 } }, "Por seguran\xE7a, a sess\xE3o terminou.", /* @__PURE__ */ React.createElement("br", null), "Para aceder novamente, utiliza o QR code do portal.")
     );
   }
   if (phase === "login") {
@@ -5313,8 +5322,7 @@ function ClientPortal(props) {
     return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32 } },
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 64, marginBottom: 20 } }, "\uD83D\uDD12"),
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 8, textAlign: "center" } }, "Sess\xE3o expirada"),
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "rgba(255,255,255,0.6)", marginBottom: 32, textAlign: "center" } }, "Por seguran\xE7a, a sess\xE3o terminou ap\xF3s 1 minuto de inactividade."),
-      /* @__PURE__ */ React.createElement("button", { onClick: function() { setClientTimedOut(false); setPhase("welcome"); setClientLastActivity(Date.now()); }, style: { background: "#38B6D8", border: "none", borderRadius: 12, padding: "14px 32px", color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer" } }, "Entrar novamente")
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "rgba(255,255,255,0.6)", textAlign: "center", lineHeight: 1.6 } }, "Por seguran\xE7a, a sess\xE3o terminou.", /* @__PURE__ */ React.createElement("br", null), "Para aceder novamente, utilize o QR code.")
     );
   }
   if (phase === "welcome") {
