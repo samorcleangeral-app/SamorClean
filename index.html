@@ -143,7 +143,7 @@ const TIME_SLOTS = (function() {
   }
   return slots;
 })();
-const EC = { F001: "#2E6DA4", F002: "#0F766E", F003: "#7C3AED", F004: "#C2410C" };
+const EC = { F001: "#2E6DA4", F002: "#0F766E", F003: "#7C3AED", F004: "#C2410C", F006: "#B45309", F007: "#0369A1", F999: "#BE185D" };
 const PRICE_PER_HOUR = 13.66;
 const COST_PER_HOUR_PERSON = 8.68;
 const PRODUCTS_PCT = 0.1;
@@ -658,21 +658,7 @@ function Finance() {
       )
     ),
     finTab === "geral" && /* @__PURE__ */ React.createElement("div", null,
-    alertasFreq.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#FFF7ED", border: "1.5px solid #F59E0B", borderRadius: 10, padding: "12px 16px", marginBottom: 16 } },
-      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#92400E", marginBottom: 8 } }, "\u23F0 Clientes quinzenais/mensais a agendar:"),
-      alertasFreq.map(function(a, i) {
-        var cor = a.diasRestantes <= 0 ? "#DC2626" : a.diasRestantes === 1 ? "#F97316" : "#F59E0B";
-        var msg = a.diasRestantes <= 0 ? "Hoje!" : a.diasRestantes === 1 ? "Falta 1 dia" : "Faltam " + a.diasRestantes + " dias";
-        return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < alertasFreq.length - 1 ? "1px solid #FDE68A" : "none" } },
-          /* @__PURE__ */ React.createElement("div", null,
-            /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, fontSize: 13, color: "#78350F" } }, a.name),
-            /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#92400E", marginLeft: 8 } }, a.freq),
-            a.lastDate && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8", marginLeft: 8 } }, "\xDAltimo: ", new Date(a.lastDate + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }))
-          ),
-          /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 12, color: cor } }, msg)
-        );
-      })
-    ), emAtraso.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, emAtraso.map(function(j) {
+    emAtraso.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, emAtraso.map(function(j) {
     const diffDays = Math.floor((now - /* @__PURE__ */ new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3));
     const cor = diffDays >= 30 ? "#DC2626" : diffDays >= 15 ? "#F97316" : "#F59E0B";
     const bg = diffDays >= 30 ? "#FEE2E2" : diffDays >= 15 ? "#FFF7ED" : "#FEF3C7";
@@ -4215,6 +4201,8 @@ function Manager(props) {
   const [pedidosPendentes, setPedidosPendentes] = useState(0);
   const [pedidosColabPendentes, setPedidosColabPendentes] = useState(0);
   const [notasClientesNovas, setNotasClientesNovas] = useState(0);
+  const [avaliacoesNovas, setAvaliacoesNovas] = useState(0);
+  const [alertasFreqCount, setAlertasFreqCount] = useState(0);
   const [monthFat, setMonthFat] = useState(0);
   const [monthDivida, setMonthDivida] = useState(0);
   const [alertasFreqHome, setAlertasFreqHome] = useState([]);
@@ -4232,7 +4220,8 @@ function Manager(props) {
       db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd + "&status=eq.completed"),
       db.list("pedidos_colaboradores", "?select=id&estado=eq.pendente"),
       db.list("servicos", "?select=client_id,date&date=gte." + past60 + "&order=date.desc"),
-      db.list("client_notes", "?select=id&partilhada=eq.false&expires_at=gte." + new Date().toISOString())
+      db.list("client_notes", "?select=id&partilhada=eq.false&expires_at=gte." + new Date().toISOString()),
+      db.list("avaliacoes", "?select=id&vista=is.false")
     ]).then(function(results) {
       setClientCount(results[0] ? results[0].length : 0);
       setTodayJobs(results[1] || []);
@@ -4241,6 +4230,7 @@ function Manager(props) {
       setPedidosPendentes(results[4] ? results[4].length : 0);
       setPedidosColabPendentes(results[6] ? results[6].length : 0);
       setNotasClientesNovas(results[8] ? results[8].length : 0);
+      setAvaliacoesNovas(results[9] ? results[9].length : 0);
       const cm = {};
       (results[0] || []).forEach(function(c) {
         cm[c.id] = c;
@@ -4299,7 +4289,7 @@ function Manager(props) {
     return canSee(i.k);
   });
   return /* @__PURE__ */ React.createElement("div", { style: { background: "#F4F8FB", minHeight: "100vh", color: "#334155" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 220, background: "#1A3A5C", minHeight: "100vh", display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "24px 20px 20px", borderBottom: "1px solid rgba(255,255,255,0.1)" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: "#fff" } }, "SamorClean"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#38B6D8", fontWeight: 600, letterSpacing: 1.5, marginTop: 2 } }, "GEST\xC3O OPERACIONAL")), /* @__PURE__ */ React.createElement("nav", { style: { flex: 1, padding: "12px" } }, navItems.map(function(item) {
-    const badge = item.k === "pedidos" && pedidosPendentes > 0 ? pedidosPendentes : item.k === "pedidos_colab" && pedidosColabPendentes > 0 ? pedidosColabPendentes : item.k === "clients" && notasClientesNovas > 0 ? notasClientesNovas : 0;
+    const badge = item.k === "pedidos" && pedidosPendentes > 0 ? pedidosPendentes : item.k === "pedidos_colab" && pedidosColabPendentes > 0 ? pedidosColabPendentes : item.k === "clients" && notasClientesNovas > 0 ? notasClientesNovas : item.k === "avaliacoes" && avaliacoesNovas > 0 ? avaliacoesNovas : 0;
     return /* @__PURE__ */ React.createElement("button", { key: item.k, onClick: function() {
       setView(item.k);
     }, style: { display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "11px 12px", borderRadius: 8, background: view === item.k ? "rgba(56,182,216,0.18)" : "transparent", border: "none", color: view === item.k ? "#38B6D8" : "rgba(255,255,255,0.6)", fontSize: 13, fontWeight: view === item.k ? 700 : 500, cursor: "pointer", marginBottom: 4, textAlign: "left" } }, /* @__PURE__ */ React.createElement("span", null, item.l), badge > 0 ? /* @__PURE__ */ React.createElement("span", { style: { background: "#EF4444", color: "#fff", borderRadius: 10, padding: "2px 7px", fontSize: 10, fontWeight: 800, minWidth: 18, textAlign: "center" } }, badge) : null);
