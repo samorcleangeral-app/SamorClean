@@ -221,6 +221,92 @@ const btnR = { background: "#EF4444", color: "#fff", border: "none", borderRadiu
 const btnO = { background: "transparent", color: "#2E6DA4", border: "1.5px solid #2E6DA4", borderRadius: 8, padding: "9px 18px", fontWeight: 700, fontSize: 14, cursor: "pointer" };
 const btnX = { background: "transparent", color: "#64748B", border: "none", borderRadius: 8, padding: "9px 14px", fontWeight: 600, fontSize: 14, cursor: "pointer" };
 const divid = { borderTop: "1px solid #E2EBF4", margin: "16px 0" };
+function calcDiasUteisMes(refDate) {
+  var count = 0;
+  var d = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
+  while (d.getMonth() === refDate.getMonth()) {
+    var dow = d.getDay();
+    if (dow !== 0 && dow !== 6) count++;
+    d.setDate(d.getDate() + 1);
+  }
+  return count;
+}
+function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate) {
+  var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
+  if (!rh) return { total: 0, detalhe: [], tipo: null };
+  var tipo = rh.tipo_contrato || "Contrato";
+  var detalhe = [];
+  var total = 0;
+  var diasUteisDoMes = calcDiasUteisMes(refDate);
+  var ausenciasEmp = absData.filter(function(a) { return a.funcionario_id === emp.id; });
+  var diasBaixa = 0;
+  var diasFerias = 0;
+  var temAusenciaPenalizante = false;
+  var monthStart2 = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
+  var monthEnd2 = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0);
+  ausenciasEmp.forEach(function(a) {
+    var start = new Date((a.data_inicio || "") + "T12:00:00");
+    var end = new Date((a.data_fim || a.data_inicio || "") + "T12:00:00");
+    var tipoAus = (a.tipo || "").toLowerCase();
+    var d = new Date(Math.max(start, monthStart2));
+    var dEnd = new Date(Math.min(end, monthEnd2));
+    var dias = 0;
+    while (d <= dEnd) {
+      if (d.getDay() !== 0 && d.getDay() !== 6) dias++;
+      d.setDate(d.getDate() + 1);
+    }
+    if (tipoAus === "férias") { diasFerias += dias; }
+    else if (tipoAus === "baixa médica" || tipoAus === "baixa m\xe9dica" || tipoAus === "baixa" || tipoAus.indexOf("baixa") !== -1) { diasBaixa += dias; if (diasBaixa > 3) diasBaixa = diasBaixa - 3; }
+    else { temAusenciaPenalizante = true; }
+  });
+  var temAusencia = temAusenciaPenalizante || diasBaixa > 0;
+  var premio = (temAusencia || diasFerias > 0) ? 0 : 50;
+  if (tipo === "Recibo Verde") {
+    var diasTrabalhados = new Set();
+    monthJobs.forEach(function(j) {
+      if ((j.team || []).indexOf(emp.id) !== -1) diasTrabalhados.add(j.date);
+    });
+    var numDias = diasTrabalhados.size;
+    var valorDia = parseFloat(rh.valor_dia) || 0;
+    var custo = numDias * valorDia;
+    detalhe.push({ l: "Recibo Verde (" + numDias + " dias × " + fmt(valorDia) + "€)", v: custo });
+    total = custo;
+  } else {
+    var salario = parseFloat(rh.salario_base) || 0;
+    var diasEfectivos = Math.max(0, diasUteisDoMes - diasBaixa);
+    var diasAlim = Math.max(0, diasUteisDoMes - diasFerias - diasBaixa);
+    var subAlim = diasAlim * 6;
+    var salarioEfectivo = diasBaixa > 0 ? salario * (diasEfectivos / Math.max(1, diasUteisDoMes)) : salario;
+    var subFerias = salario * 0.0833;
+    var subNatal = salario * 0.0833;
+    var ss = salarioEfectivo * 0.2375;
+    var seguro = salarioEfectivo * 0.015;
+    detalhe.push({ l: "Salário base" + (diasBaixa > 0 ? " (prop. " + diasEfectivos + "/" + diasUteisDoMes + " dias)" : ""), v: salarioEfectivo });
+    detalhe.push({ l: "Sub. alimentação (" + diasAlim + " dias × 6€)" + (diasFerias > 0 || diasBaixa > 0 ? " *" : ""), v: subAlim });
+    detalhe.push({ l: "Sub. férias (8,33%)", v: subFerias });
+    detalhe.push({ l: "Sub. Natal (8,33%)", v: subNatal });
+    detalhe.push({ l: "Seg. Social patronal (23,75%)", v: ss });
+    detalhe.push({ l: "Seguro acidentes (1,5%)", v: seguro });
+    total = salarioEfectivo + subAlim + subFerias + subNatal + ss + seguro;
+  }
+  detalhe.push({ l: "Prémio assiduidade", v: premio });
+  total += premio;
+  return { total: total, detalhe: detalhe, tipo: tipo };
+}
+function calcCustoHoraReal(emp, rhData, refDate) {
+  var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
+  if (!rh) return 0;
+  var tipo = rh.tipo_contrato || "Contrato";
+  var horasDia = parseFloat(rh.horas_dia) || 8;
+  if (tipo === "Recibo Verde") {
+    return (parseFloat(rh.valor_dia) || 0) / horasDia;
+  } else {
+    var salario = parseFloat(rh.salario_base) || 0;
+    var diasUteis = calcDiasUteisMes(refDate) || 22;
+    var custoMensal = salario + diasUteis * 6 + salario * 0.0833 + salario * 0.0833 + salario * 0.2375 + salario * 0.015;
+    return custoMensal / diasUteis / horasDia;
+  }
+}
 function Finance() {
   const [loading, setLoading] = useState(true);
   const [monthJobs, setMonthJobs] = useState([]);
@@ -252,10 +338,10 @@ function Finance() {
       db.list("funcionarios", "?select=*"),
       db.list("ausencias", "?select=*&data_inicio=lte." + monthEnd + "&data_fim=gte." + monthStart)
     ]).then(function(results) {
-      setMonthJobs(results[0] || []);
-      setLast6Months(results[1] || []);
       const cm = {};
       (results[2] || []).forEach(function(c) { cm[c.id] = c; });
+      setMonthJobs((results[0] || []).filter(function(j) { return cm[j.client_id]; }));
+      setLast6Months((results[1] || []).filter(function(j) { return cm[j.client_id]; }));
       setClientsMap(cm);
       setClientes(results[2] || []);
       setDespesas(results[3] || []);
@@ -374,93 +460,11 @@ function Finance() {
   })();
 
   function custoColaborador(emp) {
-    var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
-    if (!rh) return { total: 0, detalhe: [] };
-    var tipo = rh.tipo_contrato || "Contrato";
-    var detalhe = [];
-    var total = 0;
-    // Calculate absence days this month
-    var ausenciasEmp = absData.filter(function(a) { return a.funcionario_id === emp.id; });
-    var diasBaixa = 0;
-    var diasFerias = 0;
-    var temAusenciaPenalizante = false;
-    var monthStart2 = new Date(now.getFullYear(), now.getMonth(), 1);
-    var monthEnd2 = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    ausenciasEmp.forEach(function(a) {
-      var start = new Date((a.data_inicio || "") + "T12:00:00");
-      var end = new Date((a.data_fim || a.data_inicio || "") + "T12:00:00");
-      var tipoAus = (a.tipo || "").toLowerCase();
-      // Count working days in absence period within this month
-      var d = new Date(Math.max(start, monthStart2));
-      var dEnd = new Date(Math.min(end, monthEnd2));
-      var dias = 0;
-      while (d <= dEnd) {
-        if (d.getDay() !== 0 && d.getDay() !== 6) dias++;
-        d.setDate(d.getDate() + 1);
-      }
-      if (tipoAus === "férias") { diasFerias += dias; }
-      else if (tipoAus === "baixa médica" || tipoAus === "baixa m\xe9dica" || tipoAus === "baixa" || tipoAus.indexOf("baixa") !== -1) { diasBaixa += dias; if (diasBaixa > 3) diasBaixa = diasBaixa - 3; }
-      else { temAusenciaPenalizante = true; }
-    });
-    var temAusencia = temAusenciaPenalizante || diasBaixa > 0;
-    var premio = (temAusencia || diasFerias > 0) ? 0 : 50;
-    if (tipo === "Recibo Verde") {
-      var diasTrabalhados = new Set();
-      monthJobs.forEach(function(j) {
-        if ((j.team || []).indexOf(emp.id) !== -1) diasTrabalhados.add(j.date);
-      });
-      var numDias = diasTrabalhados.size;
-      var valorDia = parseFloat(rh.valor_dia) || 0;
-      var custo = numDias * valorDia;
-      detalhe.push({ l: "Recibo Verde (" + numDias + " dias × " + fmt(valorDia) + "€)", v: custo });
-      total = custo;
-    } else {
-      var salario = parseFloat(rh.salario_base) || 0;
-      // Dias úteis efectivos (excluindo baixa - a SS paga)
-      var diasEfectivos = Math.max(0, diasUteisDoMes - diasBaixa);
-      // Sub. alimentação só nos dias que trabalhou (excluindo férias e baixa)
-      var diasAlim = Math.max(0, diasUteisDoMes - diasFerias - diasBaixa);
-      var subAlim = diasAlim * 6;
-      // Salário proporcional (sem os dias de baixa - SS paga)
-      var salarioEfectivo = diasBaixa > 0 ? salario * (diasEfectivos / Math.max(1, diasUteisDoMes)) : salario;
-      var subFerias = salario * 0.0833;
-      var subNatal = salario * 0.0833;
-      var ss = salarioEfectivo * 0.2375;
-      var seguro = salarioEfectivo * 0.015;
-      detalhe.push({ l: "Salário base" + (diasBaixa > 0 ? " (prop. " + diasEfectivos + "/" + diasUteisDoMes + " dias)" : ""), v: salarioEfectivo });
-      detalhe.push({ l: "Sub. alimentação (" + diasAlim + " dias × 6€)" + (diasFerias > 0 || diasBaixa > 0 ? " *" : ""), v: subAlim });
-      detalhe.push({ l: "Sub. férias (8,33%)", v: subFerias });
-      detalhe.push({ l: "Sub. Natal (8,33%)", v: subNatal });
-      detalhe.push({ l: "Seg. Social patronal (23,75%)", v: ss });
-      detalhe.push({ l: "Seguro acidentes (1,5%)", v: seguro });
-      total = salarioEfectivo + subAlim + subFerias + subNatal + ss + seguro;
-    }
-    detalhe.push({ l: "Prémio assiduidade", v: premio });
-    total += premio;
-    return { total: total, detalhe: detalhe, tipo: tipo };
+    return calcCustoColaboradorMes(emp, rhData, absData, monthJobs, now);
   }
 
   function custoHoraReal(emp) {
-    var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
-    if (!rh) return 0;
-    var tipo = rh.tipo_contrato || "Contrato";
-    var horasDia = parseFloat(rh.horas_dia) || 8;
-    if (tipo === "Recibo Verde") {
-      return (parseFloat(rh.valor_dia) || 0) / horasDia;
-    } else {
-      var salario = parseFloat(rh.salario_base) || 0;
-      // Calculate dias uteis locally to avoid scope issues
-      var diasUteis = 0;
-      var dd = new Date(now.getFullYear(), now.getMonth(), 1);
-      while (dd.getMonth() === now.getMonth()) {
-        var dow = dd.getDay();
-        if (dow !== 0 && dow !== 6) diasUteis++;
-        dd.setDate(dd.getDate() + 1);
-      }
-      if (diasUteis === 0) diasUteis = 22;
-      var custoMensal = salario + diasUteis * 6 + salario * 0.0833 + salario * 0.0833 + salario * 0.2375 + salario * 0.015;
-      return custoMensal / diasUteis / horasDia;
-    }
+    return calcCustoHoraReal(emp, rhData, now);
   }
 
   var custosColab = emps.map(function(e) {
@@ -3802,15 +3806,18 @@ function RelatorioMensal() {
     setLoading(true);
     const from = localDateStr(new Date(ano, mes, 1));
     const to = localDateStr(new Date(ano, mes + 1, 0));
-    const [servicos, clientes, funcs, avs, pedidos, despesas] = await Promise.all([
+    const [servicos, clientes, funcs, avs, pedidos, despesas, rhData, absData] = await Promise.all([
       db.list("servicos", "?select=*&date=gte." + from + "&date=lte." + to + "&order=date"),
-      db.list("clientes", "?select=*"),
+      db.list("clientes", "?select=*&excluir_financeiro=is.false"),
       db.list("funcionarios", "?select=*"),
       db.list("avaliacoes", "?select=*"),
       db.list("pedidos_extra", "?select=*"),
-      db.list("despesas", "?select=*&data=gte." + from + "&data=lte." + to)
+      db.list("despesas", "?select=*&data=gte." + from + "&data=lte." + to),
+      db.list("funcionarios_rh", "?select=*"),
+      db.list("ausencias", "?select=*&data_inicio=lte." + to + "&data_fim=gte." + from)
     ]);
     const cm = {}, fm = {};
+    const rhSafe = rhData || [];
     (clientes || []).forEach(function(c) {
       cm[c.id] = c;
     });
@@ -3836,7 +3843,7 @@ function RelatorioMensal() {
       return ivaT === "autoliquidacao" ? j.val || 0 : (j.val || 0) * 1.23;
     }
     const completed = (servicos || []).filter(function(j) {
-      return j.status === "completed";
+      return j.status === "completed" && cm[j.client_id];
     });
     const fatTotal = completed.reduce(function(s, j) {
       return s + withIva(j);
@@ -3851,14 +3858,34 @@ function RelatorioMensal() {
       return s + (c && c.km_armazem ? c.km_armazem * 2 : 0);
     }, 0);
     const custoKm = kmTotal * CUSTO_KM;
+    // Horas totais (horas × equipa) para alocação proporcional dos custos operacionais — igual ao Financeiro
+    var refDate = new Date(ano, mes, 15);
+    function jobHoras(j) {
+      var t1 = (j.t1 || "0:0").split(":"); var t2 = (j.t2 || "0:0").split(":");
+      return Math.max(0, (parseInt(t2[0]) * 60 + parseInt(t2[1]) - parseInt(t1[0]) * 60 - parseInt(t1[1])) / 60);
+    }
+    var totalHorasMes = completed.reduce(function(s, j) { return s + jobHoras(j) * ((j.team || []).length || 1); }, 0);
+    var totalDespesasComKm = totalCustos + custoKm;
     const byClient = {};
     completed.forEach(function(j) {
-      if (!byClient[j.client_id]) byClient[j.client_id] = { servicos: 0, fat: 0, km: 0, checkIncomplete: 0 };
+      if (!byClient[j.client_id]) byClient[j.client_id] = { servicos: 0, fat: 0, km: 0, checkIncomplete: 0, horas: 0, custoMO: 0 };
       byClient[j.client_id].servicos++;
       byClient[j.client_id].fat += withIva(j);
       const c = cm[j.client_id];
       if (c && c.km_armazem) byClient[j.client_id].km += c.km_armazem * 2;
       if (j.checklist_incomplete) byClient[j.client_id].checkIncomplete++;
+      var horasJob = jobHoras(j);
+      var teamSize = (j.team || []).length || 1;
+      byClient[j.client_id].horas += horasJob * teamSize;
+      (j.team || []).forEach(function(eid) {
+        var empObj = fm[eid];
+        if (empObj) byClient[j.client_id].custoMO += calcCustoHoraReal(empObj, rhSafe, refDate) * horasJob;
+      });
+    });
+    Object.keys(byClient).forEach(function(cid) {
+      var proporcao = totalHorasMes > 0 ? byClient[cid].horas / totalHorasMes : 0;
+      byClient[cid].custosOp = totalDespesasComKm * proporcao;
+      byClient[cid].margemReal = byClient[cid].fat / 1.23 - byClient[cid].custoMO - byClient[cid].custosOp;
     });
     const byEmp = {};
     (funcs || []).forEach(function(f) {
@@ -3907,8 +3934,7 @@ function RelatorioMensal() {
       const cid = e[0], cs = e[1];
       const c = cm[cid];
       const nome = c ? c.name : "Desconhecido";
-      const custoKmC = cs.km * CUSTO_KM;
-      const margemC = cs.fat / 1.23 - custoKmC;
+      const margemC = cs.margemReal;
       return `<tr>
         <td style="padding:8px 10px;font-weight:600">${nome}</td>
         <td style="padding:8px 10px;text-align:center">${cs.servicos}</td>
@@ -6101,16 +6127,22 @@ function PortalArmazem() {
     });
     const hora = (/* @__PURE__ */ new Date()).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
     setDone({ tipo, nome: sel.name.split(" ")[0], hora });
-    setTimeout(function() {
-      setDone(null);
-      setSel(null);
-      setPin("");
-      setLastTipo(null);
-      setPinErr(false);
-    }, 3e3);
+    if (tipo === "saida") {
+      setTimeout(function() {
+        window.location.href = "https://samorcleangeral-app.github.io/SamorClean/sessao-terminada.html";
+      }, 3e3);
+    } else {
+      setTimeout(function() {
+        setDone(null);
+        setSel(null);
+        setPin("");
+        setLastTipo(null);
+        setPinErr(false);
+      }, 3e3);
+    }
   }
   const logoUrl = "https://dtydrnezzaykiaglwxfv.supabase.co/storage/v1/object/public/formacao/samorclean_logo.jpg";
-  if (done) return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 80, marginBottom: 16 } }, done.tipo === "entrada" ? "\u{1F7E2}" : "\u{1F534}"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, fontWeight: 900, color: "#fff", marginBottom: 8 } }, done.tipo === "entrada" ? "Bom trabalho!" : "At\xE9 amanh\xE3!"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, color: "#38B6D8", fontWeight: 700 } }, done.nome), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "rgba(255,255,255,0.6)", marginTop: 8 } }, done.tipo === "entrada" ? "Entrada" : "Sa\xEDda", " registada \xE0s ", done.hora)));
+  if (done) return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 80, marginBottom: 16 } }, done.tipo === "entrada" ? "\u{1F7E2}" : "\u{1F534}"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, fontWeight: 900, color: "#fff", marginBottom: 8 } }, done.tipo === "entrada" ? "Bom trabalho!" : "At\xE9 amanh\xE3!"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, color: "#38B6D8", fontWeight: 700 } }, done.nome), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "rgba(255,255,255,0.6)", marginTop: 8 } }, done.tipo === "entrada" ? "Entrada" : "Sa\xEDda", " registada \xE0s ", done.hora), done.tipo === "saida" && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 20 } }, "A fechar...")));
   if (lastTipo !== null) {
     const sugestao = lastTipo === "entrada" ? "saida" : "entrada";
     return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "rgba(255,255,255,0.06)", borderRadius: 20, padding: 32, maxWidth: 340, width: "100%", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 4 } }, "Ol\xE1, ", sel.name.split(" ")[0], "!"), lastTipo && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 24 } }, "\xDAltima ac\xE7\xE3o: ", lastTipo), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
