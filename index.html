@@ -2259,8 +2259,22 @@ function FichaRH(props) {
     }));
   }
   const tabs = [{ k: "dados", l: "Dados Pessoais" }, { k: "ausencias", l: "Aus\xEAncias" }, { k: "fardamento", l: "Fardamento" }, { k: "docs", l: "Documentos" }, { k: "avaliacao", l: "Avalia\xE7\xE3o Interna" }, { k: "picagens", l: "Picagens" }, { k: "pedidos_hist", l: "Pedidos" }];
+  const [novoPinGerado, setNovoPinGerado] = useState(null);
+  const [gerandoPin, setGerandoPin] = useState(false);
+  async function gerarNovoPin() {
+    if (!window.confirm("Gerar um novo PIN para " + sel.name + "? O PIN actual deixa de funcionar.")) return;
+    setGerandoPin(true);
+    const res = await fetch(SUPABASE_URL + "/rest/v1/rpc/gerar_novo_pin", { method: "POST", headers: dbHeaders(), body: JSON.stringify({ p_id: sel.id }) });
+    setGerandoPin(false);
+    if (res.ok) {
+      const novoPin = await res.json();
+      setNovoPinGerado(novoPin);
+    } else {
+      alert("Erro ao gerar novo PIN.");
+    }
+  }
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar ficha RH...");
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, display: "flex", alignItems: "center", gap: 16, padding: 20 }) }, /* @__PURE__ */ React.createElement(Av, { init: sel.av, size: 56, color: EC[sel.id] || "#2E6DA4" }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 18, color: "#1A3A5C" } }, sel.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 2 } }, sel.role, " \u2014 ", sel.id), sel.rating && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", marginTop: 2 } }, "Avalia\xE7\xE3o: ", sel.rating, " \u2605")), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right", fontSize: 12, color: "#64748B" } }, /* @__PURE__ */ React.createElement("div", null, "PIN: ", /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "monospace", fontWeight: 700 } }, sel.pin)))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" } }, tabs.map(function(t) {
+  return /* @__PURE__ */ React.createElement("div", null, novoPinGerado && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 28, maxWidth: 360, width: "100%", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, marginBottom: 12 } }, "\uD83D\uDD11"), /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 4 } }, "Novo PIN de ", sel.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 36, fontWeight: 900, color: "#2E6DA4", fontFamily: "monospace", letterSpacing: 4, margin: "16px 0" } }, novoPinGerado), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#EF4444", fontWeight: 700, marginBottom: 20 } }, "\u26A0 Anota agora \u2014 n\xE3o voltar\xE1 a aparecer."), /* @__PURE__ */ React.createElement("button", { onClick: function() { setNovoPinGerado(null); }, style: Object.assign({}, btnG, { width: "100%", textAlign: "center" }) }, "Ok, j\xE1 anotei"))), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, display: "flex", alignItems: "center", gap: 16, padding: 20 }) }, /* @__PURE__ */ React.createElement(Av, { init: sel.av, size: 56, color: EC[sel.id] || "#2E6DA4" }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 18, color: "#1A3A5C" } }, sel.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 2 } }, sel.role, " \u2014 ", sel.id), sel.rating && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", marginTop: 2 } }, "Avalia\xE7\xE3o: ", sel.rating, " \u2605")), /* @__PURE__ */ React.createElement("button", { onClick: gerarNovoPin, disabled: gerandoPin, style: Object.assign({}, btnO, { fontSize: 12, padding: "8px 14px", opacity: gerandoPin ? 0.6 : 1 }) }, gerandoPin ? "A gerar..." : "\uD83D\uDD11 Gerar novo PIN")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" } }, tabs.map(function(t) {
     return /* @__PURE__ */ React.createElement("button", { key: t.k, onClick: function() {
       setTab(t.k);
     }, style: { padding: "8px 14px", borderRadius: 8, border: "1.5px solid " + (tab === t.k ? "#2E6DA4" : "#E2EBF4"), background: tab === t.k ? "#EFF6FF" : "#fff", color: tab === t.k ? "#2E6DA4" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, t.l);
@@ -2268,9 +2282,7 @@ function FichaRH(props) {
     return /* @__PURE__ */ React.createElement("div", { key: f[0], style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, f[1]), /* @__PURE__ */ React.createElement("input", { style: inp, value: editForm[f[0]], onChange: function(e) {
       setEditForm(Object.assign({}, editForm, { [f[0]]: e.target.value }));
     } }));
-  }), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "PIN (6 d\xEDgitos)"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { fontFamily: "monospace" }), value: editForm.pin, onChange: function(e) {
-    setEditForm(Object.assign({}, editForm, { pin: e.target.value.replace(/[^0-9]/g, "").slice(0, 6) }));
-  }, maxLength: 6 })), /* @__PURE__ */ React.createElement("button", { onClick: saveEdit, disabled: saving, style: Object.assign({}, btn, { width: "100%", textAlign: "center", opacity: saving ? 0.6 : 1 }) }, saving ? "A guardar..." : "Guardar dados da app")), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Dados Pessoais (RH)"), rhForm && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tipo de contrato"), /* @__PURE__ */ React.createElement("select", { style: inp, value: rhForm.tipo_contrato || "Contrato", onChange: function(e) { setRhForm(Object.assign({}, rhForm, { tipo_contrato: e.target.value })); } }, /* @__PURE__ */ React.createElement("option", { value: "Contrato" }, "Contrato de Trabalho"), /* @__PURE__ */ React.createElement("option", { value: "Recibo Verde" }, "Recibo Verde / Independente"))), rhForm && rhForm.tipo_contrato === "Recibo Verde" ? /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Valor por dia (\u20AC)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: rhForm.valor_dia || "", placeholder: "Ex: 65.00", onFocus: function(e) { e.target.select(); }, onChange: function(e) { setRhForm(Object.assign({}, rhForm, { valor_dia: e.target.value })); } })) : rhForm && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Sal\xE1rio Base (\u20AC/m\xEAs)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: rhForm.salario_base || "", placeholder: "Ex: 820.00", onFocus: function(e) { e.target.select(); }, onChange: function(e) { setRhForm(Object.assign({}, rhForm, { salario_base: e.target.value })); } })), rhForm && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Horas por dia"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.5", min: "1", max: "12", value: rhForm.horas_dia || 8, onFocus: function(e) { e.target.select(); }, onChange: function(e) { setRhForm(Object.assign({}, rhForm, { horas_dia: e.target.value })); } }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 3 } }, "Full-time = 8h \u2014 Part-time = horas di\xE1rias reais")), rhForm && [
+  }), /* @__PURE__ */ React.createElement("button", { onClick: saveEdit, disabled: saving, style: Object.assign({}, btn, { width: "100%", textAlign: "center", opacity: saving ? 0.6 : 1 }) }, saving ? "A guardar..." : "Guardar dados da app")), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Dados Pessoais (RH)"), rhForm && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tipo de contrato"), /* @__PURE__ */ React.createElement("select", { style: inp, value: rhForm.tipo_contrato || "Contrato", onChange: function(e) { setRhForm(Object.assign({}, rhForm, { tipo_contrato: e.target.value })); } }, /* @__PURE__ */ React.createElement("option", { value: "Contrato" }, "Contrato de Trabalho"), /* @__PURE__ */ React.createElement("option", { value: "Recibo Verde" }, "Recibo Verde / Independente"))), rhForm && rhForm.tipo_contrato === "Recibo Verde" ? /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Valor por dia (\u20AC)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: rhForm.valor_dia || "", placeholder: "Ex: 65.00", onFocus: function(e) { e.target.select(); }, onChange: function(e) { setRhForm(Object.assign({}, rhForm, { valor_dia: e.target.value })); } })) : rhForm && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Sal\xE1rio Base (\u20AC/m\xEAs)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: rhForm.salario_base || "", placeholder: "Ex: 820.00", onFocus: function(e) { e.target.select(); }, onChange: function(e) { setRhForm(Object.assign({}, rhForm, { salario_base: e.target.value })); } })), rhForm && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Horas por dia"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.5", min: "1", max: "12", value: rhForm.horas_dia || 8, onFocus: function(e) { e.target.select(); }, onChange: function(e) { setRhForm(Object.assign({}, rhForm, { horas_dia: e.target.value })); } }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 3 } }, "Full-time = 8h \u2014 Part-time = horas di\xE1rias reais")), rhForm && [
     ["nif", "NIF"],
     ["niss", "NISS"],
     ["iban", "IBAN"],
@@ -2520,6 +2532,7 @@ function Employees() {
   const [newForm, setNewForm] = useState({ id: "", name: "", role: "T\xE9cnico", pin: "", av: "" });
   const [errMsg, setErrMsg] = useState("");
   const [empSearch, setEmpSearch] = useState("");
+  const [pinRecemGerado, setPinRecemGerado] = useState(null);
   useEffect(function() {
     db.list("funcionarios", "?select=*&order=id").then(function(rows) {
       setEmps(rows || []);
@@ -2528,7 +2541,7 @@ function Employees() {
   }, []);
   function openEdit(e) {
     setSel(e);
-    setEditForm({ name: e.name, role: e.role || "", pin: e.pin || "", av: e.av || "" });
+    setEditForm({ name: e.name, role: e.role || "", av: e.av || "" });
     setView("detail");
     setErrMsg("");
   }
@@ -2538,22 +2551,10 @@ function Employees() {
       setErrMsg("O nome n\xE3o pode estar vazio.");
       return;
     }
-    if (!/^[0-9]{6}$/.test(editForm.pin)) {
-      setErrMsg("O PIN deve ter exatamente 6 d\xEDgitos.");
-      return;
-    }
-    const dup = emps.find(function(e) {
-      return e.id !== sel.id && e.pin === editForm.pin;
-    });
-    if (dup) {
-      setErrMsg("Esse PIN j\xE1 est\xE1 a ser usado por " + dup.name + ".");
-      return;
-    }
     setSaving(true);
     const patch = {
       name: editForm.name.trim(),
       role: editForm.role.trim(),
-      pin: editForm.pin,
       av: (editForm.av || editForm.name.slice(0, 2)).toUpperCase()
     };
     const updated = await db.update("funcionarios", sel.id, patch);
@@ -2579,17 +2580,6 @@ function Employees() {
       setErrMsg("O nome n\xE3o pode estar vazio.");
       return;
     }
-    if (!/^[0-9]{6}$/.test(newForm.pin)) {
-      setErrMsg("O PIN deve ter exatamente 6 d\xEDgitos.");
-      return;
-    }
-    const dup = emps.find(function(e) {
-      return e.pin === newForm.pin;
-    });
-    if (dup) {
-      setErrMsg("Esse PIN j\xE1 est\xE1 a ser usado por " + dup.name + ".");
-      return;
-    }
     const existingIds = emps.map(function(e) {
       return e.id;
     });
@@ -2603,15 +2593,17 @@ function Employees() {
       id: newId,
       name: newForm.name.trim(),
       role: newForm.role.trim() || "T\xE9cnico",
-      pin: newForm.pin,
       av: (newForm.av || newForm.name.slice(0, 2)).toUpperCase(),
       rating: null
     };
     const inserted = await db.insertVerbose("funcionarios", nf);
     if (inserted.ok) {
+      const pinRes = await fetch(SUPABASE_URL + "/rest/v1/rpc/gerar_novo_pin", { method: "POST", headers: dbHeaders(), body: JSON.stringify({ p_id: newId }) });
+      const novoPin = pinRes.ok ? await pinRes.json() : null;
       setEmps(emps.concat([inserted.data]));
       setNewForm({ id: "", name: "", role: "T\xE9cnico", pin: "", av: "" });
       setSaved(true);
+      if (novoPin) setPinRecemGerado({ nome: nf.name, pin: novoPin });
       setTimeout(function() {
         setSaved(false);
         setView("list");
@@ -2624,14 +2616,14 @@ function Employees() {
     return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar funcionarios...");
   }
   if (view === "list") {
-    return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Funcionarios"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, emps.length, " registados")), /* @__PURE__ */ React.createElement("button", { style: btn, onClick: function() {
+    return /* @__PURE__ */ React.createElement("div", null, pinRecemGerado && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 28, maxWidth: 360, width: "100%", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, marginBottom: 12 } }, "\uD83D\uDD11"), /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 4 } }, "PIN de ", pinRecemGerado.nome), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 36, fontWeight: 900, color: "#2E6DA4", fontFamily: "monospace", letterSpacing: 4, margin: "16px 0" } }, pinRecemGerado.pin), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#EF4444", fontWeight: 700, marginBottom: 20 } }, "\u26A0 Anota agora \u2014 n\xE3o voltar\xE1 a aparecer."), /* @__PURE__ */ React.createElement("button", { onClick: function() { setPinRecemGerado(null); }, style: Object.assign({}, btnG, { width: "100%", textAlign: "center" }) }, "Ok, j\xE1 anotei"))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Funcionarios"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, emps.length, " registados")), /* @__PURE__ */ React.createElement("button", { style: btn, onClick: function() {
       setNewForm({ id: "", name: "", role: "T\xE9cnico", pin: "", av: "" });
       setErrMsg("");
       setView("new");
     } }, "+ Novo Funcionario")), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar funcionário...", value: empSearch, onChange: function(e) { setEmpSearch(e.target.value); } }), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 } }, emps.filter(function(e) { return !empSearch || e.name.toLowerCase().indexOf(empSearch.toLowerCase()) !== -1 || (e.role || "").toLowerCase().indexOf(empSearch.toLowerCase()) !== -1; }).map(function(e) {
       return /* @__PURE__ */ React.createElement("div", { key: e.id, onClick: function() {
         openEdit(e);
-      }, style: Object.assign({}, card, { cursor: "pointer", padding: 18, borderLeft: "4px solid " + (e.ativo === false ? "#CBD5E1" : "#2E6DA4"), marginBottom: 0, display: "flex", alignItems: "center", gap: 14, opacity: e.ativo === false ? 0.6 : 1 }) }, /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 48, color: e.ativo === false ? "#94A3B8" : (EC[e.id] || "#2E6DA4") }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, e.name), e.ativo === false && /* @__PURE__ */ React.createElement("span", { style: { background: "#F1F5F9", color: "#94A3B8", borderRadius: 6, padding: "1px 7px", fontSize: 10, fontWeight: 700 } }, "Inactivo")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, e.role), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 4, fontFamily: "monospace" } }, "PIN: ", e.pin)), e.rating ? /* @__PURE__ */ React.createElement(Stars, { r: e.rating }) : null);
+      }, style: Object.assign({}, card, { cursor: "pointer", padding: 18, borderLeft: "4px solid " + (e.ativo === false ? "#CBD5E1" : "#2E6DA4"), marginBottom: 0, display: "flex", alignItems: "center", gap: 14, opacity: e.ativo === false ? 0.6 : 1 }) }, /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 48, color: e.ativo === false ? "#94A3B8" : (EC[e.id] || "#2E6DA4") }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, e.name), e.ativo === false && /* @__PURE__ */ React.createElement("span", { style: { background: "#F1F5F9", color: "#94A3B8", borderRadius: 6, padding: "1px 7px", fontSize: 10, fontWeight: 700 } }, "Inactivo")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, e.role)), e.rating ? /* @__PURE__ */ React.createElement(Stars, { r: e.rating }) : null);
     })));
   }
   if (view === "detail" && sel && editForm) {
@@ -2648,9 +2640,7 @@ function Employees() {
       setNewForm(Object.assign({}, newForm, { role: e.target.value }));
     }, placeholder: "Ex: T\xE9cnico" })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Iniciais do avatar (opcional)"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 100, textTransform: "uppercase" }), value: newForm.av, onChange: function(e) {
       setNewForm(Object.assign({}, newForm, { av: e.target.value.slice(0, 2) }));
-    }, placeholder: "Ex: CM", maxLength: 2 })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "PIN (6 d\xEDgitos)"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 140, fontFamily: "monospace", fontSize: 16 }), value: newForm.pin, onChange: function(e) {
-      setNewForm(Object.assign({}, newForm, { pin: e.target.value.replace(/[^0-9]/g, "").slice(0, 6) }));
-    }, placeholder: "000000", maxLength: 6 })), /* @__PURE__ */ React.createElement("button", { onClick: saveNew, style: Object.assign({}, btn, { width: "100%", marginTop: 8 }) }, "Criar Funcionario")));
+    }, placeholder: "Ex: CM", maxLength: 2 })), /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 8, padding: "10px 12px", fontSize: 12, color: "#2E6DA4", marginBottom: 14 } }, "\uD83D\uDD11 O PIN de acesso ser\xE1 gerado automaticamente ap\xF3s criar o colaborador."), /* @__PURE__ */ React.createElement("button", { onClick: saveNew, style: Object.assign({}, btn, { width: "100%", marginTop: 8 }) }, "Criar Funcionario")));
   }
   return null;
 }
@@ -4844,9 +4834,15 @@ function Employee(props) {
     const n = pin + d;
     setPin(n);
     if (n.length === 6) {
-      setTimeout(function() {
-        if (n === String(sEmp.pin)) {
-          setEmp(sEmp);
+      setTimeout(async function() {
+        const res = await fetch(SUPABASE_URL + "/rest/v1/rpc/login_funcionario", {
+          method: "POST",
+          headers: dbHeaders(),
+          body: JSON.stringify({ p_id: sEmp.id, p_pin: n })
+        });
+        const rows = res.ok ? await res.json() : [];
+        if (rows && rows.length > 0) {
+          setEmp(Object.assign({}, sEmp, rows[0]));
           setPinErr(false);
           if (clientContext) {
             setPhase("team-confirm");
@@ -5473,7 +5469,7 @@ function ClientPortal(props) {
     const n = pin + d;
     setPin(n);
     if (n.length === 6) {
-      setTimeout(function() {
+      setTimeout(async function() {
         if (pinMode === "client") {
           const match = contacts.find(function(c) {
             return c.pin === n;
@@ -5489,11 +5485,14 @@ function ClientPortal(props) {
             setPin("");
           }
         } else {
-          const match = allEmps.find(function(e) {
-            return String(e.pin) === n;
+          const res = await fetch(SUPABASE_URL + "/rest/v1/rpc/login_funcionario_por_pin", {
+            method: "POST",
+            headers: dbHeaders(),
+            body: JSON.stringify({ p_pin: n })
           });
-          if (match) {
-            setCurrentEmp(match);
+          const rows = res.ok ? await res.json() : [];
+          if (rows && rows.length > 0) {
+            setCurrentEmp(rows[0]);
             setPhase("team-confirm");
             setPinErr(false);
             setPin("");
@@ -6070,9 +6069,13 @@ function PortalArmazem() {
   async function tryPin() {
     if (!sel || pin.length < 6 || checking) return;
     setChecking(true);
-    const pinGuardado = String(sel.pin).trim();
-    const pinIntroduzido = String(pin).trim();
-    if (pinIntroduzido === pinGuardado) {
+    const res = await fetch(SUPABASE_URL + "/rest/v1/rpc/login_funcionario", {
+      method: "POST",
+      headers: dbHeaders(),
+      body: JSON.stringify({ p_id: sel.id, p_pin: String(pin).trim() })
+    });
+    const rows = res.ok ? await res.json() : [];
+    if (rows && rows.length > 0) {
       setPinErr(false);
       setLastTipo("");
     } else {
