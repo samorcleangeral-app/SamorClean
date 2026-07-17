@@ -123,6 +123,17 @@ const db = {
     }
   }
 };
+async function removerFuncionarioDeServicosFuturos(empId, dataInicio, dataFim) {
+  const hoje = localDateStr();
+  const inicio = dataInicio > hoje ? dataInicio : hoje;
+  const jobs = await db.list("servicos", "?select=id,team,date&date=gte." + encodeURIComponent(inicio) + "&date=lte." + encodeURIComponent(dataFim || dataInicio) + "&status=neq.completed");
+  const afectados = (jobs || []).filter(function(j) { return (j.team || []).indexOf(empId) !== -1; });
+  for (var i = 0; i < afectados.length; i++) {
+    const novaEquipa = (afectados[i].team || []).filter(function(id) { return id !== empId; });
+    await db.update("servicos", afectados[i].id, { team: novaEquipa });
+  }
+  return afectados.length;
+}
 const SVCS = ["Limpeza Residencial", "Limpeza Comercial", "Limpeza P\xF3s-Obra", "Limpeza Profunda", "Limpeza de Estofos", "Limpeza de Vidros", "Limpeza de Condom\xEDnio"];
 const FREQS = ["Pontual", "Semanal", "Quinzenal", "Mensal", "Trimestral"];
 function localDateStr(d) {
@@ -2171,6 +2182,10 @@ function FichaRH(props) {
       setAusencias(function(p) {
         return [d[0]].concat(p);
       });
+      if (ausForm.data_inicio) {
+        var nRemovidos = await removerFuncionarioDeServicosFuturos(sel.id, ausForm.data_inicio, ausForm.data_fim || ausForm.data_inicio);
+        if (nRemovidos > 0) alert(sel.name + " foi removido de " + nRemovidos + " servi\xE7o" + (nRemovidos > 1 ? "s" : "") + " j\xE1 agendado" + (nRemovidos > 1 ? "s" : "") + " nesse per\xEDodo. Pode ser necess\xE1rio reatribuir equipa.");
+      }
       setShowAddAus(false);
       setAusForm({ tipo: "Baixa M\xE9dica", data_inicio: "", data_fim: "", descricao: "", estado: "aprovado" });
     }
@@ -3061,6 +3076,10 @@ function PedidosColab(props) {
           descricao: det.descricao || selPedido.descricao || ""
         })
       });
+      if (det.data_inicio) {
+        var nRem = await removerFuncionarioDeServicosFuturos(selPedido.funcionario_id, det.data_inicio, det.data_fim || det.data_inicio);
+        if (nRem > 0) alert(selPedido.funcionario_nome + " foi removido de " + nRem + " servi\xE7o" + (nRem > 1 ? "s" : "") + " j\xE1 agendado" + (nRem > 1 ? "s" : "") + " nesse per\xEDodo. Pode ser necess\xE1rio reatribuir equipa.");
+      }
     }
     setPedidos(function(p) {
       return p.map(function(x) {
