@@ -5391,6 +5391,15 @@ function ClientPortal(props) {
   const [upcoming, setUpcoming] = useState([]);
   const [emps, setEmps] = useState(EMPS);
   const [showRate, setShowRate] = useState(null);
+  const [autoRatePrompted, setAutoRatePrompted] = useState(false);
+  useEffect(function() {
+    if (autoRatePrompted || history.length === 0) return;
+    var pendente = history.filter(function(h) { return !h.rated; }).sort(function(a, b) { return b.date < a.date ? -1 : 1; })[0];
+    if (pendente) {
+      setShowRate(pendente);
+    }
+    setAutoRatePrompted(true);
+  }, [history]);
   const [ratings, setRatings] = useState({});
   const [comment, setComment] = useState("");
   const [rateDone, setRateDone] = useState(false);
@@ -5937,7 +5946,7 @@ function ClientPortal(props) {
     return h.rated;
   }).length, c: "#16A34A" }].map(function(s) {
     return /* @__PURE__ */ React.createElement("div", { key: s.l, style: { background: "rgba(255,255,255,0.08)", borderRadius: 10, padding: "10px 8px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 18 } }, s.v), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.4)", fontSize: 9, fontWeight: 600, textTransform: "uppercase", marginTop: 2 } }, s.l));
-  }))), /* @__PURE__ */ React.createElement("div", { style: { margin: "0 16px", marginTop: -28, background: "#fff", borderRadius: 14, boxShadow: "0 4px 20px rgba(0,0,0,0.1)", padding: "16px", position: "relative", zIndex: 1, marginBottom: 16 } }, tab === "home" && /* @__PURE__ */ React.createElement("div", null, upcoming.length > 0 ? /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 10 } }, "Proximo servico"), /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 10, padding: "14px 16px", borderLeft: "4px solid #2E6DA4" } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, color: "#1A3A5C" } }, upcoming[0].svc), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 4 } }, (/* @__PURE__ */ new Date(upcoming[0].date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long" }), " - ", upcoming[0].t1))) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8", marginBottom: 16, textAlign: "center", padding: "16px 0" } }, "Sem servicos agendados."), history.filter(function(h) {
+  }))), /* @__PURE__ */ React.createElement("div", { style: { margin: "0 16px", marginTop: -28, background: "#fff", borderRadius: 14, boxShadow: "0 4px 20px rgba(0,0,0,0.1)", padding: "16px", position: "relative", zIndex: 1, marginBottom: 16 } }, tab === "home" && /* @__PURE__ */ React.createElement("div", null, currentContact && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 18 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: "#1A3A5C" } }, "Bem-vindo de volta, ", currentContact.name.split(" ")[0], "!"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", marginTop: 2 } }, "Aqui est\xE1 o resumo do vosso servi\xE7o.")), upcoming.length > 0 ? /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 10 } }, "Proximo servico"), /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 10, padding: "14px 16px", borderLeft: "4px solid #2E6DA4" } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, color: "#1A3A5C" } }, upcoming[0].svc), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 4 } }, (/* @__PURE__ */ new Date(upcoming[0].date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long" }), " - ", upcoming[0].t1))) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8", marginBottom: 16, textAlign: "center", padding: "16px 0" } }, "Sem servicos agendados."), history.filter(function(h) {
     return !h.rated;
   }).length > 0 && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 10 } }, "Avaliacoes pendentes"), history.filter(function(h) {
     return !h.rated;
