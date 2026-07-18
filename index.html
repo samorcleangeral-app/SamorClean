@@ -1410,9 +1410,11 @@ function Routes() {
     return /* @__PURE__ */ React.createElement("option", { key: t }, t);
   }))), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Equipa"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, emps.map(function(e) {
     const checked = nj.team.indexOf(e.id) !== -1;
+    const ausenteHoje = nj.date ? isEmpAusente(e.id, nj.date) : false;
     return /* @__PURE__ */ React.createElement("div", { key: e.id, onClick: function() {
+      if (ausenteHoje) return;
       togT(e.id);
-    }, style: { display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 8, border: "1.5px solid " + (checked ? empColor(e.id) : "#E2EBF4"), background: checked ? empColor(e.id) + "15" : "#F8FAFC", cursor: "pointer" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: checked ? empColor(e.id) : "#CBD5E1", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 9, fontWeight: 800 } }, e.av || e.name.slice(0, 2).toUpperCase()), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: checked ? empColor(e.id) : "#64748B" } }, e.name.split(" ")[0]));
+    }, style: { display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 8, border: "1.5px solid " + (ausenteHoje ? "#FCA5A5" : checked ? empColor(e.id) : "#E2EBF4"), background: ausenteHoje ? "#FEF2F2" : checked ? empColor(e.id) + "15" : "#F8FAFC", cursor: ausenteHoje ? "not-allowed" : "pointer", opacity: ausenteHoje ? 0.7 : 1 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: ausenteHoje ? "#EF4444" : checked ? empColor(e.id) : "#CBD5E1", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 9, fontWeight: 800 } }, ausenteHoje ? "\u26A0" : (e.av || e.name.slice(0, 2).toUpperCase())), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: ausenteHoje ? "#DC2626" : checked ? empColor(e.id) : "#64748B" } }, e.name.split(" ")[0], ausenteHoje && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 700, marginLeft: 4 } }, "(ausente)")));
   })))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 16 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setShowNew(false);
   }, style: Object.assign({}, btnX, { flex: 1 }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: addJ, disabled: !nj.cn || !nj.date, style: Object.assign({}, btn, { flex: 2, opacity: !nj.cn || !nj.date ? 0.5 : 1 }) }, "Adicionar")))));
@@ -4129,16 +4131,21 @@ function Avaliacoes() {
   const [avs, setAvs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [clientsMap, setClientsMap] = useState({});
+  const [empsMap, setEmpsMap] = useState({});
   const [selCliente, setSelCliente] = useState(null);
   useEffect(function() {
     Promise.all([
       db.list("avaliacoes", "?select=*&order=created_at.desc"),
-      db.list("clientes", "?select=id,name")
+      db.list("clientes", "?select=id,name"),
+      db.list("funcionarios", "?select=id,name,av")
     ]).then(function(results) {
       setAvs(results[0] || []);
       const cm = {};
       (results[1] || []).forEach(function(c) { cm[c.id] = c; });
       setClientsMap(cm);
+      const em = {};
+      (results[2] || []).forEach(function(e) { em[e.id] = e; });
+      setEmpsMap(em);
       setLoading(false);
     });
   }, []);
@@ -4179,9 +4186,14 @@ function Avaliacoes() {
       clientAvs.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Sem avalia\xE7\xF5es.") :
       clientAvs.map(function(a) {
         var isNeg = a.stars <= 2;
+        var emp = empsMap[a.funcionario_id];
         return /* @__PURE__ */ React.createElement("div", { key: a.id, style: Object.assign({}, card, { marginBottom: 10, borderLeft: "4px solid " + (isNeg ? "#EF4444" : a.stars >= 4 ? "#16A34A" : "#F59E0B") }) },
           /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 } },
             /* @__PURE__ */ React.createElement("div", null,
+              emp && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 6 } },
+                /* @__PURE__ */ React.createElement("div", { style: { width: 24, height: 24, borderRadius: "50%", background: EC[a.funcionario_id] || "#2E6DA4", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 10, fontWeight: 800 } }, emp.av || emp.name.slice(0, 2).toUpperCase()),
+                /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, emp.name)
+              ),
               /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 3, marginBottom: 4 } }, [1,2,3,4,5].map(function(i) { return /* @__PURE__ */ React.createElement("span", { key: i, style: { fontSize: 18, color: i <= a.stars ? "#F59E0B" : "#E2EBF4" } }, "\u2605"); })),
               a.contact_name && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, "por ", a.contact_name),
               /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } }, new Date(a.created_at).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" }))
