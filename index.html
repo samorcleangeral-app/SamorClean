@@ -14,6 +14,7 @@
   <div id="root"></div>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script>
     const { useState, useEffect } = React;
     function jsx(type, props, key) {
@@ -26,6 +27,7 @@
 
 const SUPABASE_URL = "https://dtydrnezzaykiaglwxfv.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR0eWRybmV6emF5a2lhZ2x3eGZ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3MDA3ODQsImV4cCI6MjA5NzI3Njc4NH0.aDujsByOVcbqZPnz36AKJukWahIbJKkxb6imbInHG5s";
+const supabaseRT = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 function dbHeaders(extra) {
   const h = {
     "apikey": SUPABASE_KEY,
@@ -891,7 +893,6 @@ function Routes() {
   async function addJ() {
     if (!nj.cn || !nj.date) return;
     const c = clients.find(function(x) { return x.name === nj.cn; });
-    const base = { client_id: c ? c.id : "", cn: nj.cn, addr: nj.addr, svc: c ? c.service : nj.svc, t1: nj.t1, t2: nj.t2, team: nj.team, status: "pending", cl: c ? c.checklist || [] : [], prods: [], val: parseFloat(nj.val) || 0, paid: false };
     var dates = [];
     if (nj.date_end && nj.date_end >= nj.date) {
       var cur = new Date(nj.date + "T12:00:00");
@@ -899,8 +900,27 @@ function Routes() {
       while (cur <= end) { dates.push(cur.toISOString().split("T")[0]); cur.setDate(cur.getDate() + 1); }
     } else { dates = [nj.date]; }
     var newJobs = [];
+    var avisos = [];
     for (var di = 0; di < dates.length; di++) {
-      var ins = await db.insert("servicos", Object.assign({}, base, { date: dates[di] }));
+      var dataAtual = dates[di];
+      var teamDisponivel = nj.team.filter(function(eid) { return !isEmpAusente(eid, dataAtual); });
+      var ausentesNeste = nj.team.filter(function(eid) { return isEmpAusente(eid, dataAtual); });
+      ausentesNeste.forEach(function(eid) {
+        var e = emps.find(function(x) { return x.id === eid; });
+        avisos.push((e ? e.name.split(" ")[0] : eid) + " estava ausente em " + dataAtual + " \u2014 removido da equipa desse dia.");
+      });
+      var visitHoursVal = Math.max(0, (timeToMin(nj.t2) - timeToMin(nj.t1)) / 60);
+      var teamSize = teamDisponivel.length || 1;
+      var valCalculado = (function() {
+        if (!c) return parseFloat(nj.val) || 0;
+        var tipoFat = c.tipo_faturacao || "hora";
+        if (tipoFat === "visita") return parseFloat(c.valor_visita) || 0;
+        if (tipoFat === "mensal") return parseFloat(c.valor_visita) || 0;
+        var preco = c.price_per_hour || PRICE_PER_HOUR;
+        return teamSize * visitHoursVal * preco;
+      })();
+      var base = { client_id: c ? c.id : "", cn: nj.cn, addr: nj.addr, svc: c ? c.service : nj.svc, t1: nj.t1, t2: nj.t2, team: teamDisponivel, status: "pending", cl: c ? c.checklist || [] : [], prods: [], val: valCalculado, iva_override: c ? c.iva_type || "normal" : "normal", paid: false, date: dataAtual };
+      var ins = await db.insert("servicos", base);
       if (ins) newJobs.push(ins);
     }
     if (newJobs.length > 0) {
@@ -908,6 +928,7 @@ function Routes() {
       setShowNew(false);
       setNj({ cn: "", addr: "", svc: "", date: "", date_end: "", t1: "08:00", t2: "10:00", team: [], val: "" });
       setClientSearch("");
+      if (avisos.length > 0) alert("\u26A0 Aten\xE7\xE3o:\n\n" + avisos.join("\n"));
     }
   }
   function togT(eid) {
@@ -1370,11 +1391,16 @@ function Routes() {
     setNj(Object.assign({}, nj, { date: e.target.value }));
   } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Data fim (opcional)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: nj.date_end || "", onChange: function(e) {
     setNj(Object.assign({}, nj, { date_end: e.target.value }));
-  } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Valor (\u20AC)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: nj.val, onFocus: function(e) {
-    if (e.target.value === "0") e.target.select();
-  }, onChange: function(e) {
-    setNj(Object.assign({}, nj, { val: e.target.value }));
-  } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Hora in\xEDcio"), /* @__PURE__ */ React.createElement("select", { style: inp, value: nj.t1, onChange: function(e) {
+  } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Valor (\u20AC) \u2014 calculado automaticamente"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { background: "#F8FAFC", color: "#64748B", cursor: "not-allowed" }), type: "text", readOnly: true, value: (function() {
+    var c = clients.find(function(x) { return x.name === nj.cn; });
+    if (!c) return "\u2014";
+    var tipoFat = c.tipo_faturacao || "hora";
+    if (tipoFat === "visita" || tipoFat === "mensal") return fmt(parseFloat(c.valor_visita) || 0) + "\u20AC";
+    var horas = Math.max(0, (timeToMin(nj.t2) - timeToMin(nj.t1)) / 60);
+    var teamSize = nj.team.length || 1;
+    var preco = c.price_per_hour || PRICE_PER_HOUR;
+    return fmt(teamSize * horas * preco) + "\u20AC";
+  })() })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Hora in\xEDcio"), /* @__PURE__ */ React.createElement("select", { style: inp, value: nj.t1, onChange: function(e) {
     setNj(Object.assign({}, nj, { t1: e.target.value }));
   } }, TIME_SLOTS.map(function(t) {
     return /* @__PURE__ */ React.createElement("option", { key: t }, t);
@@ -2803,10 +2829,18 @@ function QuadroOperacional() {
       setLastUpdate(new Date());
     });
   }
+  const [liveConnected, setLiveConnected] = useState(false);
   useEffect(function() {
     load();
     var interval = setInterval(load, 60000);
-    return function() { clearInterval(interval); };
+    var channel = null;
+    if (supabaseRT) {
+      channel = supabaseRT.channel("quadro-operacional")
+        .on("postgres_changes", { event: "*", schema: "public", table: "servicos" }, function() { load(); })
+        .on("postgres_changes", { event: "*", schema: "public", table: "notas_operacionais" }, function() { load(); })
+        .subscribe(function(status) { setLiveConnected(status === "SUBSCRIBED"); });
+    }
+    return function() { clearInterval(interval); if (channel) supabaseRT.removeChannel(channel); };
   }, []);
   async function addNota() {
     if (!notaForm.texto.trim()) return;
@@ -2825,6 +2859,7 @@ function QuadroOperacional() {
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } },
       /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Quadro Operacional"),
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+        liveConnected && /* @__PURE__ */ React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 4, background: "#DCFCE7", color: "#15803D", borderRadius: 6, padding: "3px 8px", fontSize: 11, fontWeight: 700 } }, /* @__PURE__ */ React.createElement("span", { style: { width: 6, height: 6, borderRadius: "50%", background: "#16A34A" } }), "Ao vivo"),
         /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, lastUpdate.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })),
         /* @__PURE__ */ React.createElement("button", { onClick: function() { setLoading(true); load(); }, style: Object.assign({}, btnO, { fontSize: 12, padding: "6px 12px" }) }, "\u21BB")
       )
