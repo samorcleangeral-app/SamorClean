@@ -2014,6 +2014,9 @@ function Clients() {
       ativo: sel.ativo !== false,
       excluir_financeiro: sel.excluir_financeiro || false,
       iva_type: sel.iva_type || "normal",
+      tolerancia_minutos: sel.tolerancia_minutos || 15,
+      km_armazem: sel.km_armazem || 0,
+      nota_interna: sel.nota_interna || "",
       checklist: sel.checklist && sel.checklist.length ? sel.checklist.slice() : [""],
       schedule: sel.schedule ? sel.schedule.map(function(s) { return Object.assign({}, s); }) : [],
       equipa_habitual: sel.equipa_habitual ? sel.equipa_habitual.slice() : []
@@ -6106,7 +6109,7 @@ function ClientPortal(props) {
     if (autoRatePrompted || history.length === 0) return;
     var pendente = history.filter(function(h) { return !h.rated; }).sort(function(a, b) { return b.date < a.date ? -1 : 1; })[0];
     if (pendente) {
-      setShowRate(pendente);
+      setTimeout(function() { setShowRate(pendente); }, 1400);
     }
     setAutoRatePrompted(true);
   }, [history]);
