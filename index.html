@@ -1404,6 +1404,8 @@ function Routes() {
       return w + 1;
     });
   }, style: Object.assign({}, btnX, { padding: "7px 12px" }) }, "\u203A"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    setNj({ cn: "", addr: "", svc: "", date: localDateStr(), date_end: "", t1: "08:00", t2: "10:00", team: [], val: "" });
+    setClientSearch("");
     setShowNew(true);
   }, style: btn }, "+ Servi\xE7o"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: generatePreview, style: Object.assign({}, btnG, { fontSize: 13 }) }, "\u26A1 Gerar (", getLabel(), ")"), calView === "week" && wJobs.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: function() {
     const win = window.open("", "_blank");
@@ -1748,10 +1750,18 @@ function Routes() {
   }))), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Equipa"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, emps.map(function(e) {
     const checked = nj.team.indexOf(e.id) !== -1;
     const ausenteHoje = nj.date ? isEmpAusente(e.id, nj.date) : false;
+    const outrosServicos = nj.date ? jobs.filter(function(j) { return j.date === nj.date && j.status !== "completed" && (j.team || []).indexOf(e.id) !== -1 && j.cn !== nj.cn; }) : [];
+    const jaAlocado = outrosServicos.length > 0;
     return /* @__PURE__ */ React.createElement("div", { key: e.id, onClick: function() {
       if (ausenteHoje) return;
       togT(e.id);
-    }, style: { display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 8, border: "1.5px solid " + (ausenteHoje ? "#FCA5A5" : checked ? empColor(e.id) : "#E2EBF4"), background: ausenteHoje ? "#FEF2F2" : checked ? empColor(e.id) + "15" : "#F8FAFC", cursor: ausenteHoje ? "not-allowed" : "pointer", opacity: ausenteHoje ? 0.7 : 1 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: ausenteHoje ? "#EF4444" : checked ? empColor(e.id) : "#CBD5E1", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 9, fontWeight: 800 } }, ausenteHoje ? "\u26A0" : (e.av || e.name.slice(0, 2).toUpperCase())), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: ausenteHoje ? "#DC2626" : checked ? empColor(e.id) : "#64748B" } }, e.name.split(" ")[0], ausenteHoje && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 700, marginLeft: 4 } }, "(ausente)")));
+    }, style: { display: "flex", flexDirection: "column", gap: 2, padding: "7px 10px", borderRadius: 8, border: "1.5px solid " + (ausenteHoje ? "#FCA5A5" : jaAlocado ? "#FDE68A" : checked ? empColor(e.id) : "#E2EBF4"), background: ausenteHoje ? "#FEF2F2" : jaAlocado ? "#FFFBEB" : checked ? empColor(e.id) + "15" : "#F8FAFC", cursor: ausenteHoje ? "not-allowed" : "pointer", opacity: ausenteHoje ? 0.7 : 1 } },
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+        /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: ausenteHoje ? "#EF4444" : checked ? empColor(e.id) : "#CBD5E1", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 9, fontWeight: 800, flexShrink: 0 } }, ausenteHoje ? "\u26A0" : (e.av || e.name.slice(0, 2).toUpperCase())),
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: ausenteHoje ? "#DC2626" : checked ? empColor(e.id) : "#64748B" } }, e.name.split(" ")[0], ausenteHoje && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 700, marginLeft: 4 } }, "(ausente)"))
+      ),
+      jaAlocado && !ausenteHoje && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#92400E", marginLeft: 30, lineHeight: 1.3 } }, outrosServicos.map(function(j) { return j.cn + " (" + j.t1 + "\u2013" + j.t2 + ")"; }).join(", "))
+    );
   })))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 16 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setShowNew(false);
   }, style: Object.assign({}, btnX, { flex: 1 }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: addJ, disabled: !nj.cn || !nj.date, style: Object.assign({}, btn, { flex: 2, opacity: !nj.cn || !nj.date ? 0.5 : 1 }) }, "Adicionar")))));
