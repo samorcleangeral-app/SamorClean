@@ -332,6 +332,14 @@ function ChartCanvas(props) {
   }, [JSON.stringify(props.data), props.type]);
   return /* @__PURE__ */ React.createElement("div", { style: { height: props.height || 240 } }, /* @__PURE__ */ React.createElement("canvas", { ref: canvasRef }));
 }
+function calcValorFaturacao(c, jobs, horas) {
+  var isOrcamento = c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda";
+  if (isOrcamento) return { valor: c.price_per_hour || 0, tipo: "orcamento" };
+  var tipoFat = c.tipo_faturacao || "hora";
+  if (tipoFat === "mensal") return { valor: parseFloat(c.valor_visita) || 0, tipo: "mensal" };
+  if (tipoFat === "visita") return { valor: jobs.length * (parseFloat(c.valor_visita) || 0), tipo: "visita" };
+  return { valor: horas * (c.price_per_hour || 0), tipo: "hora" };
+}
 function Finance() {
   const [loading, setLoading] = useState(true);
   const [monthJobs, setMonthJobs] = useState([]);
@@ -366,7 +374,7 @@ function Finance() {
     Promise.all([
       db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd + "&status=eq.completed"),
       db.list("servicos", "?select=*&date=gte." + sixMonthsAgo + "&status=eq.completed"),
-      db.list("clientes", "?select=id,name,freq,iva_type,service,price_per_hour&excluir_financeiro=is.false"),
+      db.list("clientes", "?select=id,name,freq,iva_type,service,price_per_hour,tipo_faturacao,valor_visita&excluir_financeiro=is.false"),
       db.list("despesas", "?select=*&data=gte." + monthStart + "&data=lte." + monthEnd),
       db.list("servicos", "?select=client_id,date&date=gte." + past60 + "&order=date.desc"),
       db.list("funcionarios_rh", "?select=*"),
@@ -888,17 +896,24 @@ function Finance() {
           clientes.forEach(function(c) {
             var jobs = monthJobsAll.filter(function(j) { return j.client_id === c.id; });
             if (!jobs.length) return;
-            var isOrcamento = c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda";
             var horas = jobs.reduce(function(s, j) {
               var t1 = (j.t1 || "0:0").split(":"); var t2 = (j.t2 || "0:0").split(":");
               return s + (parseInt(t2[0])*60+parseInt(t2[1]) - parseInt(t1[0])*60-parseInt(t1[1])) / 60;
             }, 0);
-            var valor = isOrcamento ? (c.price_per_hour || 0) : horas * (c.price_per_hour || 0);
+            var calc = calcValorFaturacao(c, jobs, horas);
+            var valor = calc.valor;
+            var isOrcamento = calc.tipo === "orcamento";
             var iva = c.iva_type === "autoliquida\xE7\xE3o" ? "Autoliquidação" : "23%";
             total += valor;
             lines.push(c.name);
             if (isOrcamento) {
               lines.push("  Tipo: Orçamento");
+              lines.push("  Valor s/IVA: " + fmt(valor) + "€  |  IVA: " + iva);
+            } else if (calc.tipo === "mensal") {
+              lines.push("  Tipo: Mensal (avença fixa) \u2014 " + jobs.length + " visitas realizadas");
+              lines.push("  Valor s/IVA: " + fmt(valor) + "€  |  IVA: " + iva);
+            } else if (calc.tipo === "visita") {
+              lines.push("  Visitas: " + jobs.length + "  |  Valor/visita: " + fmt(parseFloat(c.valor_visita) || 0) + "€");
               lines.push("  Valor s/IVA: " + fmt(valor) + "€  |  IVA: " + iva);
             } else {
               lines.push("  Visitas: " + jobs.length + "  |  Horas: " + horas.toFixed(1) + "h  |  Preço/h: " + fmt(c.price_per_hour || 0) + "€");
@@ -915,9 +930,10 @@ function Finance() {
             var totalGeral = 0;
             clientes.filter(function(c) { return monthJobsAll.some(function(j) { return j.client_id === c.id; }); }).forEach(function(c) {
               var jobs = monthJobsAll.filter(function(j) { return j.client_id === c.id; });
-              var isOrcamento = c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda";
               var horas = jobs.reduce(function(s, j) { var t1 = (j.t1 || "0:0").split(":"); var t2 = (j.t2 || "0:0").split(":"); return s + (parseInt(t2[0])*60+parseInt(t2[1]) - parseInt(t1[0])*60-parseInt(t1[1])) / 60; }, 0);
-              var valorSemIva = isOrcamento ? (c.price_per_hour || 0) : horas * (c.price_per_hour || 0);
+              var calc = calcValorFaturacao(c, jobs, horas);
+              var valorSemIva = calc.valor;
+              var isOrcamento = calc.tipo === "orcamento";
               var isAutoliq = c.iva_type === "autoliquida\xE7\xE3o";
               var valorComIva = isAutoliq ? valorSemIva : valorSemIva * 1.23;
               totalGeral += valorSemIva;
@@ -933,12 +949,13 @@ function Finance() {
       /* @__PURE__ */ React.createElement("div", null,
         clientes.filter(function(c) { return monthJobsAll.some(function(j) { return j.client_id === c.id; }); }).map(function(c) {
           var jobs = monthJobsAll.filter(function(j) { return j.client_id === c.id; });
-          var isOrcamento = c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda";
           var horas = jobs.reduce(function(s, j) {
             var t1 = (j.t1 || "0:0").split(":"); var t2 = (j.t2 || "0:0").split(":");
             return s + (parseInt(t2[0])*60+parseInt(t2[1]) - parseInt(t1[0])*60-parseInt(t1[1])) / 60;
           }, 0);
-          var valorSemIva = isOrcamento ? (c.price_per_hour || 0) : horas * (c.price_per_hour || 0);
+          var calc = calcValorFaturacao(c, jobs, horas);
+          var valorSemIva = calc.valor;
+          var isOrcamento = calc.tipo === "orcamento";
           var isAutoliq = c.iva_type === "autoliquida\xE7\xE3o";
           var valorComIva = isAutoliq ? valorSemIva : valorSemIva * 1.23;
           var pendentes = jobs.filter(function(j) { return j.status !== "completed"; }).length;
@@ -955,7 +972,7 @@ function Finance() {
                 /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, "c/IVA: ", fmt(valorComIva), "\u20AC"),
                 /* @__PURE__ */ React.createElement("button", { onClick: function() {
                   var mesNome = now.toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
-                  var linhaDetalhe = isOrcamento ? "Por or\xE7amento" : jobs.length + " visitas \u2014 " + horas.toFixed(1) + "h totais \u2014 " + fmt(c.price_per_hour || 0) + "\u20AC/hora";
+                  var linhaDetalhe = isOrcamento ? "Por or\xE7amento" : calc.tipo === "mensal" ? "Avença mensal \u2014 " + jobs.length + " visitas realizadas" : calc.tipo === "visita" ? jobs.length + " visitas \u2014 " + fmt(parseFloat(c.valor_visita) || 0) + "\u20AC/visita" : jobs.length + " visitas \u2014 " + horas.toFixed(1) + "h totais \u2014 " + fmt(c.price_per_hour || 0) + "\u20AC/hora";
                   var win = window.open("", "_blank");
                   win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Fatura\xE7\xE3o \u2014 " + c.name + "</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C}h1{margin-bottom:2px}h2{color:#64748B;font-weight:normal;margin-top:0;margin-bottom:24px}.box{background:#F8FAFC;border-radius:10px;padding:20px;margin-bottom:16px}.row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #E2EBF4}.total{font-size:22px;font-weight:800;color:#1A3A5C;text-align:right;margin-top:16px}@media print{body{padding:15px}}</style></head><body><h1>SamorClean</h1><h2>Resumo de Fatura\xE7\xE3o \u2014 " + mesNome + "</h2><div class='box'><div class='row'><span>Cliente</span><strong>" + c.name + "</strong></div><div class='row'><span>Detalhe</span><strong>" + linhaDetalhe + "</strong></div><div class='row'><span>Regime de IVA</span><strong>" + (isAutoliq ? "Autoliquida\xE7\xE3o" : "23%") + "</strong></div><div class='row'><span>Valor sem IVA</span><strong>" + fmt(valorSemIva) + "\u20AC</strong></div><div class='row'><span>Valor com IVA</span><strong>" + fmt(valorComIva) + "\u20AC</strong></div></div><div class='total'>TOTAL: " + fmt(valorComIva) + "\u20AC</div><script>window.onload=function(){window.print();}<\/script></body></html>");
                   win.document.close();
@@ -4280,7 +4297,7 @@ function RelatorioMensal() {
     setLoading(true);
     const from = localDateStr(new Date(ano, mes, 1));
     const to = localDateStr(new Date(ano, mes + 1, 0));
-    const [servicos, clientes, funcs, avs, pedidos, despesas, rhData, absData] = await Promise.all([
+    const [servicos, clientes, funcs, avs, pedidos, despesas, rhData, absData, cashConfigArr, cashMovs, metasArr, recrutamento] = await Promise.all([
       db.list("servicos", "?select=*&date=gte." + from + "&date=lte." + to + "&order=date"),
       db.list("clientes", "?select=*&excluir_financeiro=is.false"),
       db.list("funcionarios", "?select=*"),
@@ -4288,7 +4305,11 @@ function RelatorioMensal() {
       db.list("pedidos_extra", "?select=*"),
       db.list("despesas", "?select=*&data=gte." + from + "&data=lte." + to),
       db.list("funcionarios_rh", "?select=*"),
-      db.list("ausencias", "?select=*&data_inicio=lte." + to + "&data_fim=gte." + from)
+      db.list("ausencias", "?select=*&data_inicio=lte." + to + "&data_fim=gte." + from),
+      db.list("cash_config", "?select=*&order=data_inicio.desc&limit=1"),
+      db.list("cash_movimentos", "?select=*&order=data.desc"),
+      db.list("metas_financeiras", "?select=*&order=created_at.desc"),
+      db.list("leads_recrutamento", "?select=id,estado")
     ]);
     const cm = {}, fm = {};
     const rhSafe = rhData || [];
@@ -4394,12 +4415,21 @@ function RelatorioMensal() {
     const monthPedidos = (pedidos || []).filter(function(p) {
       return p.created_at && p.created_at.slice(0, 7) === ano + "-" + String(mes + 1).padStart(2, "0");
     });
-    setData({ fatTotal, recTotal, custoKm, kmTotal, byClient, byEmp, cm, completed, monthAvs, monthPedidos, servicos: servicos || [], totalCustos, totalIVADedutivel, custosCat, despesas: despesas || [] });
+    const cashCfg = cashConfigArr && cashConfigArr[0] ? cashConfigArr[0] : null;
+    const saldoAtual = cashCfg ? cashCfg.saldo_inicial + (cashMovs || []).reduce(function(s, m) { return s + (m.tipo === "entrada" ? m.valor : -m.valor); }, 0) : null;
+    const margemPctMes = fatTotal > 0 ? Math.round(margemBruta / (fatTotal / 1.23) * 100) : 0;
+    const metasComProgresso = (metasArr || []).map(function(meta) {
+      var actual = meta.tipo === "cash_flow" ? saldoAtual : meta.tipo === "margem_lucro" ? margemPctMes : meta.tipo === "faturacao" ? fatTotal / 1.23 : null;
+      var pct = actual !== null && meta.valor_alvo > 0 ? Math.min(100, Math.max(0, Math.round(actual / meta.valor_alvo * 100))) : null;
+      return Object.assign({}, meta, { actual: actual, pct: pct });
+    });
+    const recrutStats = { total: (recrutamento || []).length, novos: (recrutamento || []).filter(function(r) { return r.estado === "novo"; }).length };
+    setData({ fatTotal, recTotal, custoKm, kmTotal, byClient, byEmp, cm, completed, monthAvs, monthPedidos, servicos: servicos || [], totalCustos, totalIVADedutivel, custosCat, despesas: despesas || [], cashCfg, saldoAtual, metasComProgresso, recrutStats });
     setLoading(false);
   }
   function exportPDF() {
     if (!data) return;
-    const { fatTotal, recTotal, custoKm, kmTotal, byClient, byEmp, cm, completed, monthAvs, monthPedidos, totalCustos, totalIVADedutivel, custosCat, despesas } = data;
+    const { fatTotal, recTotal, custoKm, kmTotal, byClient, byEmp, cm, completed, monthAvs, monthPedidos, totalCustos, totalIVADedutivel, custosCat, despesas, cashCfg, saldoAtual, metasComProgresso, recrutStats } = data;
     const mesLabel = MESES[mes] + " " + ano;
     const totalCustosReal = (totalCustos || 0) + custoKm;
     const margemBruta = fatTotal / 1.23 - totalCustosReal;
@@ -4513,6 +4543,25 @@ function RelatorioMensal() {
       return a.stars <= 2;
     }).length}</div></div>
     </div>
+
+    ${cashCfg ? `<h2>Cash Flow</h2>
+    <div class="kpi3">
+      <div class="kpi-card"><div class="kpi-label">Saldo actual</div><div class="kpi-value" style="color:${saldoAtual >= 0 ? "#16A34A" : "#EF4444"}">${saldoAtual.toFixed(2)}\u20AC</div></div>
+      <div class="kpi-card"><div class="kpi-label">Saldo inicial</div><div class="kpi-value" style="color:#64748B">${cashCfg.saldo_inicial.toFixed(2)}\u20AC</div></div>
+      <div class="kpi-card"><div class="kpi-label">Desde</div><div class="kpi-value" style="color:#64748B;font-size:14px">${new Date(cashCfg.data_inicio + "T12:00:00").toLocaleDateString("pt-PT")}</div></div>
+    </div>` : ""}
+
+    ${metasComProgresso && metasComProgresso.length > 0 ? `<h2>Objectivos</h2>
+    <table><thead><tr><th>Objectivo</th><th style="text-align:right">Actual</th><th style="text-align:right">Alvo</th><th style="text-align:center">Progresso</th></tr></thead><tbody>${metasComProgresso.map(function(m) {
+      var unidade = m.tipo === "margem_lucro" ? "%" : "\u20AC";
+      return "<tr><td style='padding:8px 10px;font-weight:600'>" + m.titulo + "</td><td style='padding:8px 10px;text-align:right'>" + (m.actual !== null ? m.actual.toFixed(2) + unidade : "\u2014") + "</td><td style='padding:8px 10px;text-align:right'>" + m.valor_alvo.toFixed(2) + unidade + "</td><td style='padding:8px 10px;text-align:center;font-weight:700;color:" + (m.pct >= 100 ? "#16A34A" : "#F59E0B") + "'>" + (m.pct !== null ? m.pct + "%" : "\u2014") + "</td></tr>";
+    }).join("")}</tbody></table>` : ""}
+
+    ${recrutStats && recrutStats.total > 0 ? `<h2>Recrutamento</h2>
+    <div class="kpi3">
+      <div class="kpi-card"><div class="kpi-label">Candidatos totais</div><div class="kpi-value" style="color:#2E6DA4">${recrutStats.total}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Por contactar</div><div class="kpi-value" style="color:#F59E0B">${recrutStats.novos}</div></div>
+    </div>` : ""}
 
     <script>window.onload=function(){window.print();}<\/script>
     </body></html>`);
@@ -4913,7 +4962,7 @@ function Manager(props) {
   const [monthFat, setMonthFat] = useState(0);
   const [monthDivida, setMonthDivida] = useState(0);
   const [alertasFreqHome, setAlertasFreqHome] = useState([]);
-  useEffect(function() {
+  function loadHomeData() {
     const now = /* @__PURE__ */ new Date();
     const monthStart = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
     const monthEnd = localDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
@@ -4973,6 +5022,21 @@ function Manager(props) {
       setAlertasFreqHome(alertas);
       setLoading(false);
     });
+  }
+  useEffect(function() {
+    loadHomeData();
+  }, []);
+  const [liveGestao, setLiveGestao] = useState(false);
+  useEffect(function() {
+    if (!supabaseRT) return;
+    var channel = supabaseRT.channel("gestao-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "pedidos_extra" }, function() { loadHomeData(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "pedidos_colaboradores" }, function() { loadHomeData(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "client_notes" }, function() { loadHomeData(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "avaliacoes" }, function() { loadHomeData(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "servicos" }, function() { loadHomeData(); })
+      .subscribe(function(status) { setLiveGestao(status === "SUBSCRIBED"); });
+    return function() { supabaseRT.removeChannel(channel); };
   }, []);
   const allNavItems = [
     { k: "home", l: "In\xEDcio" },
@@ -4996,7 +5060,7 @@ function Manager(props) {
     if (i.k === "gestores" || i.k === "armazem_qr") return isDirector;
     return canSee(i.k);
   });
-  return /* @__PURE__ */ React.createElement("div", { style: { background: "#F4F8FB", minHeight: "100vh", color: "#334155" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 220, background: "#1A3A5C", minHeight: "100vh", display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "24px 20px 20px", borderBottom: "1px solid rgba(255,255,255,0.1)" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: "#fff" } }, "SamorClean"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#38B6D8", fontWeight: 600, letterSpacing: 1.5, marginTop: 2 } }, "GEST\xC3O OPERACIONAL")), /* @__PURE__ */ React.createElement("nav", { style: { flex: 1, padding: "12px" } }, navItems.map(function(item) {
+  return /* @__PURE__ */ React.createElement("div", { style: { background: "#F4F8FB", minHeight: "100vh", color: "#334155" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 220, background: "#1A3A5C", minHeight: "100vh", display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "24px 20px 20px", borderBottom: "1px solid rgba(255,255,255,0.1)" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: "#fff" } }, "SamorClean"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#38B6D8", fontWeight: 600, letterSpacing: 1.5, marginTop: 2 } }, "GEST\xC3O OPERACIONAL"), liveGestao && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5, marginTop: 8 } }, /* @__PURE__ */ React.createElement("span", { style: { width: 6, height: 6, borderRadius: "50%", background: "#22C55E" } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 9, color: "rgba(255,255,255,0.5)", fontWeight: 700, letterSpacing: 1 } }, "AO VIVO"))), /* @__PURE__ */ React.createElement("nav", { style: { flex: 1, padding: "12px" } }, navItems.map(function(item) {
     const badge = item.k === "pedidos" && pedidosPendentes > 0 ? pedidosPendentes : item.k === "pedidos_colab" && pedidosColabPendentes > 0 ? pedidosColabPendentes : item.k === "clients" && notasClientesNovas > 0 ? notasClientesNovas : item.k === "avaliacoes" && avaliacoesNovas > 0 ? avaliacoesNovas : 0;
     return /* @__PURE__ */ React.createElement("button", { key: item.k, onClick: function() {
       setView(item.k);
