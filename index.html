@@ -6120,6 +6120,7 @@ function ClientPortal(props) {
   const [extraNote, setExtraNote] = useState("");
   const [extraSent, setExtraSent] = useState(false);
   const [extraRespondidos, setExtraRespondidos] = useState(0);
+  const [meusPedidosExtra, setMeusPedidosExtra] = useState([]);
   const [leadSent, setLeadSent] = useState(false);
   const [socialProof, setSocialProof] = useState({ count: 0, avg: 0 });
   const [leadForm, setLeadForm] = useState({
@@ -6258,7 +6259,7 @@ function ClientPortal(props) {
     const todayStr = localDateStr();
     Promise.all([
       db.list("servicos", "?select=*&client_id=eq." + encodeURIComponent(clientId) + "&order=date"),
-      db.list("pedidos_extra", "?select=id,status&client_id=eq." + encodeURIComponent(clientId) + "&status=neq.pendente")
+      db.list("pedidos_extra", "?select=*&client_id=eq." + encodeURIComponent(clientId) + "&order=created_at.desc")
     ]).then(function(results) {
       const all = results[0] || [];
       setHistory(all.filter(function(j) {
@@ -6267,7 +6268,8 @@ function ClientPortal(props) {
       setUpcoming(all.filter(function(j) {
         return j.status !== "completed" && j.date >= todayStr;
       }));
-      setExtraRespondidos((results[1] || []).length);
+      setExtraRespondidos((results[1] || []).filter(function(p) { return p.status !== "pendente" && !p.visto_cliente; }).length);
+      setMeusPedidosExtra(results[1] || []);
     });
   }
   async function submitRate(job) {
@@ -6314,6 +6316,7 @@ function ClientPortal(props) {
       contact_name: currentContact ? currentContact.name : null
     });
     if (inserted) {
+      setMeusPedidosExtra(function(p) { return [inserted].concat(p); });
       setExtraSent(true);
       setTimeout(function() {
         setExtraSent(false);
@@ -6679,9 +6682,31 @@ function ClientPortal(props) {
     }, style: { padding: "10px 12px", borderRadius: 8, border: "1.5px solid " + (extraSel === sv ? "#2E6DA4" : "#E2EBF4"), background: extraSel === sv ? "#EFF6FF" : "#F8FAFC", cursor: "pointer", fontSize: 12, color: extraSel === sv ? "#2E6DA4" : "#334155", fontWeight: extraSel === sv ? 700 : 500 } }, sv);
   })), /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 80, resize: "vertical", marginBottom: 12 }), value: extraNote, onChange: function(e) {
     setExtraNote(e.target.value);
-  }, placeholder: "Descreve o que precisas..." }), extraSent ? /* @__PURE__ */ React.createElement("div", { style: { background: "#DCFCE7", borderRadius: 10, padding: "14px", textAlign: "center", color: "#15803D", fontWeight: 700 } }, "Pedido enviado! Responderemos em 24 horas.") : /* @__PURE__ */ React.createElement("button", { onClick: submitExtra, disabled: !extraSel, style: { width: "100%", background: extraSel ? "#2E6DA4" : "#94A3B8", border: "none", borderRadius: 12, padding: "14px 0", color: "#fff", fontSize: 15, fontWeight: 700, cursor: extraSel ? "pointer" : "not-allowed" } }, "Enviar Pedido")), tab === "notas" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 6 } }, "Deixar uma Nota"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 16, lineHeight: 1.6 } }, "As suas notas s\xE3o enviadas directamente ao gestor e ficam vis\xEDveis na ficha da sua empresa durante 30 dias."), /* @__PURE__ */ React.createElement(NotaForm, { clientId, currentContact }))), /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 500, background: "#fff", borderTop: "1px solid #E2EBF4", display: "flex", zIndex: 50 } }, tabs.map(function(t) {
+  }, placeholder: "Descreve o que precisas..." }), extraSent ? /* @__PURE__ */ React.createElement("div", { style: { background: "#DCFCE7", borderRadius: 10, padding: "14px", textAlign: "center", color: "#15803D", fontWeight: 700 } }, "Pedido enviado! Responderemos em 24 horas.") : /* @__PURE__ */ React.createElement("button", { onClick: submitExtra, disabled: !extraSel, style: { width: "100%", background: extraSel ? "#2E6DA4" : "#94A3B8", border: "none", borderRadius: 12, padding: "14px 0", color: "#fff", fontSize: 15, fontWeight: 700, cursor: extraSel ? "pointer" : "not-allowed" } }, "Enviar Pedido"), meusPedidosExtra.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 24 } },
+    /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 13, color: "#1A3A5C", marginBottom: 10 } }, "Os teus pedidos anteriores"),
+    meusPedidosExtra.slice(0, 8).map(function(p) {
+      var estCor = p.status === "aprovado" ? "#16A34A" : p.status === "recusado" ? "#EF4444" : "#F59E0B";
+      var estBg = p.status === "aprovado" ? "#DCFCE7" : p.status === "recusado" ? "#FEE2E2" : "#FEF3C7";
+      var estLabel = p.status === "aprovado" ? "Aprovado" : p.status === "recusado" ? "Recusado" : "Em an\xE1lise";
+      return /* @__PURE__ */ React.createElement("div", { key: p.id, style: { background: "#F8FAFC", borderRadius: 10, padding: "10px 12px", marginBottom: 8, borderLeft: "3px solid " + estCor } },
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#1A3A5C" } }, p.tipo),
+          /* @__PURE__ */ React.createElement("span", { style: { background: estBg, color: estCor, borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" } }, estLabel)
+        ),
+        p.descricao && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 4 } }, p.descricao)
+      );
+    })
+  )), tab === "notas" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 6 } }, "Deixar uma Nota"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 16, lineHeight: 1.6 } }, "As suas notas s\xE3o enviadas directamente ao gestor e ficam vis\xEDveis na ficha da sua empresa durante 30 dias."), /* @__PURE__ */ React.createElement(NotaForm, { clientId, currentContact }))), /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 500, background: "#fff", borderTop: "1px solid #E2EBF4", display: "flex", zIndex: 50 } }, tabs.map(function(t) {
     return /* @__PURE__ */ React.createElement("button", { key: t.k, onClick: function() {
       setTab(t.k);
+      if (t.k === "extra" && extraRespondidos > 0) {
+        setExtraRespondidos(0);
+        var idsParaMarcar = meusPedidosExtra.filter(function(p) { return p.status !== "pendente" && !p.visto_cliente; }).map(function(p) { return p.id; });
+        idsParaMarcar.forEach(function(id) {
+          fetch(SUPABASE_URL + "/rest/v1/pedidos_extra?id=eq." + id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ visto_cliente: true }), keepalive: true });
+        });
+        setMeusPedidosExtra(function(p) { return p.map(function(x) { return idsParaMarcar.indexOf(x.id) !== -1 ? Object.assign({}, x, { visto_cliente: true }) : x; }); });
+      }
     }, style: { flex: 1, padding: "12px 4px 8px", background: "transparent", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, position: "relative" } },
       t.k === "extra" && extraRespondidos > 0 && /* @__PURE__ */ React.createElement("span", { style: { position: "absolute", top: 6, right: "50%", marginRight: -16, background: "#EF4444", color: "#fff", borderRadius: "50%", width: 14, height: 14, fontSize: 8, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" } }, extraRespondidos),
       /* @__PURE__ */ React.createElement("span", { style: { fontSize: 9, fontWeight: 700, color: tab === t.k ? "#2E6DA4" : "#94A3B8", textTransform: "uppercase", letterSpacing: 0.5 } }, t.l),
