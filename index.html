@@ -1272,7 +1272,7 @@ function Routes() {
     });
   }
   function generatePreview() {
-    const nextDates = getWeekDates(wk === 0 ? 1 : wk);
+    const nextDates = getWeekDates(wk);
     const previews = [];
     const warnings = [];
     var skipped = [];
@@ -1405,7 +1405,7 @@ function Routes() {
     });
   }, style: Object.assign({}, btnX, { padding: "7px 12px" }) }, "\u203A"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setShowNew(true);
-  }, style: btn }, "+ Servi\xE7o"), /* @__PURE__ */ React.createElement("button", { onClick: generatePreview, style: Object.assign({}, btnG, { fontSize: 13 }) }, "\u26A1 Gerar"), calView === "week" && wJobs.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: function() {
+  }, style: btn }, "+ Servi\xE7o"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: generatePreview, style: Object.assign({}, btnG, { fontSize: 13 }) }, "\u26A1 Gerar (", getLabel(), ")"), calView === "week" && wJobs.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: function() {
     const win = window.open("", "_blank");
     const byEmp = {};
     emps.forEach(function(e) {
@@ -1657,7 +1657,7 @@ function Routes() {
   } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 24, maxWidth: 520, width: "100%", maxHeight: "85vh", overflowY: "auto" }, onClick: function(e) {
     e.stopPropagation();
   } },
-    /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C", marginBottom: 4 } }, "Pré-visualização da semana"),
+    /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C", marginBottom: 4 } }, "Pré-visualização \u2014 ", getLabel()),
     /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 16 } }, preview.length, " serviços a criar"),
     genWarnings.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF3C7", border: "1.5px solid #F59E0B", borderRadius: 10, padding: "12px 14px", marginBottom: 16 } },
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#92400E", marginBottom: 8 } }, "⚠ Colaboradores em ausência — realocação necessária:"),
@@ -1668,7 +1668,7 @@ function Routes() {
     /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } },
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 8 } }, "Horas alocadas por colaborador:"),
       /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 } }, emps.map(function(e) {
-        const ausente = getWeekDates(wk === 0 ? 1 : wk).some(function(d) { return isEmpAusente(e.id, d); });
+        const ausente = getWeekDates(wk).some(function(d) { return isEmpAusente(e.id, d); });
         const horas = preview.filter(function(j) { return (j.team || []).indexOf(e.id) !== -1; }).reduce(function(s, j) { return s + (timeToMin(j.t2) - timeToMin(j.t1)) / 60; }, 0);
         const cor = ausente ? "#EF4444" : horas > 0 ? "#2E6DA4" : "#94A3B8";
         const bg = ausente ? "#FEE2E2" : horas > 0 ? "#EFF6FF" : "#F8FAFC";
@@ -1681,14 +1681,26 @@ function Routes() {
         );
       }))
     ),
+    preview.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } },
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 6 } }, "Clique num cliente para o remover todo da semana (ex: f\xE9rias):"),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } },
+        Array.from(new Set(preview.map(function(j) { return j.cn; }))).map(function(nome) {
+          var count = preview.filter(function(j) { return j.cn === nome; }).length;
+          return /* @__PURE__ */ React.createElement("button", { key: nome, onClick: function() { setPreview(function(p) { return p.filter(function(j) { return j.cn !== nome; }); }); }, style: { background: "#F8FAFC", border: "1px solid #E2EBF4", borderRadius: 6, padding: "4px 8px", fontSize: 11, color: "#64748B", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 } }, nome, " (", count, ") \u2715");
+        })
+      )
+    ),
     preview.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24 } }, "Nenhum serviço a gerar.") : preview.map(function(j, i) {
       const temAusentes = (j._ausentesNeste || []).length > 0;
-      return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #F1F5F9", fontSize: 13, background: temAusentes ? "#FFFBEB" : "transparent" } },
+      return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F1F5F9", fontSize: 13, background: temAusentes ? "#FFFBEB" : "transparent" } },
         /* @__PURE__ */ React.createElement("div", null,
           /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, color: "#1A3A5C" } }, j.cn, temAusentes && /* @__PURE__ */ React.createElement("span", { style: { color: "#F59E0B", marginLeft: 6, fontSize: 11 } }, "⚠ sem equipa completa")),
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, new Date(j.date + "T12:00:00").toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" }), " • ", j.t1, "–", j.t2)
         ),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#2E6DA4", fontWeight: 700 } }, fmt(j.val || 0), "€")
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#2E6DA4", fontWeight: 700 } }, fmt(j.val || 0), "€"),
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { setPreview(function(p) { return p.filter(function(_, idx) { return idx !== i; }); }); }, title: "Remover este serviço da pré-visualização", style: { background: "#FEE2E2", border: "none", borderRadius: 6, width: 22, height: 22, color: "#DC2626", cursor: "pointer", fontSize: 13, fontWeight: 800, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" } }, "\u2715")
+        )
       );
     }),
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 16 } },
