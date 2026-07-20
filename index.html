@@ -3973,19 +3973,48 @@ function Fornecedores() {
   })), (function() {
     var despGerais = despesas.filter(function(d) { return !d.fornecedor_id; });
     if (despGerais.length === 0) return null;
+    var byCat = {};
+    despGerais.forEach(function(d) {
+      var cat = d.categoria || "Outro";
+      if (!byCat[cat]) byCat[cat] = { pagas: [], porPagar: [] };
+      (d.pago ? byCat[cat].pagas : byCat[cat].porPagar).push(d);
+    });
+    var categorias = Object.keys(byCat).sort(function(a, b) {
+      var totalA = byCat[a].pagas.length + byCat[a].porPagar.length;
+      var totalB = byCat[b].pagas.length + byCat[b].porPagar.length;
+      return totalB - totalA;
+    });
+    function linhaDesp(d) {
+      return /* @__PURE__ */ React.createElement("div", { key: d.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F1F5F9", flexWrap: "wrap", gap: 8 } },
+        /* @__PURE__ */ React.createElement("div", null,
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C" } }, d.descricao),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } }, d.fornecedor_nome, " \u2022 ", new Date(d.data + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }))
+        ),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+          /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, fmt(d.valor), "\u20AC"),
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { togglePago(d); }, style: { background: d.pago ? "#DCFCE7" : "#FEF3C7", color: d.pago ? "#15803D" : "#92400E", border: "none", borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, d.pago ? "Pago" : "Por pagar"),
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { deleteDesp(d.id); }, style: { background: "transparent", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 14 } }, "\uD83D\uDDD1")
+        )
+      );
+    }
     return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20 }) },
-      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Despesas Gerais (sem fornecedor)"),
-      despGerais.slice(0, 15).map(function(d, i) {
-        var cor = CAT_CORES[d.categoria] || "#64748B";
-        return /* @__PURE__ */ React.createElement("div", { key: d.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: i < despGerais.length - 1 ? "1px solid #F1F5F9" : "none", flexWrap: "wrap", gap: 8 } },
-          /* @__PURE__ */ React.createElement("div", null,
-            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C" } }, d.descricao),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } }, /* @__PURE__ */ React.createElement("span", { style: { background: cor + "18", color: cor, borderRadius: 6, padding: "1px 7px", fontWeight: 700, marginRight: 6 } }, d.categoria), d.fornecedor_nome, " \u2022 ", new Date(d.data + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }))
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 16 } }, "Despesas Gerais (sem fornecedor)"),
+      categorias.map(function(cat) {
+        var cor = CAT_CORES[cat] || "#64748B";
+        var grupo = byCat[cat];
+        var totalCat = grupo.pagas.concat(grupo.porPagar).reduce(function(s, d) { return s + d.valor; }, 0);
+        return /* @__PURE__ */ React.createElement("div", { key: cat, style: { marginBottom: 18 } },
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
+            /* @__PURE__ */ React.createElement("span", { style: { background: cor + "18", color: cor, borderRadius: 6, padding: "3px 10px", fontWeight: 700, fontSize: 12 } }, cat),
+            /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: "#64748B" } }, fmt(totalCat), "\u20AC")
           ),
-          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
-            /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, fmt(d.valor), "\u20AC"),
-            /* @__PURE__ */ React.createElement("button", { onClick: function() { togglePago(d); }, style: { background: d.pago ? "#DCFCE7" : "#FEF3C7", color: d.pago ? "#15803D" : "#92400E", border: "none", borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, d.pago ? "Pago" : "Por pagar"),
-            /* @__PURE__ */ React.createElement("button", { onClick: function() { deleteDesp(d.id); }, style: { background: "transparent", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 14 } }, "\uD83D\uDDD1")
+          grupo.porPagar.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: grupo.pagas.length > 0 ? 10 : 0 } },
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#92400E", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Por pagar (", grupo.porPagar.length, ")"),
+            grupo.porPagar.map(linhaDesp)
+          ),
+          grupo.pagas.length > 0 && /* @__PURE__ */ React.createElement("div", null,
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#15803D", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Pagas (", grupo.pagas.length, ")"),
+            grupo.pagas.map(linhaDesp)
           )
         );
       })
@@ -4912,8 +4941,8 @@ function Avaliacoes() {
           return cliente && cliente.email ? cliente.email.trim() : null;
         }).filter(Boolean);
         if (emailsPendentes.length === 0) return null;
-        var assunto = "Lembrete: a sua avalia\xE7\xE3o \xE9 importante \u2014 SamorClean";
-        var corpo = "Ol\xE1,\n\nEsperamos que esteja tudo bem consigo.\n\nEste \xE9 um lembrete simp\xE1tico para nos deixar a sua avalia\xE7\xE3o sobre o(s) \xFAltimo(s) servi\xE7o(s) de limpeza realizado(s). Demora menos de 1 minuto atrav\xE9s do QR code ou do link do portal habitual.\n\nA sua opini\xE3o ajuda-nos a reconhecer e premiar a nossa equipa, e a corrigir rapidamente qualquer aspecto menos positivo.\n\nMuito obrigado pelo seu tempo!\n\nEquipa SamorClean";
+        var assunto = "\uD83E\uDDF9 A sua opini\xE3o faz a nossa equipa brilhar \u2014 SamorClean";
+        var corpo = "Ol\xE1,\n\nAqui vai a equipa SamorClean, com um pedido rápido e sincero.\n\nCada visita que fazemos \xE9 feita por pessoas reais, que se esfor\xE7am para deixar o seu espa\xE7o impec\xE1vel. A sua avalia\xE7\xE3o \xE9 a forma como reconhecemos e premiamos esse trabalho \u2014 e tamb\xE9m como sabemos, na hora, se algo precisa de ser corrigido.\n\nDemora menos de 1 minuto: basta usar o QR code ou o link do portal que j\xE1 conhece.\n\nMuito obrigado por fazer parte da nossa hist\xF3ria \u2014 \xE9 com clientes como voc\xEA que continuamos a crescer com cuidado.\n\nCom gratid\xE3o,\nEquipa SamorClean\n\U0001F9F9\u2728";
         return /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14, marginTop: 4 } },
           /* @__PURE__ */ React.createElement("a", { href: "mailto:?bcc=" + encodeURIComponent(emailsPendentes.join(",")) + "&subject=" + encodeURIComponent(assunto) + "&body=" + encodeURIComponent(corpo), style: Object.assign({}, btnG, { display: "inline-block", textDecoration: "none", fontSize: 12 }) }, "\uD83D\uDCE9 Enviar lembrete semanal a todos (", emailsPendentes.length, ")")
         );
@@ -4942,8 +4971,8 @@ function Avaliacoes() {
         /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C", marginBottom: 4 } }, "Email para ", emailModal.cliente.name),
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 16 } }, emailModal.contacto.email),
         (function() {
-          var assunto = "A sua opini\xE3o \xE9 importante para n\xF3s \u2014 SamorClean";
-          var corpo = "Ol\xE1 " + (emailModal.contacto.name || "").split(" ")[0] + ",\n\nEsperamos que esteja tudo bem consigo.\n\nGost\xE1vamos de saber a sua opini\xE3o sobre o(s) \xFAltimo(s) servi\xE7o(s) de limpeza realizado(s). A sua avalia\xE7\xE3o demora menos de 1 minuto e ajuda-nos a reconhecer e premiar a nossa equipa, al\xE9m de nos permitir corrigir rapidamente qualquer aspecto menos positivo.\n\nPode avaliar atrav\xE9s do QR code que tem dispon\xEDvel, ou pelo link do portal habitual.\n\nMuito obrigado pelo seu tempo!\n\nEquipa SamorClean";
+          var assunto = "\uD83E\uDDF9 A sua opini\xE3o faz a nossa equipa brilhar \u2014 SamorClean";
+          var corpo = "Ol\xE1 " + (emailModal.contacto.name || "").split(" ")[0] + ",\n\nAqui vai a equipa SamorClean, com um pedido rápido e sincero.\n\nCada visita que fazemos \xE9 feita por pessoas reais, que se esfor\xE7am para deixar o seu espa\xE7o impec\xE1vel. A sua avalia\xE7\xE3o \xE9 a forma como reconhecemos e premiamos esse trabalho \u2014 e tamb\xE9m como sabemos, na hora, se algo precisa de ser corrigido.\n\nDemora menos de 1 minuto: basta usar o QR code ou o link do portal que j\xE1 conhece.\n\nMuito obrigado por fazer parte da nossa hist\xF3ria \u2014 \xE9 com clientes como voc\xEA que continuamos a crescer com cuidado.\n\nCom gratid\xE3o,\nEquipa SamorClean\n\U0001F9F9\u2728";
           return /* @__PURE__ */ React.createElement("div", null,
             /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } },
               /* @__PURE__ */ React.createElement("label", { style: lbl }, "Assunto"),
