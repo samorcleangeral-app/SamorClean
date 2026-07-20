@@ -3561,6 +3561,8 @@ function PedidosColab(props) {
   const [filtroTipo, setFiltroTipo] = useState("todos");
   const [selPedido, setSelPedido] = useState(null);
   const [resposta, setResposta] = useState("");
+  const [horaInicioEdit, setHoraInicioEdit] = useState("");
+  const [horaFimEdit, setHoraFimEdit] = useState("");
   const TIPO_ICON = { ausencia: "\u{1F4C5}", fardamento: "\u{1F455}", material: "\u{1F9F9}" };
   const TIPO_LABEL = { ausencia: "Aus\xEAncia", fardamento: "Fardamento", material: "Material" };
   const TIPO_COR = { ausencia: "#2E6DA4", fardamento: "#7C3AED", material: "#F59E0B" };
@@ -3579,6 +3581,8 @@ function PedidosColab(props) {
     });
     if (estado === "aprovado" && selPedido && selPedido.tipo === "ausencia" && selPedido.detalhes) {
       var det = selPedido.detalhes;
+      var horaIni = det.parcial ? horaInicioEdit || det.hora_inicio : null;
+      var horaFimF = det.parcial ? horaFimEdit || det.hora_fim : null;
       await fetch(SUPABASE_URL + "/rest/v1/ausencias", {
         method: "POST",
         headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }),
@@ -3587,10 +3591,12 @@ function PedidosColab(props) {
           tipo: det.tipo || "Outro",
           data_inicio: det.data_inicio,
           data_fim: det.data_fim || det.data_inicio,
-          descricao: det.descricao || selPedido.descricao || ""
+          descricao: (det.parcial ? "Aus\xEAncia parcial das " + horaIni + " \xE0s " + horaFimF + " \u2014 " : "") + (det.descricao || selPedido.descricao || "")
         })
       });
-      if (det.data_inicio) {
+      if (det.parcial) {
+        alert(selPedido.funcionario_nome + " tem aus\xEAncia parcial no dia " + det.data_inicio + ", das " + horaIni + " \xE0s " + horaFimF + ". Ajusta manualmente a equipa desse per\xEDodo nas Rotas, se necess\xE1rio.");
+      } else if (det.data_inicio) {
         var nRem = await removerFuncionarioDeServicosFuturos(selPedido.funcionario_id, det.data_inicio, det.data_fim || det.data_inicio);
         if (nRem > 0) alert(selPedido.funcionario_nome + " foi removido de " + nRem + " servi\xE7o" + (nRem > 1 ? "s" : "") + " j\xE1 agendado" + (nRem > 1 ? "s" : "") + " nesse per\xEDodo. Pode ser necess\xE1rio reatribuir equipa.");
       }
@@ -3643,6 +3649,8 @@ function PedidosColab(props) {
         return /* @__PURE__ */ React.createElement("div", { key: p.id, onClick: function() {
           setSelPedido(p);
           setResposta(p.resposta || "");
+          setHoraInicioEdit(p.detalhes && p.detalhes.hora_inicio || "");
+          setHoraFimEdit(p.detalhes && p.detalhes.hora_fim || "");
         }, style: Object.assign({}, card, { marginBottom: 10, padding: 16, cursor: "pointer", borderLeft: "4px solid " + cor, display: "flex", alignItems: "center", gap: 14 }) },
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, flexShrink: 0 } }, TIPO_ICON[p.tipo] || "\u{1F4CB}"),
           /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } },
@@ -3659,7 +3667,7 @@ function PedidosColab(props) {
         e.stopPropagation();
       } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C" } }, selPedido.funcionario_nome), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, TIPO_LABEL[selPedido.tipo], " \u2014 ", new Date(selPedido.created_at).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" }))), /* @__PURE__ */ React.createElement("button", { onClick: function() {
         setSelPedido(null);
-      }, style: Object.assign({}, btnX, { padding: "4px 8px" }) }, "\u2715")), /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 10, padding: "12px 14px", marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Pedido"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#334155", fontWeight: 600 } }, selPedido.descricao)), selPedido.detalhes && selPedido.tipo === "ausencia" && /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 8, padding: "8px 10px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700 } }, "IN\xCDCIO"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, selPedido.detalhes.data_inicio || "\u2014")), /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 8, padding: "8px 10px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700 } }, "FIM"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, selPedido.detalhes.data_fim || "\u2014"))), selPedido.estado === "pendente" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Resposta (opcional)"), /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 60 }), value: resposta, onChange: function(e) {
+      }, style: Object.assign({}, btnX, { padding: "4px 8px" }) }, "\u2715")), /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 10, padding: "12px 14px", marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Pedido"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#334155", fontWeight: 600 } }, selPedido.descricao)), selPedido.detalhes && selPedido.tipo === "ausencia" && !selPedido.detalhes.parcial && /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 8, padding: "8px 10px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700 } }, "IN\xCDCIO"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, selPedido.detalhes.data_inicio || "\u2014")), /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 8, padding: "8px 10px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700 } }, "FIM"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, selPedido.detalhes.data_fim || "\u2014"))), selPedido.detalhes && selPedido.tipo === "ausencia" && selPedido.detalhes.parcial && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, marginBottom: 6 } }, "AUS\xCANCIA PARCIAL \u2014 ", selPedido.detalhes.data_inicio, " (podes ajustar as horas)"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Das"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "time", value: horaInicioEdit, onChange: function(e) { setHoraInicioEdit(e.target.value); }, disabled: selPedido.estado !== "pendente" })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "\xC0s"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "time", value: horaFimEdit, onChange: function(e) { setHoraFimEdit(e.target.value); }, disabled: selPedido.estado !== "pendente" })))), selPedido.estado === "pendente" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Resposta (opcional)"), /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 60 }), value: resposta, onChange: function(e) {
         setResposta(e.target.value);
       }, placeholder: "Mensagem para o colaborador..." })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
         responder(selPedido.id, "recusado");
@@ -5404,7 +5412,7 @@ function EmpPedidos(props) {
   const [sent, setSent] = useState(false);
   const [historico, setHistorico] = useState([]);
   const [loadingHist, setLoadingHist] = useState(false);
-  const [ausForm, setAusForm] = useState({ tipo: "F\xE9rias", data_inicio: "", data_fim: "", descricao: "" });
+  const [ausForm, setAusForm] = useState({ tipo: "F\xE9rias", parcial: false, hora_inicio: "", hora_fim: "", data_inicio: "", data_fim: "", descricao: "" });
   const [fardForm, setFardForm] = useState({ item: "", tamanho: "", quantidade: 1, motivo: "" });
   const [matForm, setMatForm] = useState({ item: "", quantidade: 1, motivo: "" });
   const [saving, setSaving] = useState(false);
@@ -5423,10 +5431,11 @@ function EmpPedidos(props) {
   const TIPOS_AUS = ["F\xE9rias", "Falta Justificada", "Licen\xE7a", "Forma\xE7\xE3o Externa", "Dispensa", "Outro"];
   async function submitAusencia() {
     setSaving(true);
+    var descParcial = ausForm.parcial ? " | das " + ausForm.hora_inicio + " \xE0s " + ausForm.hora_fim : (ausForm.data_fim ? " \u2192 " + ausForm.data_fim : "");
     await fetch(SUPABASE_URL + "/rest/v1/pedidos_colaboradores", {
       method: "POST",
       headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }),
-      body: JSON.stringify({ funcionario_id: empId, funcionario_nome: empName, tipo: "ausencia", descricao: ausForm.tipo + " | " + ausForm.data_inicio + (ausForm.data_fim ? " \u2192 " + ausForm.data_fim : "") + (ausForm.descricao ? " | " + ausForm.descricao : ""), detalhes: ausForm, estado: "pendente" })
+      body: JSON.stringify({ funcionario_id: empId, funcionario_nome: empName, tipo: "ausencia", descricao: ausForm.tipo + " | " + ausForm.data_inicio + descParcial + (ausForm.descricao ? " | " + ausForm.descricao : ""), detalhes: Object.assign({}, ausForm, { data_fim: ausForm.parcial ? ausForm.data_inicio : ausForm.data_fim }), estado: "pendente" })
     });
     setSaving(false);
     setSent(true);
@@ -5466,13 +5475,22 @@ function EmpPedidos(props) {
     setAusForm(Object.assign({}, ausForm, { tipo: e.target.value }));
   } }, TIPOS_AUS.map(function(t) {
     return /* @__PURE__ */ React.createElement("option", { key: t }, t);
-  }))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Data in\xEDcio"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: ausForm.data_inicio, onChange: function(e) {
+  }))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 12 } },
+    /* @__PURE__ */ React.createElement("button", { onClick: function() { setAusForm(Object.assign({}, ausForm, { parcial: false })); }, style: { flex: 1, padding: "9px 4px", borderRadius: 8, border: "1.5px solid " + (!ausForm.parcial ? "#2E6DA4" : "#E2EBF4"), background: !ausForm.parcial ? "#EFF6FF" : "#fff", color: !ausForm.parcial ? "#2E6DA4" : "#64748B", fontWeight: 700, fontSize: 12, cursor: "pointer" } }, "\uD83D\uDCC5 Dia(s) inteiro(s)"),
+    /* @__PURE__ */ React.createElement("button", { onClick: function() { setAusForm(Object.assign({}, ausForm, { parcial: true, data_fim: "" })); }, style: { flex: 1, padding: "9px 4px", borderRadius: 8, border: "1.5px solid " + (ausForm.parcial ? "#2E6DA4" : "#E2EBF4"), background: ausForm.parcial ? "#EFF6FF" : "#fff", color: ausForm.parcial ? "#2E6DA4" : "#64748B", fontWeight: 700, fontSize: 12, cursor: "pointer" } }, "\u23F1 Algumas horas")
+  ), ausForm.parcial ? /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Data"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: ausForm.data_inicio, onChange: function(e) {
+    setAusForm(Object.assign({}, ausForm, { data_inicio: e.target.value }));
+  } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Das"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "time", value: ausForm.hora_inicio, onChange: function(e) {
+    setAusForm(Object.assign({}, ausForm, { hora_inicio: e.target.value }));
+  } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "\xC0s"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "time", value: ausForm.hora_fim, onChange: function(e) {
+    setAusForm(Object.assign({}, ausForm, { hora_fim: e.target.value }));
+  } }))) : /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Data in\xEDcio"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: ausForm.data_inicio, onChange: function(e) {
     setAusForm(Object.assign({}, ausForm, { data_inicio: e.target.value }));
   } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Data fim"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: ausForm.data_fim, onChange: function(e) {
     setAusForm(Object.assign({}, ausForm, { data_fim: e.target.value }));
   } }))), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Motivo / Observa\xE7\xF5es"), /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 70, resize: "vertical" }), value: ausForm.descricao, onChange: function(e) {
     setAusForm(Object.assign({}, ausForm, { descricao: e.target.value }));
-  }, placeholder: "Explica o motivo do pedido..." })), /* @__PURE__ */ React.createElement("button", { onClick: submitAusencia, disabled: saving || !ausForm.data_inicio, style: Object.assign({}, btnG, { width: "100%", textAlign: "center", opacity: !ausForm.data_inicio ? 0.5 : 1 }) }, saving ? "A enviar..." : "Enviar pedido")), tab === "fardamento" && /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Pedido de Fardamento"), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Item"), /* @__PURE__ */ React.createElement("input", { style: inp, value: fardForm.item, onChange: function(e) {
+  }, placeholder: "Explica o motivo do pedido..." })), /* @__PURE__ */ React.createElement("button", { onClick: submitAusencia, disabled: saving || !ausForm.data_inicio || (ausForm.parcial && (!ausForm.hora_inicio || !ausForm.hora_fim)), style: Object.assign({}, btnG, { width: "100%", textAlign: "center", opacity: !ausForm.data_inicio || (ausForm.parcial && (!ausForm.hora_inicio || !ausForm.hora_fim)) ? 0.5 : 1 }) }, saving ? "A enviar..." : "Enviar pedido")), tab === "fardamento" && /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Pedido de Fardamento"), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Item"), /* @__PURE__ */ React.createElement("input", { style: inp, value: fardForm.item, onChange: function(e) {
     setFardForm(Object.assign({}, fardForm, { item: e.target.value }));
   }, placeholder: "Ex: T-shirt SamorClean, cal\xE7as, etc." })), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tamanho"), /* @__PURE__ */ React.createElement("input", { style: inp, value: fardForm.tamanho, onChange: function(e) {
     setFardForm(Object.assign({}, fardForm, { tamanho: e.target.value }));
