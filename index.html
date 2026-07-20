@@ -1841,7 +1841,13 @@ function Routes() {
   }))), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Equipa"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, emps.map(function(e) {
     const checked = nj.team.indexOf(e.id) !== -1;
     const ausenteHoje = nj.date ? isEmpAusente(e.id, nj.date) : false;
-    const outrosServicos = nj.date ? jobs.filter(function(j) { return j.date === nj.date && j.status !== "completed" && (j.team || []).indexOf(e.id) !== -1 && j.cn !== nj.cn; }) : [];
+    const outrosServicos = nj.date ? jobs.filter(function(j) {
+      if (j.date !== nj.date || j.status === "completed" || (j.team || []).indexOf(e.id) === -1 || j.cn === nj.cn) return false;
+      var toMin = function(t) { var p = (t || "0:0").split(":"); return parseInt(p[0]) * 60 + parseInt(p[1]); };
+      var novoInicio = toMin(nj.t1), novoFim = toMin(nj.t2);
+      var outroInicio = toMin(j.t1), outroFim = toMin(j.t2);
+      return novoInicio < outroFim && outroInicio < novoFim;
+    }) : [];
     const jaAlocado = outrosServicos.length > 0;
     return /* @__PURE__ */ React.createElement("div", { key: e.id, onClick: function() {
       if (ausenteHoje) return;
@@ -1851,7 +1857,7 @@ function Routes() {
         /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: ausenteHoje ? "#EF4444" : checked ? empColor(e.id) : "#CBD5E1", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 9, fontWeight: 800, flexShrink: 0 } }, ausenteHoje ? "\u26A0" : (e.av || e.name.slice(0, 2).toUpperCase())),
         /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: ausenteHoje ? "#DC2626" : checked ? empColor(e.id) : "#64748B" } }, e.name.split(" ")[0], ausenteHoje && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 700, marginLeft: 4 } }, "(ausente)"))
       ),
-      jaAlocado && !ausenteHoje && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#92400E", marginLeft: 30, lineHeight: 1.3 } }, outrosServicos.map(function(j) { return j.cn + " (" + j.t1 + "\u2013" + j.t2 + ")"; }).join(", "))
+      jaAlocado && !ausenteHoje && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#92400E", marginLeft: 30 } }, "j\xE1 alocado a outro servi\xE7o")
     );
   })))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 16 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setShowNew(false);
