@@ -509,6 +509,17 @@ function Finance() {
     }
     return count;
   })();
+  const diasUteisPassados = (function() {
+    var count = 0;
+    var d = new Date(now.getFullYear(), now.getMonth(), 1);
+    while (d.getMonth() === now.getMonth() && d <= now) {
+      var dow = d.getDay();
+      if (dow !== 0 && dow !== 6) count++;
+      d.setDate(d.getDate() + 1);
+    }
+    return count;
+  })();
+  const proporcaoMes = diasUteisDoMes > 0 ? diasUteisPassados / diasUteisDoMes : 1;
 
   function custoColaborador(emp) {
     return calcCustoColaboradorMes(emp, rhData, absData, monthJobs, now);
@@ -595,7 +606,8 @@ function Finance() {
         return s + (parseInt(t2[0])*60+parseInt(t2[1]) - parseInt(t1[0])*60-parseInt(t1[1])) / 60;
       }, 0);
     var custoH = custoHoraReal(e);
-    return { emp: e, custo: c.total, horas: horasEmp, detalhe: c.detalhe, tipo: c.tipo, custoHora: custoH };
+    var custoAteHoje = c.tipo === "Recibo Verde" ? c.total : c.total * proporcaoMes;
+    return { emp: e, custo: c.total, custoAteHoje: custoAteHoje, horas: horasEmp, detalhe: c.detalhe, tipo: c.tipo, custoHora: custoH };
   }).filter(function(x) { return x.custo > 0 || x.horas > 0; });
 
   var totalCustoMaoObra = custosColab.reduce(function(s, c) { return s + c.custo; }, 0);
@@ -793,20 +805,32 @@ function Finance() {
     ),
     finTab === "colaboradores" && /* @__PURE__ */ React.createElement("div", null,
       /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, padding: 16, background: "#1A3A5C" }) },
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.6)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Custo total mão de obra este mês"),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, fontWeight: 900, color: "#fff" } }, fmt(totalCustoMaoObra), "€")
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 16 } },
+          /* @__PURE__ */ React.createElement("div", null,
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.6)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Custo acumulado at\xE9 hoje"),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, fontWeight: 900, color: "#fff" } }, fmt(custosColab.reduce(function(s, c) { return s + c.custoAteHoje; }, 0)), "€")
+          ),
+          /* @__PURE__ */ React.createElement("div", null,
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.5)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Proje\xE7\xE3o mês completo"),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: "rgba(255,255,255,0.7)" } }, fmt(totalCustoMaoObra), "€")
+          )
+        )
       ),
       custosColab.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
-        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Custo por colaborador"),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "Custo por colaborador \u2014 at\xE9 hoje"),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, diasUteisPassados, "/", diasUteisDoMes, " dias \xFAteis")
+        ),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 14 } }, "Valor acumulado com base nos dias \xFAteis j\xE1 decorridos este m\xEAs (recibo verde conta sempre pelos dias reais trabalhados)."),
         (function() {
-          var ordenado = custosColab.slice().sort(function(a, b) { return b.custo - a.custo; });
-          var maxCusto = Math.max.apply(null, ordenado.map(function(c) { return c.custo; }).concat([1]));
+          var ordenado = custosColab.slice().sort(function(a, b) { return b.custoAteHoje - a.custoAteHoje; });
+          var maxCusto = Math.max.apply(null, ordenado.map(function(c) { return c.custoAteHoje; }).concat([1]));
           return ordenado.map(function(c) {
-            var pct = Math.max(2, Math.round(c.custo / maxCusto * 100));
+            var pct = Math.max(2, Math.round(c.custoAteHoje / maxCusto * 100));
             return /* @__PURE__ */ React.createElement("div", { key: c.emp.id, style: { marginBottom: 10 } },
               /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 } },
                 /* @__PURE__ */ React.createElement("span", { style: { color: "#334155", fontWeight: 600 } }, c.emp.name),
-                /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B", fontWeight: 700 } }, fmt(c.custo), "\u20AC")
+                /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B", fontWeight: 700 } }, fmt(c.custoAteHoje), "\u20AC", c.tipo !== "Recibo Verde" && /* @__PURE__ */ React.createElement("span", { style: { color: "#CBD5E1", fontWeight: 500 } }, " / ", fmt(c.custo), "\u20AC proj."))
               ),
               /* @__PURE__ */ React.createElement("div", { style: { height: 10, background: "#F1F5F9", borderRadius: 5 } },
                 /* @__PURE__ */ React.createElement("div", { style: { height: 10, width: pct + "%", background: EC[c.emp.id] || "#2E6DA4", borderRadius: 5 } })
