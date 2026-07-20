@@ -340,6 +340,46 @@ function calcValorFaturacao(c, jobs, horas) {
   if (tipoFat === "visita") return { valor: jobs.length * (parseFloat(c.valor_visita) || 0), tipo: "visita" };
   return { valor: horas * (c.price_per_hour || 0), tipo: "hora" };
 }
+function calcCustoAteHojeReal(emp, rhData, absData, monthJobs, hoje) {
+  var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
+  if (!rh) return 0;
+  var tipo = rh.tipo_contrato || "Contrato";
+  var hojeStr = localDateStr(hoje);
+  if (tipo === "Recibo Verde") {
+    var diasTrabalhados = new Set();
+    monthJobs.forEach(function(j) { if ((j.team || []).indexOf(emp.id) !== -1 && j.date <= hojeStr) diasTrabalhados.add(j.date); });
+    return diasTrabalhados.size * (parseFloat(rh.valor_dia) || 0);
+  }
+  var diasUteisDoMes = calcDiasUteisMes(hoje);
+  var monthStart = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  var diasUteisPassados = 0;
+  var d = new Date(monthStart);
+  while (d <= hoje) { if (d.getDay() !== 0 && d.getDay() !== 6) diasUteisPassados++; d.setDate(d.getDate() + 1); }
+  var ausenciasEmp = absData.filter(function(a) { return a.funcionario_id === emp.id; });
+  var diasBaixaAteHoje = 0, diasFeriasAteHoje = 0;
+  ausenciasEmp.forEach(function(a) {
+    var start = new Date((a.data_inicio || "") + "T12:00:00");
+    var end = new Date((a.data_fim || a.data_inicio || "") + "T12:00:00");
+    var tipoAus = (a.tipo || "").toLowerCase();
+    var dd = new Date(Math.max(start, monthStart));
+    var ddEnd = new Date(Math.min(end, hoje));
+    var dias = 0;
+    while (dd <= ddEnd) { if (dd.getDay() !== 0 && dd.getDay() !== 6) dias++; dd.setDate(dd.getDate() + 1); }
+    if (tipoAus === "férias") diasFeriasAteHoje += dias;
+    else if (tipoAus.indexOf("baixa") !== -1) { diasBaixaAteHoje += dias; if (diasBaixaAteHoje > 3) diasBaixaAteHoje -= 3; }
+  });
+  var salario = parseFloat(rh.salario_base) || 0;
+  var diasEfectivos = Math.max(0, diasUteisPassados - diasBaixaAteHoje);
+  var salarioAteHoje = diasUteisDoMes > 0 ? salario * (diasEfectivos / diasUteisDoMes) : 0;
+  var diasAlim = Math.max(0, diasUteisPassados - diasFeriasAteHoje - diasBaixaAteHoje);
+  var subAlimAteHoje = diasAlim * 6;
+  var proporcaoPassado = diasUteisDoMes > 0 ? diasUteisPassados / diasUteisDoMes : 0;
+  var subFeriasAteHoje = salario * 0.0833 * proporcaoPassado;
+  var subNatalAteHoje = salario * 0.0833 * proporcaoPassado;
+  var ssAteHoje = salarioAteHoje * 0.2375;
+  var seguroAteHoje = salarioAteHoje * 0.015;
+  return salarioAteHoje + subAlimAteHoje + subFeriasAteHoje + subNatalAteHoje + ssAteHoje + seguroAteHoje;
+}
 function Finance() {
   const [loading, setLoading] = useState(true);
   const [monthJobs, setMonthJobs] = useState([]);
@@ -606,7 +646,7 @@ function Finance() {
         return s + (parseInt(t2[0])*60+parseInt(t2[1]) - parseInt(t1[0])*60-parseInt(t1[1])) / 60;
       }, 0);
     var custoH = custoHoraReal(e);
-    var custoAteHoje = c.tipo === "Recibo Verde" ? c.total : c.total * proporcaoMes;
+    var custoAteHoje = calcCustoAteHojeReal(e, rhData, absData, monthJobs, now);
     return { emp: e, custo: c.total, custoAteHoje: custoAteHoje, horas: horasEmp, detalhe: c.detalhe, tipo: c.tipo, custoHora: custoH };
   }).filter(function(x) { return x.custo > 0 || x.horas > 0; });
 
@@ -3495,7 +3535,7 @@ function PedidosColab(props) {
   };
   const [pedidos, setPedidos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filtro, setFiltro] = useState("pendente");
+  const [selFunc, setSelFunc] = useState(null);
   const [selPedido, setSelPedido] = useState(null);
   const [resposta, setResposta] = useState("");
   const TIPO_ICON = { ausencia: "\u{1F4C5}", fardamento: "\u{1F455}", material: "\u{1F9F9}" };
@@ -3514,7 +3554,6 @@ function PedidosColab(props) {
       headers: dbHeaders(),
       body: JSON.stringify({ estado, resposta })
     });
-    // If approving an ausencia, auto-create record in ausencias table
     if (estado === "aprovado" && selPedido && selPedido.tipo === "ausencia" && selPedido.detalhes) {
       var det = selPedido.detalhes;
       await fetch(SUPABASE_URL + "/rest/v1/ausencias", {
@@ -3533,53 +3572,98 @@ function PedidosColab(props) {
         if (nRem > 0) alert(selPedido.funcionario_nome + " foi removido de " + nRem + " servi\xE7o" + (nRem > 1 ? "s" : "") + " j\xE1 agendado" + (nRem > 1 ? "s" : "") + " nesse per\xEDodo. Pode ser necess\xE1rio reatribuir equipa.");
       }
     }
-    setPedidos(function(p) {
-      return p.map(function(x) {
-        return x.id === id ? Object.assign({}, x, { estado, resposta }) : x;
-      });
+    var pedidosAtualizados = pedidos.map(function(x) {
+      return x.id === id ? Object.assign({}, x, { estado, resposta }) : x;
     });
-    const pendentes2 = pedidos.filter(function(p) {
-      return p.id !== id && p.estado === "pendente";
-    }).length;
-    onUpdate(pendentes2);
+    setPedidos(pedidosAtualizados);
+    const pendentesTotal = pedidosAtualizados.filter(function(p) { return p.estado === "pendente"; }).length;
+    onUpdate(pendentesTotal);
     setSelPedido(null);
     setResposta("");
   }
-  const filtered = filtro === "todos" ? pedidos : pedidos.filter(function(p) {
-    return p.estado === filtro;
+  // Group by employee
+  var byFunc = {};
+  pedidos.forEach(function(p) {
+    if (!byFunc[p.funcionario_id]) byFunc[p.funcionario_id] = { nome: p.funcionario_nome, pedidos: [] };
+    byFunc[p.funcionario_id].pedidos.push(p);
   });
-  const pendentes = pedidos.filter(function(p) {
-    return p.estado === "pendente";
-  }).length;
+  var funcList = Object.keys(byFunc).map(function(fid) {
+    var pends = byFunc[fid].pedidos.filter(function(p) { return p.estado === "pendente"; }).length;
+    return { id: fid, nome: byFunc[fid].nome, pedidos: byFunc[fid].pedidos, pendentes: pends };
+  }).sort(function(a, b) { return b.pendentes - a.pendentes || b.pedidos.length - a.pedidos.length; });
+  var totalPendentes = pedidos.filter(function(p) { return p.estado === "pendente"; }).length;
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...");
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Pedidos da Equipa"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, pedidos.length, " pedido", pedidos.length !== 1 ? "s" : "", pendentes > 0 && /* @__PURE__ */ React.createElement("span", { style: { background: "#EF4444", color: "#fff", borderRadius: 10, padding: "1px 8px", fontSize: 11, fontWeight: 700, marginLeft: 8 } }, pendentes, " pendente", pendentes !== 1 ? "s" : "")))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" } }, ["pendente", "aprovado", "recusado", "todos"].map(function(e) {
-    const count = e === "todos" ? pedidos.length : pedidos.filter(function(p) {
-      return p.estado === e;
-    }).length;
-    const cor = ESTADO_COR[e] || "#64748B";
-    return /* @__PURE__ */ React.createElement("button", { key: e, onClick: function() {
-      setFiltro(e);
-    }, style: { padding: "6px 14px", borderRadius: 8, border: "1.5px solid " + (filtro === e ? cor : "#E2EBF4"), background: filtro === e ? cor + "22" : "#fff", color: filtro === e ? cor : "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, e.charAt(0).toUpperCase() + e.slice(1), " (", count, ")");
-  })), filtered.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, marginBottom: 12 } }, "\u{1F4E5}"), /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16, marginBottom: 8 } }, "Sem pedidos"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13 } }, "Quando a equipa fizer pedidos aparecem aqui.")) : filtered.map(function(p) {
-    const cor = TIPO_COR[p.tipo] || "#64748B";
-    const estadoCor = ESTADO_COR[p.estado] || "#64748B";
-    return /* @__PURE__ */ React.createElement("div", { key: p.id, onClick: function() {
-      setSelPedido(p);
-      setResposta(p.resposta || "");
-    }, style: Object.assign({}, card, { marginBottom: 10, padding: 16, cursor: "pointer", borderLeft: "4px solid " + cor, display: "flex", alignItems: "center", gap: 14 }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, flexShrink: 0 } }, TIPO_ICON[p.tipo] || "\u{1F4CB}"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 3 } }, /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, p.funcionario_nome), /* @__PURE__ */ React.createElement("span", { style: { background: cor + "22", color: cor, borderRadius: 5, padding: "1px 7px", fontSize: 10, fontWeight: 700 } }, TIPO_LABEL[p.tipo])), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, p.descricao), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 3 } }, new Date(p.created_at).toLocaleDateString("pt-PT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))), /* @__PURE__ */ React.createElement("span", { style: { background: estadoCor + "22", color: estadoCor, borderRadius: 6, padding: "3px 10px", fontSize: 11, fontWeight: 700, flexShrink: 0 } }, p.estado));
-  }), selPedido && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }, onClick: function() {
-    setSelPedido(null);
-  } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 24, maxWidth: 440, width: "100%" }, onClick: function(e) {
-    e.stopPropagation();
-  } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C" } }, selPedido.funcionario_nome), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, TIPO_LABEL[selPedido.tipo], " \u2014 ", new Date(selPedido.created_at).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" }))), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-    setSelPedido(null);
-  }, style: Object.assign({}, btnX, { padding: "4px 8px" }) }, "\u2715")), /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 10, padding: "12px 14px", marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Pedido"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#334155", fontWeight: 600 } }, selPedido.descricao)), selPedido.detalhes && selPedido.tipo === "ausencia" && /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 8, padding: "8px 10px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700 } }, "IN\xCDCIO"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, selPedido.detalhes.data_inicio || "\u2014")), /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 8, padding: "8px 10px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700 } }, "FIM"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, selPedido.detalhes.data_fim || "\u2014"))), selPedido.estado === "pendente" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Resposta (opcional)"), /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 60 }), value: resposta, onChange: function(e) {
-    setResposta(e.target.value);
-  }, placeholder: "Mensagem para o colaborador..." })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
-    responder(selPedido.id, "recusado");
-  }, style: Object.assign({}, btnR, { flex: 1, textAlign: "center" }) }, "\u2717 Recusar"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-    responder(selPedido.id, "aprovado");
-  }, style: Object.assign({}, btnG, { flex: 1, textAlign: "center" }) }, "\u2713 Aprovar"))), selPedido.estado !== "pendente" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { background: ESTADO_COR[selPedido.estado] + "15", borderRadius: 10, padding: "10px 14px", marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: ESTADO_COR[selPedido.estado], textTransform: "uppercase" } }, selPedido.estado), selPedido.resposta && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#334155", marginTop: 4 } }, selPedido.resposta)), /* @__PURE__ */ React.createElement("button", { onClick: function() { responder(selPedido.id, "pendente"); }, style: { width: "100%", background: "#F8FAFC", border: "1.5px solid #E2EBF4", borderRadius: 8, padding: "8px", fontSize: 12, color: "#64748B", cursor: "pointer", fontWeight: 600 } }, "\u21A9 Reverter para pendente")))))
+  if (selFunc) {
+    var funcPedidos = (byFunc[selFunc.id] ? byFunc[selFunc.id].pedidos : []).slice().sort(function(a, b) { return new Date(b.created_at) - new Date(a.created_at); });
+    return /* @__PURE__ */ React.createElement("div", null,
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 20 } },
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setSelFunc(null); }, style: Object.assign({}, btnO, { padding: "8px 14px", fontSize: 13 }) }, "\u2190 Voltar"),
+        /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 20, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, selFunc.nome)
+      ),
+      funcPedidos.map(function(p) {
+        const cor = TIPO_COR[p.tipo] || "#64748B";
+        const estadoCor = ESTADO_COR[p.estado] || "#64748B";
+        return /* @__PURE__ */ React.createElement("div", { key: p.id, onClick: function() {
+          setSelPedido(p);
+          setResposta(p.resposta || "");
+        }, style: Object.assign({}, card, { marginBottom: 10, padding: 16, cursor: "pointer", borderLeft: "4px solid " + cor, display: "flex", alignItems: "center", gap: 14 }) },
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, flexShrink: 0 } }, TIPO_ICON[p.tipo] || "\u{1F4CB}"),
+          /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } },
+            /* @__PURE__ */ React.createElement("span", { style: { background: cor + "22", color: cor, borderRadius: 5, padding: "1px 7px", fontSize: 10, fontWeight: 700 } }, TIPO_LABEL[p.tipo]),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 4 } }, p.descricao),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 3 } }, new Date(p.created_at).toLocaleDateString("pt-PT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))
+          ),
+          /* @__PURE__ */ React.createElement("span", { style: { background: estadoCor + "22", color: estadoCor, borderRadius: 6, padding: "3px 10px", fontSize: 11, fontWeight: 700, flexShrink: 0 } }, p.estado)
+        );
+      }),
+      selPedido && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }, onClick: function() {
+        setSelPedido(null);
+      } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 24, maxWidth: 440, width: "100%" }, onClick: function(e) {
+        e.stopPropagation();
+      } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C" } }, selPedido.funcionario_nome), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, TIPO_LABEL[selPedido.tipo], " \u2014 ", new Date(selPedido.created_at).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" }))), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+        setSelPedido(null);
+      }, style: Object.assign({}, btnX, { padding: "4px 8px" }) }, "\u2715")), /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 10, padding: "12px 14px", marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Pedido"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#334155", fontWeight: 600 } }, selPedido.descricao)), selPedido.detalhes && selPedido.tipo === "ausencia" && /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 8, padding: "8px 10px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700 } }, "IN\xCDCIO"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, selPedido.detalhes.data_inicio || "\u2014")), /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 8, padding: "8px 10px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700 } }, "FIM"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, selPedido.detalhes.data_fim || "\u2014"))), selPedido.estado === "pendente" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Resposta (opcional)"), /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 60 }), value: resposta, onChange: function(e) {
+        setResposta(e.target.value);
+      }, placeholder: "Mensagem para o colaborador..." })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
+        responder(selPedido.id, "recusado");
+      }, style: Object.assign({}, btnR, { flex: 1, textAlign: "center" }) }, "\u2717 Recusar"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+        responder(selPedido.id, "aprovado");
+      }, style: Object.assign({}, btnG, { flex: 1, textAlign: "center" }) }, "\u2713 Aprovar"))), selPedido.estado !== "pendente" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { background: ESTADO_COR[selPedido.estado] + "15", borderRadius: 10, padding: "10px 14px", marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: ESTADO_COR[selPedido.estado], textTransform: "uppercase" } }, selPedido.estado), selPedido.resposta && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#334155", marginTop: 4 } }, selPedido.resposta)), /* @__PURE__ */ React.createElement("button", { onClick: function() { responder(selPedido.id, "pendente"); }, style: { width: "100%", background: "#F8FAFC", border: "1.5px solid #E2EBF4", borderRadius: 8, padding: "8px", fontSize: 12, color: "#64748B", cursor: "pointer", fontWeight: 600 } }, "\u21A9 Reverter para pendente"))))
+    );
+  }
+  return /* @__PURE__ */ React.createElement("div", null,
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 } },
+      /* @__PURE__ */ React.createElement("div", null,
+        /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Pedidos da Equipa"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, pedidos.length, " pedido", pedidos.length !== 1 ? "s" : "", " \u2014 ", funcList.length, " colaboradores")
+      ),
+      totalPendentes > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF3C7", borderRadius: 10, padding: "8px 16px", display: "flex", alignItems: "center", gap: 8 } },
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 18 } }, "\u{1F4E5}"),
+        /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, color: "#92400E", fontSize: 13 } }, totalPendentes, " pendente", totalPendentes !== 1 ? "s" : "")
+      )
+    ),
+    funcList.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) },
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, marginBottom: 12 } }, "\u{1F4E5}"),
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16, marginBottom: 8 } }, "Sem pedidos"),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13 } }, "Quando a equipa fizer pedidos aparecem aqui.")
+    ) :
+    /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 14 } },
+      funcList.map(function(f) {
+        var temPendentes = f.pendentes > 0;
+        return /* @__PURE__ */ React.createElement("div", { key: f.id, onClick: function() { setSelFunc(f); }, style: Object.assign({}, card, { cursor: "pointer", padding: 18, position: "relative", borderTop: "3px solid " + (temPendentes ? "#F59E0B" : "#16A34A") }) },
+          temPendentes && /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", top: -8, right: -8, background: "#F59E0B", color: "#fff", borderRadius: "50%", width: 22, height: 22, fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid #fff" } }, f.pendentes),
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 8 } },
+            /* @__PURE__ */ React.createElement("div", { style: { width: 34, height: 34, borderRadius: "50%", background: EC[f.id] || "#2E6DA4", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12, fontWeight: 800, flexShrink: 0 } }, (f.nome || "").split(" ").map(function(w) { return w[0]; }).slice(0, 2).join("").toUpperCase()),
+            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, f.nome)
+          ),
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+            /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 700, color: temPendentes ? "#F59E0B" : "#16A34A" } }, temPendentes ? f.pendentes + " pendente" + (f.pendentes !== 1 ? "s" : "") : "\u2713 Resolvido"),
+            /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, f.pedidos.length, " total")
+          )
+        );
+      })
+    )
+  );
 }
 function Fornecedores() {
   const [fornecedores, setFornecedores] = useState([]);
