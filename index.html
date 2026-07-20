@@ -4632,7 +4632,7 @@ function Avaliacoes() {
   useEffect(function() {
     Promise.all([
       db.list("avaliacoes", "?select=*&order=created_at.desc"),
-      db.list("clientes", "?select=id,name"),
+      db.list("clientes", "?select=id,name,email,contact,phone"),
       db.list("funcionarios", "?select=id,name,av"),
       db.list("servicos", "?select=id,client_id,date,rated&status=eq.completed"),
       db.list("client_contacts", "?select=client_id,name,email,phone")
@@ -4742,7 +4742,9 @@ function Avaliacoes() {
         var emailsPendentes = porAvaliar.map(function(p) {
           var contactos = contactsMap[p.id] || [];
           var ec = contactos.find(function(c) { return c.email; });
-          return ec ? ec.email : null;
+          if (ec) return ec.email.trim();
+          var cliente = clientsMap[p.id];
+          return cliente && cliente.email ? cliente.email.trim() : null;
         }).filter(Boolean);
         if (emailsPendentes.length === 0) return null;
         var assunto = "Lembrete: a sua avalia\xE7\xE3o \xE9 importante \u2014 SamorClean";
@@ -4754,8 +4756,9 @@ function Avaliacoes() {
       showPendentes && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 14 } },
         porAvaliar.map(function(p) {
           var contactos = contactsMap[p.id] || [];
-          var emailContacto = contactos.find(function(c) { return c.email; });
-          var telContacto = contactos.find(function(c) { return c.phone; });
+          var cliente = clientsMap[p.id] || {};
+          var emailContacto = contactos.find(function(c) { return c.email; }) || (cliente.email ? { email: cliente.email.trim(), name: cliente.contact || "" } : null);
+          var telContacto = contactos.find(function(c) { return c.phone; }) || (cliente.phone ? { phone: cliente.phone } : null);
           return /* @__PURE__ */ React.createElement("div", { key: p.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #F1F5F9", flexWrap: "wrap", gap: 8 } },
             /* @__PURE__ */ React.createElement("div", null,
               /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C" } }, p.name),
