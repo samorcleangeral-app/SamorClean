@@ -4738,6 +4738,19 @@ function Avaliacoes() {
         ),
         /* @__PURE__ */ React.createElement("span", { style: { fontSize: 18, color: "#94A3B8" } }, showPendentes ? "\u25B2" : "\u25BC")
       ),
+      showPendentes && (function() {
+        var emailsPendentes = porAvaliar.map(function(p) {
+          var contactos = contactsMap[p.id] || [];
+          var ec = contactos.find(function(c) { return c.email; });
+          return ec ? ec.email : null;
+        }).filter(Boolean);
+        if (emailsPendentes.length === 0) return null;
+        var assunto = "Lembrete: a sua avalia\xE7\xE3o \xE9 importante \u2014 SamorClean";
+        var corpo = "Ol\xE1,\n\nEsperamos que esteja tudo bem consigo.\n\nEste \xE9 um lembrete simp\xE1tico para nos deixar a sua avalia\xE7\xE3o sobre o(s) \xFAltimo(s) servi\xE7o(s) de limpeza realizado(s). Demora menos de 1 minuto atrav\xE9s do QR code ou do link do portal habitual.\n\nA sua opini\xE3o ajuda-nos a reconhecer e premiar a nossa equipa, e a corrigir rapidamente qualquer aspecto menos positivo.\n\nMuito obrigado pelo seu tempo!\n\nEquipa SamorClean";
+        return /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14, marginTop: 4 } },
+          /* @__PURE__ */ React.createElement("a", { href: "mailto:?bcc=" + encodeURIComponent(emailsPendentes.join(",")) + "&subject=" + encodeURIComponent(assunto) + "&body=" + encodeURIComponent(corpo), style: Object.assign({}, btnG, { display: "inline-block", textDecoration: "none", fontSize: 12 }) }, "\uD83D\uDCE9 Enviar lembrete semanal a todos (", emailsPendentes.length, ")")
+        );
+      })(),
       showPendentes && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 14 } },
         porAvaliar.map(function(p) {
           var contactos = contactsMap[p.id] || [];
