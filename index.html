@@ -3118,6 +3118,7 @@ function Employees() {
       name: newForm.name.trim(),
       role: newForm.role.trim() || "T\xE9cnico",
       av: (newForm.av || newForm.name.slice(0, 2)).toUpperCase(),
+      pin: "000000",
       rating: null
     };
     const inserted = await db.insertVerbose("funcionarios", nf);
