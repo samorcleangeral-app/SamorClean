@@ -1151,6 +1151,11 @@ function Routes() {
     const d5 = /* @__PURE__ */ new Date(dates[5] + "T12:00:00");
     return d0.toLocaleDateString("pt-PT", { day: "numeric", month: "long" }) + " \u2014 " + d5.toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" });
   }
+  function getLabelCurta() {
+    const d0 = /* @__PURE__ */ new Date(dates[0] + "T12:00:00");
+    const d5 = /* @__PURE__ */ new Date(dates[5] + "T12:00:00");
+    return d0.getDate() + "\u2013" + d5.getDate() + " " + d5.toLocaleDateString("pt-PT", { month: "short" }).replace(".", "");
+  }
   function layoutDay(dayJobs) {
     const sorted = dayJobs.slice().sort(function(a, b) {
       return timeToMin(a.t1) - timeToMin(b.t1);
@@ -1407,7 +1412,7 @@ function Routes() {
     setNj({ cn: "", addr: "", svc: "", date: localDateStr(), date_end: "", t1: "08:00", t2: "10:00", team: [], val: "" });
     setClientSearch("");
     setShowNew(true);
-  }, style: btn }, "+ Servi\xE7o"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: generatePreview, style: Object.assign({}, btnG, { fontSize: 13 }) }, "\u26A1 Gerar (", getLabel(), ")"), calView === "week" && wJobs.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: function() {
+  }, style: btn }, "+ Servi\xE7o"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: generatePreview, style: Object.assign({}, btnG, { fontSize: 13, whiteSpace: "nowrap" }) }, "\u26A1 Gerar (", getLabelCurta(), ")"), calView === "week" && wJobs.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: function() {
     const win = window.open("", "_blank");
     const byEmp = {};
     emps.forEach(function(e) {
