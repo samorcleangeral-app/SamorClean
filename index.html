@@ -1088,13 +1088,24 @@ function Finance() {
       ),
       /* @__PURE__ */ React.createElement("button", { onClick: function() { setFinTab("faturacao"); }, style: btnG }, "Ver Factura\xE7\xE3o")
     ),
-    emAtraso.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, emAtraso.map(function(j) {
-    const diffDays = Math.floor((now - /* @__PURE__ */ new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3));
-    const cor = diffDays >= 30 ? "#DC2626" : diffDays >= 15 ? "#F97316" : "#F59E0B";
-    const bg = diffDays >= 30 ? "#FEE2E2" : diffDays >= 15 ? "#FFF7ED" : "#FEF3C7";
-    const msg = diffDays >= 30 ? "\u26A0 +30 dias \u2014 considerar rescis\xE3o" : diffDays >= 15 ? "\u26A0 +15 dias \u2014 suspender servi\xE7o" : "\u26A0 +9 dias \u2014 enviar follow-up";
-    return /* @__PURE__ */ React.createElement("div", { key: j.id, style: { background: bg, border: "1.5px solid " + cor, borderRadius: 10, padding: "10px 16px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: cor } }, j.cn), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, msg, " \u2014 ", fmt(withIva(j.val || 0, j)), "\u20AC por cobrar")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: cor } }, diffDays, " dias"));
-  })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Receitas"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 } }, [
+    emAtraso.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Clientes com pagamentos em atraso"),
+    emAtraso.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, (function() {
+    var byClientAtraso = {};
+    emAtraso.forEach(function(j) {
+      if (!byClientAtraso[j.client_id]) byClientAtraso[j.client_id] = { cn: j.cn, valor: 0, maxDias: 0, count: 0 };
+      var diffDays = Math.floor((now - new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3));
+      byClientAtraso[j.client_id].valor += withIva(j.val || 0, j);
+      byClientAtraso[j.client_id].count++;
+      if (diffDays > byClientAtraso[j.client_id].maxDias) byClientAtraso[j.client_id].maxDias = diffDays;
+    });
+    return Object.values(byClientAtraso).sort(function(a, b) { return b.maxDias - a.maxDias; }).map(function(c, i) {
+      const diffDays = c.maxDias;
+      const cor = diffDays >= 30 ? "#DC2626" : diffDays >= 15 ? "#F97316" : "#F59E0B";
+      const bg = diffDays >= 30 ? "#FEE2E2" : diffDays >= 15 ? "#FFF7ED" : "#FEF3C7";
+      const msg = diffDays >= 30 ? "\u26A0 +30 dias \u2014 considerar rescis\xE3o" : diffDays >= 15 ? "\u26A0 +15 dias \u2014 suspender servi\xE7o" : "\u26A0 +9 dias \u2014 enviar follow-up";
+      return /* @__PURE__ */ React.createElement("div", { key: i, style: { background: bg, border: "1.5px solid " + cor, borderRadius: 10, padding: "10px 16px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: cor } }, c.cn), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, msg, " \u2014 ", c.count, " servi\xE7o", c.count !== 1 ? "s" : "", " \u2014 ", fmt(c.valor), "\u20AC por cobrar")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: cor } }, diffDays, " dias"));
+    });
+  })()), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Receitas"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 } }, [
     { l: "Faturado s/IVA", v: fmt(fatSemIva) + "\u20AC", c: "#2E6DA4" },
     { l: "Faturado c/IVA", v: fmt(fatComIva) + "\u20AC", c: "#0F766E" },
     { l: "Recebido", v: fmt(recebido) + "\u20AC", s: fatComIva > 0 ? Math.round(recebido / fatComIva * 100) + "%" : "0%", c: "#16A34A" },
@@ -1117,13 +1128,24 @@ function Finance() {
   }).map(function(cat) {
     const pct = totalCustos > 0 ? Math.round(custosCat[cat] / totalCustos * 100) : 0;
     return /* @__PURE__ */ React.createElement("div", { key: cat, style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#334155", fontWeight: 600 } }, cat), /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B" } }, fmt(custosCat[cat]), "\u20AC (", pct, "%)")), /* @__PURE__ */ React.createElement("div", { style: { height: 6, background: "#F1F5F9", borderRadius: 3 } }, /* @__PURE__ */ React.createElement("div", { style: { height: 6, width: pct + "%", background: "#EF4444", borderRadius: 3 } })));
-  }))), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Servi\xE7os por Cobrar (", pendingRows.length, ")"), pendingRows.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24 } }, "Tudo cobrado este m\xEAs! \u{1F389}") : /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { borderBottom: "2px solid #E2EBF4" } }, ["Cliente", "Data", "Valor s/IVA", "Valor c/IVA", "Dias"].map(function(h) {
+  }))), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Clientes por Cobrar (", (function() { var s = new Set(pendingRows.map(function(j) { return j.client_id; })); return s.size; })(), ")"), pendingRows.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24 } }, "Tudo cobrado este m\xEAs! \u{1F389}") : /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { borderBottom: "2px solid #E2EBF4" } }, ["Cliente", "Servi\xE7os", "\xDAltimo", "Valor s/IVA", "Valor c/IVA", "Dias"].map(function(h) {
     return /* @__PURE__ */ React.createElement("th", { key: h, style: { textAlign: "left", padding: "8px 10px", fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, h);
-  }))), /* @__PURE__ */ React.createElement("tbody", null, pendingRows.map(function(j) {
-    const diffDays = Math.floor((now - /* @__PURE__ */ new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3));
-    const cor = diffDays >= 30 ? "#DC2626" : diffDays >= 15 ? "#F97316" : diffDays >= 9 ? "#F59E0B" : "#64748B";
-    return /* @__PURE__ */ React.createElement("tr", { key: j.id, style: { borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 600, color: "#1A3A5C" } }, j.cn), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", color: "#64748B" } }, (/* @__PURE__ */ new Date(j.date + "T12:00:00")).toLocaleDateString("pt-PT", { day: "2-digit", month: "short" })), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 700 } }, fmt(j.val || 0), "\u20AC"), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 700 } }, fmt(withIva(j.val || 0, j)), "\u20AC"), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 700, color: cor } }, diffDays, "d"));
-  }))))));
+  }))), /* @__PURE__ */ React.createElement("tbody", null, (function() {
+    var byClientCobrar = {};
+    pendingRows.forEach(function(j) {
+      if (!byClientCobrar[j.client_id]) byClientCobrar[j.client_id] = { cn: j.cn, count: 0, semIva: 0, comIva: 0, ultimaData: j.date, maxDias: 0 };
+      var diffDays = Math.floor((now - new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3));
+      byClientCobrar[j.client_id].count++;
+      byClientCobrar[j.client_id].semIva += (j.val || 0);
+      byClientCobrar[j.client_id].comIva += withIva(j.val || 0, j);
+      if (j.date > byClientCobrar[j.client_id].ultimaData) byClientCobrar[j.client_id].ultimaData = j.date;
+      if (diffDays > byClientCobrar[j.client_id].maxDias) byClientCobrar[j.client_id].maxDias = diffDays;
+    });
+    return Object.values(byClientCobrar).sort(function(a, b) { return b.maxDias - a.maxDias; }).map(function(c, i) {
+      const cor = c.maxDias >= 30 ? "#DC2626" : c.maxDias >= 15 ? "#F97316" : c.maxDias >= 9 ? "#F59E0B" : "#64748B";
+      return /* @__PURE__ */ React.createElement("tr", { key: i, style: { borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 600, color: "#1A3A5C" } }, c.cn), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", color: "#64748B" } }, c.count), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", color: "#64748B" } }, (new Date(c.ultimaData + "T12:00:00")).toLocaleDateString("pt-PT", { day: "2-digit", month: "short" })), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 700 } }, fmt(c.semIva), "\u20AC"), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 700 } }, fmt(c.comIva), "\u20AC"), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 700, color: cor } }, c.maxDias, "d"));
+    });
+  })())))));
 }
 function Routes() {
   const [jobs, setJobs] = useState([]);
