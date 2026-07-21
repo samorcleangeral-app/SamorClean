@@ -385,6 +385,8 @@ function Finance() {
   const [monthJobs, setMonthJobs] = useState([]);
   const [monthJobsAll, setMonthJobsAll] = useState([]);
   const [last6Months, setLast6Months] = useState([]);
+  const [despesas6Months, setDespesas6Months] = useState([]);
+  const [chartMetricas, setChartMetricas] = useState(["fat"]);
   const [clientsMap, setClientsMap] = useState({});
   const [despesas, setDespesas] = useState([]);
   const [clientes, setClientes] = useState([]);
@@ -423,13 +425,15 @@ function Finance() {
       db.list("cash_config", "?select=*&order=data_inicio.desc&limit=1"),
       db.list("cash_movimentos", "?select=*&order=data.desc"),
       db.list("metas_financeiras", "?select=*&order=created_at.desc"),
-      db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd)
+      db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd),
+      db.list("despesas", "?select=data,valor&data=gte." + sixMonthsAgo)
     ]).then(function(results) {
       const cm = {};
       (results[2] || []).forEach(function(c) { cm[c.id] = c; });
       setMonthJobs((results[0] || []).filter(function(j) { return cm[j.client_id]; }));
       setMonthJobsAll((results[11] || []).filter(function(j) { return cm[j.client_id]; }));
       setLast6Months((results[1] || []).filter(function(j) { return cm[j.client_id]; }));
+      setDespesas6Months(results[12] || []);
       setClientsMap(cm);
       setClientes(results[2] || []);
       setDespesas(results[3] || []);
@@ -521,7 +525,7 @@ function Finance() {
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const key = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
-      buckets[key] = { m: d.toLocaleDateString("pt-PT", { month: "short" }), fat: 0, rec: 0 };
+      buckets[key] = { m: d.toLocaleDateString("pt-PT", { month: "short" }), fat: 0, rec: 0, custo: 0 };
     }
     last6Months.forEach(function(j) {
       const key = j.date.slice(0, 7);
@@ -531,8 +535,13 @@ function Finance() {
         if (j.paid) buckets[key].rec += v;
       }
     });
+    despesas6Months.forEach(function(d) {
+      const key = (d.data || "").slice(0, 7);
+      if (buckets[key]) buckets[key].custo += d.valor || 0;
+    });
     return Object.keys(buckets).sort().map(function(k) {
-      return buckets[k];
+      var b = buckets[k];
+      return Object.assign({}, b, { margem: b.fat / 1.23 - b.custo });
     });
   })();
   const maxB = Math.max.apply(null, monthsData.map(function(m) {
@@ -698,6 +707,26 @@ function Finance() {
       return /* @__PURE__ */ React.createElement("button", { key: t, onClick: function() { setFinTab(t); }, style: { padding: "8px 16px", borderRadius: 8, border: "1.5px solid " + (finTab === t ? "#2E6DA4" : "#E2EBF4"), background: finTab === t ? "#EFF6FF" : "#fff", color: finTab === t ? "#2E6DA4" : "#64748B", fontSize: 13, fontWeight: 700, cursor: "pointer" } }, labels[t]);
     })),
     finTab === "graficos" && /* @__PURE__ */ React.createElement("div", null,
+      /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 14 } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "Evolu\xE7\xE3o \u2014 \xFAltimos 6 meses"),
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
+            [["fat", "Factura\xE7\xE3o", "#2E6DA4"], ["custo", "Despesas", "#EF4444"], ["margem", "Margem", "#16A34A"]].map(function(m) {
+              var isOn = chartMetricas.indexOf(m[0]) !== -1;
+              return /* @__PURE__ */ React.createElement("button", { key: m[0], onClick: function() {
+                setChartMetricas(function(p) { return isOn ? p.filter(function(x) { return x !== m[0]; }) : p.concat([m[0]]); });
+              }, style: { padding: "5px 12px", borderRadius: 8, border: "1.5px solid " + (isOn ? m[2] : "#E2EBF4"), background: isOn ? m[2] + "18" : "#fff", color: isOn ? m[2] : "#94A3B8", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, m[1]);
+            })
+          )
+        ),
+        chartMetricas.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 40, fontSize: 12 } }, "Selecciona pelo menos uma métrica.") :
+        /* @__PURE__ */ React.createElement(ChartCanvas, { type: "line", height: 260, data: {
+          labels: monthsData.map(function(m) { return m.m; }),
+          datasets: [["fat", "Factura\xE7\xE3o", "#2E6DA4"], ["custo", "Despesas", "#EF4444"], ["margem", "Margem", "#16A34A"]].filter(function(m) { return chartMetricas.indexOf(m[0]) !== -1; }).map(function(m) {
+            return { label: m[1], data: monthsData.map(function(md) { return md[m[0]].toFixed(2); }), borderColor: m[2], backgroundColor: m[2] + "22", tension: 0.3, fill: false };
+          })
+        }, options: { plugins: { legend: { position: "bottom" } } } })
+      ),
       /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
         /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Factura\xE7\xE3o vs Recebido \u2014 \xFAltimos 6 meses"),
         /* @__PURE__ */ React.createElement(ChartCanvas, { type: "bar", height: 260, data: {
