@@ -4543,6 +4543,7 @@ function RelatorioMensal() {
   const HORAS_CONTRATO = 40;
   async function gerar() {
     setLoading(true);
+    try {
     const from = localDateStr(new Date(ano, mes, 1));
     const to = localDateStr(new Date(ano, mes + 1, 0));
     const [servicos, clientes, funcs, avs, pedidos, despesas, rhData, absData, cashConfigArr, cashMovs, metasArr, recrutamento] = await Promise.all([
@@ -4665,7 +4666,8 @@ function RelatorioMensal() {
     });
     const cashCfg = cashConfigArr && cashConfigArr[0] ? cashConfigArr[0] : null;
     const saldoAtual = cashCfg ? cashCfg.saldo_inicial + (cashMovs || []).reduce(function(s, m) { return s + (m.tipo === "entrada" ? m.valor : -m.valor); }, 0) : null;
-    const margemPctMes = fatTotal > 0 ? Math.round(margemBruta / (fatTotal / 1.23) * 100) : 0;
+    const margemBrutaMes = fatTotal / 1.23 - totalCustos;
+    const margemPctMes = fatTotal > 0 ? Math.round(margemBrutaMes / (fatTotal / 1.23) * 100) : 0;
     const metasComProgresso = (metasArr || []).map(function(meta) {
       var actual = meta.tipo === "cash_flow" ? saldoAtual : meta.tipo === "margem_lucro" ? margemPctMes : meta.tipo === "faturacao" ? fatTotal / 1.23 : null;
       var pct = actual !== null && meta.valor_alvo > 0 ? Math.min(100, Math.max(0, Math.round(actual / meta.valor_alvo * 100))) : null;
@@ -4673,7 +4675,11 @@ function RelatorioMensal() {
     });
     const recrutStats = { total: (recrutamento || []).length, novos: (recrutamento || []).filter(function(r) { return r.estado === "novo"; }).length };
     setData({ fatTotal, recTotal, custoKm, kmTotal, byClient, byEmp, cm, completed, monthAvs, monthPedidos, servicos: servicos || [], totalCustos, totalIVADedutivel, custosCat, despesas: despesas || [], cashCfg, saldoAtual, metasComProgresso, recrutStats });
-    setLoading(false);
+    } catch (err) {
+      alert("Erro ao gerar o relat\xF3rio: " + (err && err.message ? err.message : String(err)));
+    } finally {
+      setLoading(false);
+    }
   }
   function exportPDF() {
     if (!data) return;
