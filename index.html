@@ -1325,6 +1325,30 @@ function Routes() {
     var preco = c.price_per_hour || PRICE_PER_HOUR;
     return (teamSize || 1) * horas * preco;
   }
+  async function recalcularValoresEmLote() {
+    var pendentes = jobs.filter(function(j) { return j.status !== "completed"; });
+    if (!window.confirm("Recalcular o valor de " + pendentes.length + " servi\xE7o(s) ainda n\xE3o conclu\xEDdo(s), com base no pre\xE7o actual de cada cliente?")) return;
+    var atualizados = 0;
+    for (var i = 0; i < pendentes.length; i++) {
+      var j = pendentes[i];
+      var c = clients.find(function(x) { return x.id === j.client_id; });
+      var novoVal = calcularValorJob(c, j.t1, j.t2, (j.team || []).length);
+      if (novoVal === null) continue;
+      if (Math.abs((j.val || 0) - novoVal) > 0.01) {
+        await db.update("servicos", j.id, { val: novoVal });
+        atualizados++;
+      }
+    }
+    setJobs(function(p) {
+      return p.map(function(j) {
+        if (j.status === "completed") return j;
+        var c = clients.find(function(x) { return x.id === j.client_id; });
+        var novoVal = calcularValorJob(c, j.t1, j.t2, (j.team || []).length);
+        return novoVal !== null ? Object.assign({}, j, { val: novoVal }) : j;
+      });
+    });
+    alert(atualizados + " servi\xE7o(s) actualizado(s) com o valor correcto.");
+  }
   async function moveJob() {
     if (!moveDate || !moveT1 || !moveT2) return;
     const c = clients.find(function(x) { return x.id === selJob.client_id; });
@@ -1539,7 +1563,7 @@ function Routes() {
     setNj({ cn: "", addr: "", svc: "", date: localDateStr(), date_end: "", t1: "08:00", t2: "10:00", team: [], val: "" });
     setClientSearch("");
     setShowNew(true);
-  }, style: btn }, "+ Servi\xE7o"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: generatePreview, style: Object.assign({}, btnG, { fontSize: 13, whiteSpace: "nowrap" }) }, "\u26A1 Gerar (", getLabelCurta(), ")"), calView === "week" && wJobs.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: function() {
+  }, style: btn }, "+ Servi\xE7o"), /* @__PURE__ */ React.createElement("button", { onClick: recalcularValoresEmLote, style: Object.assign({}, btnO, { fontSize: 13 }) }, "\uD83D\uDD04 Recalcular valores"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: generatePreview, style: Object.assign({}, btnG, { fontSize: 13, whiteSpace: "nowrap" }) }, "\u26A1 Gerar (", getLabelCurta(), ")"), calView === "week" && wJobs.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: function() {
     const win = window.open("", "_blank");
     const byEmp = {};
     emps.forEach(function(e) {
