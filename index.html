@@ -5474,13 +5474,15 @@ function Manager(props) {
       }
       var dataAviso = new Date(d); dataAviso.setDate(d.getDate() + 6);
       var jaChegou = localDateStr(hoje) >= localDateStr(dataAviso);
-      if (!jaChegou) return null;
+      var debugTexto = "hoje=" + localDateStr(hoje) + " | avisoDesde=" + localDateStr(dataAviso) + " | mostrar=" + jaChegou;
+      if (!jaChegou) return /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1", fontSize: 10, color: "#CBD5E1" } }, debugTexto);
       return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1", background: "#EFF6FF", border: "1.5px solid #2E6DA4", cursor: "pointer" }), onClick: function() { setView("finance"); } },
         /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } },
           /* @__PURE__ */ React.createElement("span", { style: { fontSize: 24 } }, "\uD83D\uDCC4"),
           /* @__PURE__ */ React.createElement("div", null,
             /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "\xC9 altura de facturar os clientes de ", hoje.toLocaleDateString("pt-PT", { month: "long" }), "!"),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, "Vai ao Financeiro \u2192 Fatura\xE7\xE3o para ver o resumo e exportar o PDF.")
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, "Vai ao Financeiro \u2192 Fatura\xE7\xE3o para ver o resumo e exportar o PDF."),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", marginTop: 4 } }, debugTexto)
           )
         )
       );
