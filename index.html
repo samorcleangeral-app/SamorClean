@@ -509,12 +509,19 @@ function Finance() {
     const cat = d.categoria || "Outro";
     custosCat[cat] = (custosCat[cat] || 0) + d.valor;
   });
-  const emAtraso = monthJobs.filter(function(j) {
+  var ultimaSemanaCompleta = (function() {
+    var lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    var d = new Date(lastDay);
+    while (d.getDay() !== 1) { d.setDate(d.getDate() - 1); }
+    return { inicio: d, fim: d };
+  })();
+  var hojeStr = localDateStr(now);
+  var mostrarAvisoFaturacao = hojeStr >= localDateStr(ultimaSemanaCompleta.inicio);
+  const emAtraso = mostrarAvisoFaturacao ? monthJobs.filter(function(j) {
     if (j.paid) return false;
-    const jobDate = /* @__PURE__ */ new Date(j.date + "T12:00:00");
-    const diffDays = Math.floor((now - jobDate) / (24 * 3600 * 1e3));
-    return diffDays > 8;
-  });
+    const diffDays = Math.floor((now - ultimaSemanaCompleta.inicio) / (24 * 3600 * 1e3));
+    return diffDays >= 0;
+  }) : [];
   const pendingRows = monthJobs.filter(function(j) {
     return !j.paid;
   }).sort(function(a, b) {
@@ -634,18 +641,6 @@ function Finance() {
     setMonthJobsAll(function(p) { return p.map(function(j) { return jobIds.indexOf(j.id) !== -1 ? Object.assign({}, j, { paid: true }) : j; }); });
   }
   const METit = { cash_flow: "\uD83D\uDCB0 Cash Flow", margem_lucro: "\uD83D\uDCC8 Margem de Lucro", faturacao: "\uD83E\uDDFE Factura\xE7\xE3o", outro: "\uD83C\uDFAF Outro" };
-  var ultimaSemanaCompleta = (function() {
-    var lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    var d = new Date(lastDay);
-    // Find last Sunday that is <= lastDay of month
-    while (d.getDay() !== 0) { d.setDate(d.getDate() - 1); }
-    var domingo = new Date(d);
-    var segunda = new Date(d);
-    segunda.setDate(segunda.getDate() - 6);
-    return { inicio: segunda, fim: domingo };
-  })();
-  var hojeStr = localDateStr(now);
-  var mostrarAvisoFaturacao = hojeStr >= localDateStr(ultimaSemanaCompleta.inicio) && now.getMonth() === ultimaSemanaCompleta.inicio.getMonth();
 
   var custosColab = emps.map(function(e) {
     var c = custoColaborador(e);
@@ -1122,7 +1117,7 @@ function Finance() {
     var byClientAtraso = {};
     emAtraso.forEach(function(j) {
       if (!byClientAtraso[j.client_id]) byClientAtraso[j.client_id] = { cn: j.cn, valor: 0, maxDias: 0, count: 0 };
-      var diffDays = Math.floor((now - new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3));
+      var diffDays = Math.floor((now - ultimaSemanaCompleta.inicio) / (24 * 3600 * 1e3));
       byClientAtraso[j.client_id].valor += withIva(j.val || 0, j);
       byClientAtraso[j.client_id].count++;
       if (diffDays > byClientAtraso[j.client_id].maxDias) byClientAtraso[j.client_id].maxDias = diffDays;
@@ -1131,8 +1126,8 @@ function Finance() {
       const diffDays = c.maxDias;
       const cor = diffDays >= 30 ? "#DC2626" : diffDays >= 15 ? "#F97316" : "#F59E0B";
       const bg = diffDays >= 30 ? "#FEE2E2" : diffDays >= 15 ? "#FFF7ED" : "#FEF3C7";
-      const msg = diffDays >= 30 ? "\u26A0 +30 dias \u2014 considerar rescis\xE3o" : diffDays >= 15 ? "\u26A0 +15 dias \u2014 suspender servi\xE7o" : "\u26A0 +9 dias \u2014 enviar follow-up";
-      return /* @__PURE__ */ React.createElement("div", { key: i, style: { background: bg, border: "1.5px solid " + cor, borderRadius: 10, padding: "10px 16px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: cor } }, c.cn), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, msg, " \u2014 ", c.count, " servi\xE7o", c.count !== 1 ? "s" : "", " \u2014 ", fmt(c.valor), "\u20AC por cobrar")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: cor } }, diffDays, " dias"));
+      const msg = diffDays >= 30 ? "\u26A0 " + diffDays + " dias \u2014 considerar rescis\xE3o" : diffDays >= 15 ? "\u26A0 " + diffDays + " dias \u2014 suspender servi\xE7o" : "\u26A0 " + diffDays + " dias \u2014 enviar follow-up";
+      return /* @__PURE__ */ React.createElement("div", { key: i, style: { background: bg, border: "1.5px solid " + cor, borderRadius: 10, padding: "10px 16px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: cor } }, c.cn), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, msg, " \u2014 ", c.count, " servi\xE7o", c.count !== 1 ? "s" : "", " \u2014 ", fmt(c.valor), "\u20AC por cobrar")));
     });
   })()), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Receitas"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 } }, [
     { l: "Faturado s/IVA", v: fmt(fatSemIva) + "\u20AC", c: "#2E6DA4" },
@@ -5467,22 +5462,15 @@ function Manager(props) {
       var ultimoDia = new Date(ano, mes + 1, 0);
       var d = new Date(ultimoDia);
       while (d.getDay() !== 1) d.setDate(d.getDate() - 1);
-      while (d.getMonth() === mes) {
-        var fimSemana = new Date(d); fimSemana.setDate(d.getDate() + 6);
-        if (fimSemana.getMonth() === mes) break;
-        d.setDate(d.getDate() - 7);
-      }
-      var dataAviso = new Date(d); dataAviso.setDate(d.getDate() + 6);
+      var dataAviso = d;
       var jaChegou = localDateStr(hoje) >= localDateStr(dataAviso);
-      var debugTexto = "hoje=" + localDateStr(hoje) + " | avisoDesde=" + localDateStr(dataAviso) + " | mostrar=" + jaChegou;
-      if (!jaChegou) return /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1", fontSize: 10, color: "#CBD5E1" } }, debugTexto);
+      if (!jaChegou) return null;
       return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1", background: "#EFF6FF", border: "1.5px solid #2E6DA4", cursor: "pointer" }), onClick: function() { setView("finance"); } },
         /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } },
           /* @__PURE__ */ React.createElement("span", { style: { fontSize: 24 } }, "\uD83D\uDCC4"),
           /* @__PURE__ */ React.createElement("div", null,
             /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "\xC9 altura de facturar os clientes de ", hoje.toLocaleDateString("pt-PT", { month: "long" }), "!"),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, "Vai ao Financeiro \u2192 Fatura\xE7\xE3o para ver o resumo e exportar o PDF."),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", marginTop: 4 } }, debugTexto)
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, "Vai ao Financeiro \u2192 Fatura\xE7\xE3o para ver o resumo e exportar o PDF.")
           )
         )
       );
