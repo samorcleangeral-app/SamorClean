@@ -1317,16 +1317,28 @@ function Routes() {
     });
     setSelJob(null);
   }
+  function calcularValorJob(c, t1, t2, teamSize) {
+    if (!c) return null;
+    var tipoFat = c.tipo_faturacao || "hora";
+    if (tipoFat === "visita" || tipoFat === "mensal") return parseFloat(c.valor_visita) || 0;
+    var horas = Math.max(0, (timeToMin(t2) - timeToMin(t1)) / 60);
+    var preco = c.price_per_hour || PRICE_PER_HOUR;
+    return (teamSize || 1) * horas * preco;
+  }
   async function moveJob() {
     if (!moveDate || !moveT1 || !moveT2) return;
-    await updateJob(selJob.id, { date: moveDate, t1: moveT1, t2: moveT2 });
+    const c = clients.find(function(x) { return x.id === selJob.client_id; });
+    const novoVal = calcularValorJob(c, moveT1, moveT2, (selJob.team || []).length);
+    await updateJob(selJob.id, { date: moveDate, t1: moveT1, t2: moveT2, val: novoVal !== null ? novoVal : selJob.val });
     setPopupAction(null);
   }
   async function togJobTeam(eid) {
     const t = (selJob.team || []).indexOf(eid) === -1 ? (selJob.team || []).concat([eid]) : (selJob.team || []).filter(function(x) {
       return x !== eid;
     });
-    await updateJob(selJob.id, { team: t });
+    const c = clients.find(function(x) { return x.id === selJob.client_id; });
+    const novoVal = calcularValorJob(c, selJob.t1, selJob.t2, t.length);
+    await updateJob(selJob.id, { team: t, val: novoVal !== null ? novoVal : selJob.val });
   }
   function openJob(job) {
     setSelJob(job);
@@ -4976,8 +4988,8 @@ function Avaliacoes() {
           return cliente && cliente.email ? cliente.email.trim() : null;
         }).filter(Boolean);
         if (emailsPendentes.length === 0) return null;
-        var assunto = "\uD83E\uDDF9 A sua opini\xE3o faz a nossa equipa brilhar \u2014 SamorClean";
-        var corpo = "Ol\xE1,\n\nAqui vai a equipa SamorClean, com um pedido rápido e sincero.\n\nCada visita que fazemos \xE9 feita por pessoas reais, que se esfor\xE7am para deixar o seu espa\xE7o impec\xE1vel. A sua avalia\xE7\xE3o \xE9 a forma como reconhecemos e premiamos esse trabalho \u2014 e tamb\xE9m como sabemos, na hora, se algo precisa de ser corrigido.\n\nDemora menos de 1 minuto: basta usar o QR code ou o link do portal que j\xE1 conhece.\n\nMuito obrigado por fazer parte da nossa hist\xF3ria \u2014 \xE9 com clientes como voc\xEA que continuamos a crescer com cuidado.\n\nCom gratid\xE3o,\nEquipa SamorClean\n\U0001F9F9\u2728";
+        var assunto = "Avalia\xE7\xE3o do servi\xE7o \u2014 SamorClean";
+        var corpo = "Ol\xE1,\n\nA sua avalia\xE7\xE3o sobre o(s) \xFAltimo(s) servi\xE7o(s) da SamorClean ajuda-nos a manter o padr\xE3o de qualidade que a nossa equipa trabalha para entregar todos os dias \u2014 e conta directamente para o pr\xE9mio de produtividade dos colaboradores que o realizaram.\n\nPode avaliar em menos de 1 minuto, atrav\xE9s do QR code ou do link do portal que j\xE1 conhece.\n\nObrigado pelo seu tempo.\n\nEquipa SamorClean";
         return /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14, marginTop: 4 } },
           /* @__PURE__ */ React.createElement("a", { href: "mailto:?bcc=" + encodeURIComponent(emailsPendentes.join(",")) + "&subject=" + encodeURIComponent(assunto) + "&body=" + encodeURIComponent(corpo), style: Object.assign({}, btnG, { display: "inline-block", textDecoration: "none", fontSize: 12 }) }, "\uD83D\uDCE9 Enviar lembrete semanal a todos (", emailsPendentes.length, ")")
         );
@@ -5006,8 +5018,8 @@ function Avaliacoes() {
         /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C", marginBottom: 4 } }, "Email para ", emailModal.cliente.name),
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 16 } }, emailModal.contacto.email),
         (function() {
-          var assunto = "\uD83E\uDDF9 A sua opini\xE3o faz a nossa equipa brilhar \u2014 SamorClean";
-          var corpo = "Ol\xE1 " + (emailModal.contacto.name || "").split(" ")[0] + ",\n\nAqui vai a equipa SamorClean, com um pedido rápido e sincero.\n\nCada visita que fazemos \xE9 feita por pessoas reais, que se esfor\xE7am para deixar o seu espa\xE7o impec\xE1vel. A sua avalia\xE7\xE3o \xE9 a forma como reconhecemos e premiamos esse trabalho \u2014 e tamb\xE9m como sabemos, na hora, se algo precisa de ser corrigido.\n\nDemora menos de 1 minuto: basta usar o QR code ou o link do portal que j\xE1 conhece.\n\nMuito obrigado por fazer parte da nossa hist\xF3ria \u2014 \xE9 com clientes como voc\xEA que continuamos a crescer com cuidado.\n\nCom gratid\xE3o,\nEquipa SamorClean\n\U0001F9F9\u2728";
+          var assunto = "Avalia\xE7\xE3o do servi\xE7o \u2014 SamorClean";
+          var corpo = "Ol\xE1 " + (emailModal.contacto.name || "").split(" ")[0] + ",\n\nA sua avalia\xE7\xE3o sobre o(s) \xFAltimo(s) servi\xE7o(s) da SamorClean ajuda-nos a manter o padr\xE3o de qualidade que a nossa equipa trabalha para entregar todos os dias \u2014 e conta directamente para o pr\xE9mio de produtividade dos colaboradores que o realizaram.\n\nPode avaliar em menos de 1 minuto, atrav\xE9s do QR code ou do link do portal que j\xE1 conhece.\n\nObrigado pelo seu tempo.\n\nEquipa SamorClean";
           return /* @__PURE__ */ React.createElement("div", null,
             /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } },
               /* @__PURE__ */ React.createElement("label", { style: lbl }, "Assunto"),
