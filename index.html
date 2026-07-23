@@ -4643,7 +4643,7 @@ function RelatorioMensal() {
       return Math.max(0, (parseInt(t2[0]) * 60 + parseInt(t2[1]) - parseInt(t1[0]) * 60 - parseInt(t1[1])) / 60);
     }
     var totalHorasMes = completed.reduce(function(s, j) { return s + jobHoras(j) * ((j.team || []).length || 1); }, 0);
-    var totalDespesasComKm = totalCustos + custoKm;
+    var totalDespesasComKm = totalCustos;
     const byClient = {};
     completed.forEach(function(j) {
       if (!byClient[j.client_id]) byClient[j.client_id] = { servicos: 0, fat: 0, km: 0, checkIncomplete: 0, horas: 0, custoMO: 0 };
@@ -4719,7 +4719,7 @@ function RelatorioMensal() {
     if (!data) return;
     const { fatTotal, recTotal, custoKm, kmTotal, byClient, byEmp, cm, completed, monthAvs, monthPedidos, totalCustos, totalIVADedutivel, custosCat, despesas, cashCfg, saldoAtual, metasComProgresso, recrutStats } = data;
     const mesLabel = MESES[mes] + " " + ano;
-    const totalCustosReal = (totalCustos || 0) + custoKm;
+    const totalCustosReal = (totalCustos || 0);
     const margemBruta = fatTotal / 1.23 - totalCustosReal;
     const margemPct = fatTotal > 0 ? Math.round(margemBruta / (fatTotal / 1.23) * 100) : 0;
     const clientRows = Object.entries(byClient).map(function(e) {
@@ -4867,7 +4867,7 @@ function RelatorioMensal() {
     { l: "Faturado (c/ IVA)", v: data.fatTotal.toFixed(2) + "\u20AC", c: "#2E6DA4" },
     { l: "Recebido", v: data.recTotal.toFixed(2) + "\u20AC", c: "#16A34A" },
     { l: "Por cobrar", v: (data.fatTotal - data.recTotal).toFixed(2) + "\u20AC", c: "#EF4444" },
-    { l: "Custo desloca\xE7\xE3o", v: data.custoKm.toFixed(2) + "\u20AC", c: "#F59E0B" }
+    { l: "Custo desloca\xE7\xE3o (est.)", v: data.custoKm.toFixed(2) + "\u20AC", c: "#F59E0B" }
   ].map(function(k) {
     return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 16 }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, k.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: k.c } }, k.v));
   })), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Desempenho dos Colaboradores"), /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { borderBottom: "2px solid #E2EBF4" } }, ["Colaborador", "Servi\xE7os", "Horas reais", "Produtividade", "Faltas", "Atrasos", "Avalia\xE7\xE3o"].map(function(h) {
