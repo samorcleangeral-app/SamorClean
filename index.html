@@ -334,14 +334,14 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate) {
         notaSubFerias = " (j\xE1 pago em " + new Date(refDate.getFullYear(), mesFerias, 1).toLocaleDateString("pt-PT", { month: "long" }) + ")";
       }
     }
-    var subNatal = salario * 0.0833;
+    var subNatal = diasBaixa > 0 ? salario * 0.0833 * (diasEfectivos / Math.max(1, diasUteisDoMes)) : salario * 0.0833;
     // SS incide sempre sobre sal\xE1rio + duod\xE9cimo de Natal (pago todos os meses), e sobre o subs\xEDdio de f\xE9rias real só no mês em que for pago a s\xE9rio
     var ss = (salarioEfectivo + subNatal + subFeriasParaSS) * 0.2375;
     var seguro = salarioEfectivo * 0.015;
     detalhe.push({ l: "Salário base" + (diasBaixa > 0 ? " (prop. " + diasEfectivos + "/" + diasUteisDoMes + " dias)" : ""), v: salarioEfectivo });
     detalhe.push({ l: "Sub. alimentação (" + diasAlim + " dias × 6€)" + (diasFerias > 0 || diasBaixa > 0 ? " *" : ""), v: subAlim });
     detalhe.push({ l: "Sub. férias" + notaSubFerias, v: subFerias });
-    detalhe.push({ l: "Sub. Natal (8,33%)", v: subNatal });
+    detalhe.push({ l: "Sub. Natal (8,33%)" + (diasBaixa > 0 ? " (prop. baixa)" : ""), v: subNatal });
     detalhe.push({ l: "Seg. Social patronal (23,75%)" + (subFeriasParaSS > 0 ? " — inclui subs. férias real" : ""), v: ss });
     detalhe.push({ l: "Seguro acidentes (1,5%)", v: seguro });
     total = salarioEfectivo + subAlim + subFerias + subNatal + ss + seguro;
