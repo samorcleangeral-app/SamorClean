@@ -315,13 +315,29 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate) {
     var diasAlim = Math.max(0, diasUteisDoMes - diasFerias - diasBaixa);
     var subAlim = diasAlim * 6;
     var salarioEfectivo = diasBaixa > 0 ? salario * (diasEfectivos / Math.max(1, diasUteisDoMes)) : salario;
+    // Verifica se o subsídio de férias já foi pago a s\xE9rio este ano
     var subFerias = salario * 0.0833;
+    var notaSubFerias = " (8,33%)";
+    var feriasPagas = ausenciasEmp.filter(function(a) {
+      return (a.tipo || "").toLowerCase() === "férias" && a.subsidio_ferias_pago && a.data_inicio && new Date(a.data_inicio + "T12:00:00").getFullYear() === refDate.getFullYear();
+    });
+    if (feriasPagas.length > 0) {
+      var maisRecente = feriasPagas.sort(function(a, b) { return a.data_inicio < b.data_inicio ? 1 : -1; })[0];
+      var mesFerias = new Date(maisRecente.data_inicio + "T12:00:00").getMonth();
+      if (mesFerias === refDate.getMonth()) {
+        subFerias = parseFloat(maisRecente.subsidio_ferias_valor) || 0;
+        notaSubFerias = " (valor real pago)";
+      } else if (mesFerias < refDate.getMonth()) {
+        subFerias = 0;
+        notaSubFerias = " (j\xE1 pago em " + new Date(refDate.getFullYear(), mesFerias, 1).toLocaleDateString("pt-PT", { month: "long" }) + ")";
+      }
+    }
     var subNatal = salario * 0.0833;
     var ss = salarioEfectivo * 0.2375;
     var seguro = salarioEfectivo * 0.015;
     detalhe.push({ l: "Salário base" + (diasBaixa > 0 ? " (prop. " + diasEfectivos + "/" + diasUteisDoMes + " dias)" : ""), v: salarioEfectivo });
     detalhe.push({ l: "Sub. alimentação (" + diasAlim + " dias × 6€)" + (diasFerias > 0 || diasBaixa > 0 ? " *" : ""), v: subAlim });
-    detalhe.push({ l: "Sub. férias (8,33%)", v: subFerias });
+    detalhe.push({ l: "Sub. férias" + notaSubFerias, v: subFerias });
     detalhe.push({ l: "Sub. Natal (8,33%)", v: subNatal });
     detalhe.push({ l: "Seg. Social patronal (23,75%)", v: ss });
     detalhe.push({ l: "Seguro acidentes (1,5%)", v: seguro });
@@ -437,6 +453,7 @@ function Finance() {
   useEffect(function() {
     const monthStart = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
     const monthEnd = localDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+    const yearStart = localDateStr(new Date(now.getFullYear(), 0, 1));
     const sixMonthsAgo = localDateStr(new Date(now.getFullYear(), now.getMonth() - 5, 1));
     const past60 = localDateStr(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 60));
     Promise.all([
@@ -447,7 +464,7 @@ function Finance() {
       db.list("servicos", "?select=client_id,date&date=gte." + past60 + "&order=date.desc"),
       db.list("funcionarios_rh", "?select=*"),
       db.list("funcionarios", "?select=*"),
-      db.list("ausencias", "?select=*&data_inicio=lte." + monthEnd + "&data_fim=gte." + monthStart),
+      db.list("ausencias", "?select=*&data_inicio=lte." + monthEnd + "&data_fim=gte." + yearStart),
       db.list("ausencias", "?select=*&data_fim=gte." + sixMonthsAgo),
       db.list("cash_config", "?select=*&order=data_inicio.desc&limit=1"),
       db.list("cash_movimentos", "?select=*&order=data.desc"),
@@ -2808,7 +2825,7 @@ function FichaRH(props) {
   const [showAddFard, setShowAddFard] = useState(false);
   const [showAddDoc, setShowAddDoc] = useState(false);
   const [showAddAv, setShowAddAv] = useState(false);
-  const [ausForm, setAusForm] = useState({ tipo: "Baixa M\xE9dica", data_inicio: "", data_fim: "", descricao: "", estado: "aprovado" });
+  const [ausForm, setAusForm] = useState({ tipo: "Baixa M\xE9dica", data_inicio: "", data_fim: "", descricao: "", estado: "aprovado", subsidio_ferias_pago: false, subsidio_ferias_valor: "" });
   const [fardForm, setFardForm] = useState({ item: "", tamanho: "", quantidade: 1, data_entrega: localDateStr(), estado: "activo", notas: "" });
   const [docFile, setDocFile] = useState(null);
   const [docForm, setDocForm] = useState({ tipo: "Contrato", nome: "", mes_ano: "" });
@@ -2891,7 +2908,7 @@ function FichaRH(props) {
         if (nRemovidos > 0) alert(sel.name + " foi removido de " + nRemovidos + " servi\xE7o" + (nRemovidos > 1 ? "s" : "") + " j\xE1 agendado" + (nRemovidos > 1 ? "s" : "") + " nesse per\xEDodo. Pode ser necess\xE1rio reatribuir equipa.");
       }
       setShowAddAus(false);
-      setAusForm({ tipo: "Baixa M\xE9dica", data_inicio: "", data_fim: "", descricao: "", estado: "aprovado" });
+      setAusForm({ tipo: "Baixa M\xE9dica", data_inicio: "", data_fim: "", descricao: "", estado: "aprovado", subsidio_ferias_pago: false, subsidio_ferias_valor: "" });
     }
   }
   async function addFardamento() {
@@ -3041,7 +3058,21 @@ function FichaRH(props) {
     setAusForm(Object.assign({}, ausForm, { estado: e.target.value }));
   } }, ["aprovado", "pendente", "recusado"].map(function(e) {
     return /* @__PURE__ */ React.createElement("option", { key: e }, e);
-  })))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 12 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
+  }))), ausForm.tipo === "F\xE9rias" && /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1", background: "#FFFBEB", border: "1.5px solid #F59E0B", borderRadius: 8, padding: "10px 12px" } },
+    /* @__PURE__ */ React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#92400E", fontWeight: 700, cursor: "pointer" } },
+      /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: ausForm.subsidio_ferias_pago || false, onChange: function(e) {
+        setAusForm(Object.assign({}, ausForm, { subsidio_ferias_pago: e.target.checked }));
+      } }),
+      "J\xE1 paguei o subs\xEDdio de f\xE9rias real deste colaborador"
+    ),
+    ausForm.subsidio_ferias_pago && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 8 } },
+      /* @__PURE__ */ React.createElement("label", { style: lbl }, "Valor real pago (\u20AC)"),
+      /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: ausForm.subsidio_ferias_valor || "", placeholder: "Ex: 925", onFocus: function(e) { e.target.select(); }, onChange: function(e) {
+        setAusForm(Object.assign({}, ausForm, { subsidio_ferias_valor: parseFloat(e.target.value) || 0 }));
+      } }),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#78350F", marginTop: 4 } }, "A partir deste m\xEAs, o subs\xEDdio deixa de se acumular suavizado no custo mensal at\xE9 ao fim do ano \u2014 j\xE1 foi pago de uma vez.")
+    )
+  )), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 12 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setShowAddAus(false);
   }, style: Object.assign({}, btnX, { flex: 1, textAlign: "center" }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: addAusencia, style: Object.assign({}, btnG, { flex: 1, textAlign: "center" }) }, "Guardar"))), ausencias.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Sem aus\xEAncias registadas.") : ausencias.map(function(a) {
     const corTipo = a.tipo === "Baixa M\xE9dica" ? "#FEE2E2" : a.tipo === "F\xE9rias" ? "#DCFCE7" : a.tipo === "Falta Injustificada" ? "#FEE2E2" : "#EFF6FF";
@@ -4822,6 +4853,7 @@ function RelatorioMensal() {
     try {
     const from = localDateStr(new Date(ano, mes, 1));
     const to = localDateStr(new Date(ano, mes + 1, 0));
+    const yearStart2 = localDateStr(new Date(ano, 0, 1));
     const [servicos, clientes, funcs, avs, pedidos, despesas, rhData, absData, cashConfigArr, cashMovs, metasArr, recrutamento] = await Promise.all([
       db.list("servicos", "?select=*&date=gte." + from + "&date=lte." + to + "&order=date"),
       db.list("clientes", "?select=*&excluir_financeiro=is.false"),
@@ -4830,7 +4862,7 @@ function RelatorioMensal() {
       db.list("pedidos_extra", "?select=*"),
       db.list("despesas", "?select=*&data=gte." + from + "&data=lte." + to),
       db.list("funcionarios_rh", "?select=*"),
-      db.list("ausencias", "?select=*&data_inicio=lte." + to + "&data_fim=gte." + from),
+      db.list("ausencias", "?select=*&data_inicio=lte." + to + "&data_fim=gte." + yearStart2),
       db.list("cash_config", "?select=*&order=data_inicio.desc&limit=1"),
       db.list("cash_movimentos", "?select=*&order=data.desc"),
       db.list("metas_financeiras", "?select=*&order=created_at.desc"),
