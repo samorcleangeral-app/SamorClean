@@ -5350,7 +5350,7 @@ function Manager(props) {
     Promise.all([
       db.list("clientes", "?select=id,name,freq,iva_type"),
       db.list("servicos", "?select=*&order=date&date=eq." + today),
-      db.list("servicos", "?select=*&order=date&limit=4"),
+      db.list("servicos", "?select=*&date=gte." + today + "&order=date&limit=4"),
       db.list("funcionarios", "?select=*&order=id"),
       db.list("pedidos_extra", "?select=id&status=eq.pendente"),
       db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd + "&status=eq.completed"),
