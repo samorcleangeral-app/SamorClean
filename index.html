@@ -691,7 +691,9 @@ function Finance() {
     var custoAteHoje = calcCustoAteHojeReal(e, rhData, absData, monthJobs, now);
     var diasAusenciaEmp = diasAusenciaMes(e, absData, now);
     var diasUteisDisponiveis = Math.max(0, diasUteisDoMes - diasAusenciaEmp);
-    var capacidadeHoras = diasUteisDisponiveis * 8;
+    var rhEmp = rhData.find(function(r) { return r.funcionario_id === e.id; });
+    var horasDiaEmp = (rhEmp && parseFloat(rhEmp.horas_dia)) || 8;
+    var capacidadeHoras = diasUteisDisponiveis * horasDiaEmp;
     var utilizacaoPct = c.tipo === "Recibo Verde"
       ? (diasUteisDisponiveis > 0 ? Math.round(diasTrabalhadosEmp / diasUteisDisponiveis * 100) : 0)
       : (capacidadeHoras > 0 ? Math.round(horasEmp / capacidadeHoras * 100) : 0);
@@ -4829,7 +4831,7 @@ function RelatorioMensal() {
     function withIva(j) {
       const c = cm[j.client_id];
       const ivaT = j.iva_override || (c ? c.iva_type : "normal") || "normal";
-      return ivaT === "autoliquidacao" ? j.val || 0 : (j.val || 0) * 1.23;
+      return ivaT === "autoliquida\xE7\xE3o" ? j.val || 0 : (j.val || 0) * 1.23;
     }
     const completed = (servicos || []).filter(function(j) {
       return j.status === "completed" && cm[j.client_id];
