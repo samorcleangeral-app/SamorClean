@@ -412,6 +412,7 @@ function Finance() {
   const [despesas6Months, setDespesas6Months] = useState([]);
   const [absData6Months, setAbsData6Months] = useState([]);
   const [chartMetricas, setChartMetricas] = useState(["fat"]);
+  const [selCobrar, setSelCobrar] = useState(null);
   const [clientsMap, setClientsMap] = useState({});
   const [despesas, setDespesas] = useState([]);
   const [clientes, setClientes] = useState([]);
@@ -1240,24 +1241,53 @@ function Finance() {
   }).map(function(cat) {
     const pct = totalCustos > 0 ? Math.round(custosCat[cat] / totalCustos * 100) : 0;
     return /* @__PURE__ */ React.createElement("div", { key: cat, style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#334155", fontWeight: 600 } }, cat), /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B" } }, fmt(custosCat[cat]), "\u20AC (", pct, "%)")), /* @__PURE__ */ React.createElement("div", { style: { height: 6, background: "#F1F5F9", borderRadius: 3 } }, /* @__PURE__ */ React.createElement("div", { style: { height: 6, width: pct + "%", background: "#EF4444", borderRadius: 3 } })));
-  }))), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Clientes por Cobrar (", (function() { var s = new Set(pendingRows.map(function(j) { return j.client_id; })); return s.size; })(), ")"), pendingRows.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24 } }, "Tudo cobrado este m\xEAs! \u{1F389}") : /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { borderBottom: "2px solid #E2EBF4" } }, ["Cliente", "Servi\xE7os", "\xDAltimo", "Valor s/IVA", "Valor c/IVA", "Dias"].map(function(h) {
-    return /* @__PURE__ */ React.createElement("th", { key: h, style: { textAlign: "left", padding: "8px 10px", fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, h);
-  }))), /* @__PURE__ */ React.createElement("tbody", null, (function() {
-    var byClientCobrar = {};
-    pendingRows.forEach(function(j) {
-      if (!byClientCobrar[j.client_id]) byClientCobrar[j.client_id] = { cn: j.cn, count: 0, semIva: 0, comIva: 0, ultimaData: j.date, maxDias: 0 };
-      var diffDays = Math.floor((now - new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3));
-      byClientCobrar[j.client_id].count++;
-      byClientCobrar[j.client_id].semIva += (j.val || 0);
-      byClientCobrar[j.client_id].comIva += withIva(j.val || 0, j);
-      if (j.date > byClientCobrar[j.client_id].ultimaData) byClientCobrar[j.client_id].ultimaData = j.date;
-      if (diffDays > byClientCobrar[j.client_id].maxDias) byClientCobrar[j.client_id].maxDias = diffDays;
-    });
-    return Object.values(byClientCobrar).sort(function(a, b) { return b.maxDias - a.maxDias; }).map(function(c, i) {
-      const cor = c.maxDias >= 30 ? "#DC2626" : c.maxDias >= 15 ? "#F97316" : c.maxDias >= 9 ? "#F59E0B" : "#64748B";
-      return /* @__PURE__ */ React.createElement("tr", { key: i, style: { borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 600, color: "#1A3A5C" } }, c.cn), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", color: "#64748B" } }, c.count), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", color: "#64748B" } }, (new Date(c.ultimaData + "T12:00:00")).toLocaleDateString("pt-PT", { day: "2-digit", month: "short" })), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 700 } }, fmt(c.semIva), "\u20AC"), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 700 } }, fmt(c.comIva), "\u20AC"), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 700, color: cor } }, c.maxDias, "d"));
-    });
-  })())))));
+  }))), /* @__PURE__ */ React.createElement("div", { style: card },
+    /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Clientes por Cobrar (", (function() { var s = new Set(pendingRows.map(function(j) { return j.client_id; })); return s.size; })(), ")"),
+    pendingRows.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24 } }, "Tudo cobrado este m\xEAs! \u{1F389}") :
+    (function() {
+      var byClientCobrar = {};
+      pendingRows.forEach(function(j) {
+        if (!byClientCobrar[j.client_id]) byClientCobrar[j.client_id] = { cn: j.cn, count: 0, semIva: 0, comIva: 0, ultimaData: j.date, maxDias: 0, jobs: [] };
+        var diffDays = Math.floor((now - new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3));
+        byClientCobrar[j.client_id].count++;
+        byClientCobrar[j.client_id].semIva += (j.val || 0);
+        byClientCobrar[j.client_id].comIva += withIva(j.val || 0, j);
+        byClientCobrar[j.client_id].jobs.push(Object.assign({}, j, { diffDays: diffDays }));
+        if (j.date > byClientCobrar[j.client_id].ultimaData) byClientCobrar[j.client_id].ultimaData = j.date;
+        if (diffDays > byClientCobrar[j.client_id].maxDias) byClientCobrar[j.client_id].maxDias = diffDays;
+      });
+      if (selCobrar && byClientCobrar[selCobrar]) {
+        var d = byClientCobrar[selCobrar];
+        return /* @__PURE__ */ React.createElement("div", null,
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { setSelCobrar(null); }, style: Object.assign({}, btnO, { fontSize: 12, padding: "6px 12px", marginBottom: 14 }) }, "\u2190 Voltar"),
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 12 } }, d.cn),
+          d.jobs.sort(function(a, b) { return a.date < b.date ? -1 : 1; }).map(function(j) {
+            var cor = j.diffDays >= 30 ? "#DC2626" : j.diffDays >= 15 ? "#F97316" : j.diffDays >= 9 ? "#F59E0B" : "#64748B";
+            return /* @__PURE__ */ React.createElement("div", { key: j.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #F1F5F9" } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, new Date(j.date + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "short" }), " \u2022 ", j.t1, "\u2013", j.t2),
+              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 14, alignItems: "center" } },
+                /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, fontSize: 13 } }, fmt(withIva(j.val || 0, j)), "\u20AC"),
+                /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 12, color: cor } }, j.diffDays, "d")
+              )
+            );
+          })
+        );
+      }
+      return /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 12 } },
+        Object.keys(byClientCobrar).map(function(cid) { return Object.assign({ cid: cid }, byClientCobrar[cid]); }).sort(function(a, b) { return b.maxDias - a.maxDias; }).map(function(c) {
+          const cor = c.maxDias >= 30 ? "#DC2626" : c.maxDias >= 15 ? "#F97316" : c.maxDias >= 9 ? "#F59E0B" : "#64748B";
+          return /* @__PURE__ */ React.createElement("div", { key: c.cid, onClick: function() { setSelCobrar(c.cid); }, style: { border: "1px solid #E2EBF4", borderLeft: "4px solid " + cor, borderRadius: 10, padding: "12px 14px", cursor: "pointer" } },
+            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.cn),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 6 } }, c.count, " servi\xE7o", c.count !== 1 ? "s" : "", " \u2022 \xFAltimo ", new Date(c.ultimaData + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "short" })),
+            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+              /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, fmt(c.comIva), "\u20AC"),
+              /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 12, color: cor } }, c.maxDias, "d")
+            )
+          );
+        })
+      );
+    })()
+  )));
 }
 function Routes() {
   const [jobs, setJobs] = useState([]);
