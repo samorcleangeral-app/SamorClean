@@ -2834,8 +2834,12 @@ function FichaRH(props) {
   const [fardamento, setFardamento] = useState([]);
   const [docs, setDocs] = useState([]);
   const [avsInt, setAvsInt] = useState([]);
+  const [notasPrivadas, setNotasPrivadas] = useState([]);
+  const [novaNotaPrivada, setNovaNotaPrivada] = useState("");
+  const [savingNota, setSavingNota] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showAddAus, setShowAddAus] = useState(false);
+  const [editAusId, setEditAusId] = useState(null);
   const [showAddFard, setShowAddFard] = useState(false);
   const [showAddDoc, setShowAddDoc] = useState(false);
   const [showAddAv, setShowAddAv] = useState(false);
@@ -2864,6 +2868,9 @@ function FichaRH(props) {
       }),
       fetch(SUPABASE_URL + "/rest/v1/avaliacoes_internas?select=*&funcionario_id=eq." + encodeURIComponent(sel.id) + "&order=created_at.desc", { headers: dbHeaders() }).then(function(r) {
         return r.json();
+      }),
+      fetch(SUPABASE_URL + "/rest/v1/notas_colaborador?select=*&funcionario_id=eq." + encodeURIComponent(sel.id) + "&order=created_at.desc", { headers: dbHeaders() }).then(function(r) {
+        return r.json();
       })
     ]).then(function(results) {
       const rhData = results[0] && results[0].length > 0 ? results[0][0] : null;
@@ -2873,6 +2880,7 @@ function FichaRH(props) {
       setFardamento(results[2] || []);
       setDocs(results[3] || []);
       setAvsInt(results[4] || []);
+      setNotasPrivadas(results[5] || []);
       setLoading(false);
     });
   }, [sel.id]);
@@ -2911,6 +2919,25 @@ function FichaRH(props) {
     }
   }
   async function addAusencia() {
+    if (editAusId) {
+      const patch = Object.assign({}, ausForm);
+      delete patch.id;
+      delete patch.funcionario_id;
+      delete patch.created_at;
+      const res = await fetch(SUPABASE_URL + "/rest/v1/ausencias?id=eq." + editAusId, { method: "PATCH", headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }), body: JSON.stringify(patch) });
+      if (res.ok) {
+        const d = await res.json();
+        setAusencias(function(p) {
+          return p.map(function(a) { return a.id === editAusId ? d[0] : a; });
+        });
+        setShowAddAus(false);
+        setEditAusId(null);
+        setAusForm({ tipo: "Baixa M\xE9dica", data_inicio: "", data_fim: "", descricao: "", estado: "aprovado", subsidio_ferias_pago: false, subsidio_ferias_valor: "" });
+      } else {
+        alert("Erro ao actualizar aus\xEAncia: " + await res.text());
+      }
+      return;
+    }
     const res = await fetch(SUPABASE_URL + "/rest/v1/ausencias", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }), body: JSON.stringify(Object.assign({}, ausForm, { funcionario_id: sel.id })) });
     if (res.ok) {
       const d = await res.json();
@@ -2958,6 +2985,35 @@ function FichaRH(props) {
     setDocFile(null);
     setDocForm({ tipo: "Contrato", nome: "", mes_ano: "" });
     setUploading(false);
+  }
+  async function addNotaPrivada() {
+    if (!novaNotaPrivada.trim()) return;
+    setSavingNota(true);
+    const res = await fetch(SUPABASE_URL + "/rest/v1/notas_colaborador", {
+      method: "POST",
+      headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }),
+      body: JSON.stringify({ funcionario_id: sel.id, nota: novaNotaPrivada.trim() })
+    });
+    if (res.ok) {
+      const d = await res.json();
+      setNotasPrivadas(function(p) { return [d[0]].concat(p); });
+      setNovaNotaPrivada("");
+    }
+    setSavingNota(false);
+  }
+  async function deleteNotaPrivada(id) {
+    if (!window.confirm("Apagar esta nota?")) return;
+    await fetch(SUPABASE_URL + "/rest/v1/notas_colaborador?id=eq." + id, { method: "DELETE", headers: dbHeaders() });
+    setNotasPrivadas(function(p) { return p.filter(function(n) { return n.id !== id; }); });
+  }
+  function exportNotasPrivadasPDF() {
+    var linhas = notasPrivadas.slice().sort(function(a, b) { return a.created_at < b.created_at ? -1 : 1; }).map(function(n) {
+      var dataStr = new Date(n.created_at).toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit", year: "numeric" });
+      return "<div style='margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #E2EBF4'><div style='font-size:11px;color:#94A3B8;font-weight:700;margin-bottom:4px'>" + dataStr + "</div><div style='font-size:13px;color:#1A3A5C;line-height:1.6'>" + n.nota.replace(/</g, "&lt;").replace(/>/g, "&gt;") + "</div></div>";
+    }).join("");
+    var win = window.open("", "_blank");
+    win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Notas \u2014 " + sel.name + "</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C}h1{margin-bottom:2px}h2{color:#64748B;font-weight:normal;margin-top:0;margin-bottom:24px}@media print{body{padding:15px}}</style></head><body><h1>SamorClean</h1><h2>Registo de Notas Internas \u2014 " + sel.name + "</h2>" + (linhas || "<p>Sem notas registadas.</p>") + "<script>window.onload=function(){window.print();}<\\/script></body></html>");
+    win.document.close();
   }
   async function addAvaliacaoInterna() {
     const res = await fetch(SUPABASE_URL + "/rest/v1/avaliacoes_internas", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }), body: JSON.stringify(Object.assign({}, avForm, { funcionario_id: sel.id })) });
@@ -3012,7 +3068,7 @@ function FichaRH(props) {
       }, style: { fontSize: 24, cursor: "pointer", color: i <= val ? "#F59E0B" : "#E2EBF4" } }, "\u2605");
     }));
   }
-  const tabs = [{ k: "dados", l: "Dados Pessoais" }, { k: "ausencias", l: "Aus\xEAncias" }, { k: "fardamento", l: "Fardamento" }, { k: "docs", l: "Documentos" }, { k: "avaliacao", l: "Avalia\xE7\xE3o Interna" }, { k: "picagens", l: "Picagens" }, { k: "pedidos_hist", l: "Pedidos" }];
+  const tabs = [{ k: "dados", l: "Dados Pessoais" }, { k: "ausencias", l: "Aus\xEAncias" }, { k: "fardamento", l: "Fardamento" }, { k: "docs", l: "Documentos" }, { k: "avaliacao", l: "Avalia\xE7\xE3o Interna" }, { k: "notas_privadas", l: "\uD83D\uDD12 Notas" }, { k: "picagens", l: "Picagens" }, { k: "pedidos_hist", l: "Pedidos" }];
   const [novoPinGerado, setNovoPinGerado] = useState(null);
   const [gerandoPin, setGerandoPin] = useState(false);
   async function gerarNovoPin() {
@@ -3057,8 +3113,10 @@ function FichaRH(props) {
   } })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Notas internas"), /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 60, resize: "vertical" }), value: rhForm && rhForm.notas || "", onChange: function(e) {
     setRhForm(Object.assign({}, rhForm, { notas: e.target.value }));
   } })), /* @__PURE__ */ React.createElement("button", { onClick: saveRH, style: Object.assign({}, btnG, { width: "100%", textAlign: "center" }) }, "Guardar dados RH"))), tab === "ausencias" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, ausencias.length, " registo", ausencias.length !== 1 ? "s" : ""), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    setEditAusId(null);
+    setAusForm({ tipo: "Baixa M\xE9dica", data_inicio: "", data_fim: "", descricao: "", estado: "aprovado", subsidio_ferias_pago: false, subsidio_ferias_valor: "" });
     setShowAddAus(true);
-  }, style: btn }, "+ Registar aus\xEAncia")), showAddAus && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#F8FAFC" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 12 } }, "Nova aus\xEAncia"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tipo"), /* @__PURE__ */ React.createElement("select", { style: inp, value: ausForm.tipo, onChange: function(e) {
+  }, style: btn }, "+ Registar aus\xEAncia")), showAddAus && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#F8FAFC" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 12 } }, editAusId ? "Editar aus\xEAncia" : "Nova aus\xEAncia"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tipo"), /* @__PURE__ */ React.createElement("select", { style: inp, value: ausForm.tipo, onChange: function(e) {
     setAusForm(Object.assign({}, ausForm, { tipo: e.target.value }));
   } }, TIPOS_AUS.map(function(t) {
     return /* @__PURE__ */ React.createElement("option", { key: t }, t);
@@ -3088,12 +3146,17 @@ function FichaRH(props) {
     )
   )), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 12 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setShowAddAus(false);
-  }, style: Object.assign({}, btnX, { flex: 1, textAlign: "center" }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: addAusencia, style: Object.assign({}, btnG, { flex: 1, textAlign: "center" }) }, "Guardar"))), ausencias.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Sem aus\xEAncias registadas.") : ausencias.map(function(a) {
+    setEditAusId(null);
+  }, style: Object.assign({}, btnX, { flex: 1, textAlign: "center" }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: addAusencia, style: Object.assign({}, btnG, { flex: 1, textAlign: "center" }) }, editAusId ? "Guardar altera\xE7\xF5es" : "Guardar"))), ausencias.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Sem aus\xEAncias registadas.") : ausencias.map(function(a) {
     const corTipo = a.tipo === "Baixa M\xE9dica" ? "#FEE2E2" : a.tipo === "F\xE9rias" ? "#DCFCE7" : a.tipo === "Falta Injustificada" ? "#FEE2E2" : "#EFF6FF";
     const corTxt = a.tipo === "Baixa M\xE9dica" ? "#991B1B" : a.tipo === "F\xE9rias" ? "#15803D" : a.tipo === "Falta Injustificada" ? "#991B1B" : "#1E40AF";
-    return /* @__PURE__ */ React.createElement("div", { key: a.id, style: Object.assign({}, card, { marginBottom: 10, display: "flex", alignItems: "center", gap: 14, padding: 14 }) }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } }, /* @__PURE__ */ React.createElement("span", { style: { background: corTipo, color: corTxt, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, a.tipo), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#64748B" } }, a.data_inicio, a.data_fim ? " \u2192 " + a.data_fim : "")), a.descricao && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, a.descricao)), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    return /* @__PURE__ */ React.createElement("div", { key: a.id, style: Object.assign({}, card, { marginBottom: 10, display: "flex", alignItems: "center", gap: 14, padding: 14 }) }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } }, /* @__PURE__ */ React.createElement("span", { style: { background: corTipo, color: corTxt, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, a.tipo), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#64748B" } }, a.data_inicio, a.data_fim ? " \u2192 " + a.data_fim : ""), a.subsidio_ferias_pago && /* @__PURE__ */ React.createElement("span", { style: { background: "#DBEAFE", color: "#1E40AF", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700 } }, "\u20AC subs\xEDdio pago")), a.descricao && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, a.descricao)), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
+      setAusForm({ tipo: a.tipo, data_inicio: a.data_inicio || "", data_fim: a.data_fim || "", descricao: a.descricao || "", estado: a.estado || "aprovado", subsidio_ferias_pago: a.subsidio_ferias_pago || false, subsidio_ferias_valor: a.subsidio_ferias_valor || "" });
+      setEditAusId(a.id);
+      setShowAddAus(true);
+    }, style: Object.assign({}, btnO, { fontSize: 11, padding: "5px 10px" }) }, "Editar"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
       deleteAusencia(a.id);
-    }, style: Object.assign({}, btnR, { fontSize: 11, padding: "5px 10px" }) }, "Del"));
+    }, style: Object.assign({}, btnR, { fontSize: 11, padding: "5px 10px" }) }, "Del")));
   })), tab === "fardamento" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, fardamento.length, " item", fardamento.length !== 1 ? "s" : ""), /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setShowAddFard(true);
   }, style: btn }, "+ Adicionar item")), showAddFard && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#F8FAFC" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 12 } }, "Novo item"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Item"), /* @__PURE__ */ React.createElement("input", { style: inp, value: fardForm.item, onChange: function(e) {
@@ -3155,7 +3218,27 @@ function FichaRH(props) {
     return /* @__PURE__ */ React.createElement("div", { key: a.id, style: Object.assign({}, card, { marginBottom: 12, padding: 16 }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, a.periodo), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, "Por ", a.avaliado_por, " \u2014 ", new Date(a.created_at).toLocaleDateString("pt-PT"))), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: media >= 4 ? "#16A34A" : media >= 3 ? "#F59E0B" : "#EF4444" } }, media), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8" } }, "m\xE9dia"))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, [["qualidade_trabalho", "Qualidade"], ["pontualidade", "Pontualidade"], ["postura", "Postura"], ["relacao_equipa", "Equipa"], ["seguimento_instrucoes", "Instru\xE7\xF5es"]].map(function(c) {
       return /* @__PURE__ */ React.createElement("div", { key: c[0], style: { display: "flex", justifyContent: "space-between", fontSize: 12, padding: "4px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B" } }, c[1]), /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, color: "#1A3A5C" } }, "\u2605".repeat(a[c[0]] || 0)));
     })), a.nota_geral && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10, background: "#F8FAFC", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#334155", fontStyle: "italic" } }, '"', a.nota_geral, '"'));
-  })), tab === "picagens" && /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "Hist\xF3rico de picagens"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+  })), tab === "notas_privadas" && /* @__PURE__ */ React.createElement("div", null,
+    notasPrivadas.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "flex-end", marginBottom: 12 } },
+      /* @__PURE__ */ React.createElement("button", { onClick: exportNotasPrivadasPDF, style: btnO }, "\uD83D\uDCC4 Exportar PDF")
+    ),
+    /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#FEF2F2", border: "1.5px solid #FCA5A5" }) },
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 13, color: "#991B1B", marginBottom: 4 } }, "\uD83D\uDD12 Notas privadas \u2014 s\xF3 vis\xEDveis para ti"),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#7F1D1D", marginBottom: 12 } }, "Regista aqui factos concretos e datados (incidentes, comportamentos, conversas) \u2014 nunca vis\xEDvel para o colaborador nem para mais ningu\xE9m."),
+      /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 70, background: "#fff" }), value: novaNotaPrivada, onChange: function(e) { setNovaNotaPrivada(e.target.value); }, placeholder: "Ex: Hoje respondeu mal \xE0 Joana \xE0 frente do cliente na Protecnil..." }),
+      /* @__PURE__ */ React.createElement("button", { onClick: addNotaPrivada, disabled: savingNota || !novaNotaPrivada.trim(), style: Object.assign({}, btnR, { marginTop: 10, opacity: savingNota || !novaNotaPrivada.trim() ? 0.5 : 1 }) }, savingNota ? "A guardar..." : "+ Registar nota")
+    ),
+    notasPrivadas.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 32, color: "#94A3B8" }) }, "Sem notas registadas.") :
+    notasPrivadas.map(function(n) {
+      return /* @__PURE__ */ React.createElement("div", { key: n.id, style: Object.assign({}, card, { marginBottom: 10, padding: 14, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }) },
+        /* @__PURE__ */ React.createElement("div", null,
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 4 } }, new Date(n.created_at).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#334155", lineHeight: 1.5 } }, n.nota)
+        ),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { deleteNotaPrivada(n.id); }, style: { background: "transparent", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 14, flexShrink: 0 } }, "\uD83D\uDDD1")
+      );
+    })
+  ), tab === "picagens" && /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "Hist\xF3rico de picagens"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
     const periodo = 30;
     const from = /* @__PURE__ */ new Date();
     from.setDate(from.getDate() - periodo);
