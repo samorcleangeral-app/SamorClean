@@ -429,6 +429,8 @@ function Finance() {
   const [absData6Months, setAbsData6Months] = useState([]);
   const [chartMetricas, setChartMetricas] = useState(["fat"]);
   const [selCobrar, setSelCobrar] = useState(null);
+  const [allPendingJobs, setAllPendingJobs] = useState([]);
+  const [verTudoCobrar, setVerTudoCobrar] = useState(false);
   const [clientsMap, setClientsMap] = useState({});
   const [despesas, setDespesas] = useState([]);
   const [clientes, setClientes] = useState([]);
@@ -470,7 +472,8 @@ function Finance() {
       db.list("cash_movimentos", "?select=*&order=data.desc"),
       db.list("metas_financeiras", "?select=*&order=created_at.desc"),
       db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd),
-      db.list("despesas", "?select=data,valor&data=gte." + sixMonthsAgo)
+      db.list("despesas", "?select=data,valor&data=gte." + sixMonthsAgo),
+      db.list("servicos", "?select=*&status=eq.completed&paid=is.false")
     ]).then(function(results) {
       const cm = {};
       (results[2] || []).forEach(function(c) { cm[c.id] = c; });
@@ -478,6 +481,7 @@ function Finance() {
       setMonthJobsAll((results[12] || []).filter(function(j) { return cm[j.client_id]; }));
       setLast6Months((results[1] || []).filter(function(j) { return cm[j.client_id]; }));
       setDespesas6Months(results[13] || []);
+      setAllPendingJobs((results[14] || []).filter(function(j) { return cm[j.client_id]; }));
       setClientsMap(cm);
       setClientes(results[2] || []);
       setDespesas(results[3] || []);
@@ -1261,11 +1265,18 @@ function Finance() {
     const pct = totalCustos > 0 ? Math.round(custosCat[cat] / totalCustos * 100) : 0;
     return /* @__PURE__ */ React.createElement("div", { key: cat, style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#334155", fontWeight: 600 } }, cat), /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B" } }, fmt(custosCat[cat]), "\u20AC (", pct, "%)")), /* @__PURE__ */ React.createElement("div", { style: { height: 6, background: "#F1F5F9", borderRadius: 3 } }, /* @__PURE__ */ React.createElement("div", { style: { height: 6, width: pct + "%", background: "#EF4444", borderRadius: 3 } })));
   }))), /* @__PURE__ */ React.createElement("div", { style: card },
-    /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Clientes por Cobrar (", (function() { var s = new Set(pendingRows.map(function(j) { return j.client_id; })); return s.size; })(), ")"),
-    pendingRows.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24 } }, "Tudo cobrado este m\xEAs! \u{1F389}") :
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 14 } },
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "Clientes por Cobrar (", (function() { var s = new Set((verTudoCobrar ? allPendingJobs : pendingRows).map(function(j) { return j.client_id; })); return s.size; })(), ")"),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } },
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setVerTudoCobrar(false); setSelCobrar(null); }, style: { padding: "5px 12px", borderRadius: 8, border: "1.5px solid " + (!verTudoCobrar ? "#2E6DA4" : "#E2EBF4"), background: !verTudoCobrar ? "#EFF6FF" : "#fff", color: !verTudoCobrar ? "#2E6DA4" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "Este m\xEAs"),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setVerTudoCobrar(true); setSelCobrar(null); }, style: { padding: "5px 12px", borderRadius: 8, border: "1.5px solid " + (verTudoCobrar ? "#2E6DA4" : "#E2EBF4"), background: verTudoCobrar ? "#EFF6FF" : "#fff", color: verTudoCobrar ? "#2E6DA4" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "Desde sempre")
+      )
+    ),
     (function() {
+      var pendingRowsAtivo = verTudoCobrar ? allPendingJobs : pendingRows;
+      if (pendingRowsAtivo.length === 0) return /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24 } }, "Tudo cobrado! \u{1F389}");
       var byClientCobrar = {};
-      pendingRows.forEach(function(j) {
+      pendingRowsAtivo.forEach(function(j) {
         if (!byClientCobrar[j.client_id]) byClientCobrar[j.client_id] = { cn: j.cn, count: 0, semIva: 0, comIva: 0, ultimaData: j.date, maxDias: 0, jobs: [] };
         var diffDays = Math.floor((now - new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3));
         byClientCobrar[j.client_id].count++;
