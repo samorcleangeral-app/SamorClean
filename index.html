@@ -1418,6 +1418,7 @@ function Routes() {
   }
   function calcularValorJob(c, t1, t2, teamSize) {
     if (!c) return null;
+    if (c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda") return null;
     var tipoFat = c.tipo_faturacao || "hora";
     if (tipoFat === "visita" || tipoFat === "mensal") return parseFloat(c.valor_visita) || 0;
     var horas = horasReais(t1, t2);
@@ -1493,6 +1494,8 @@ function Routes() {
       var teamSize = teamDisponivel.length || 1;
       var valCalculado = (function() {
         if (!c) return parseFloat(nj.val) || 0;
+        var isObra = c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda";
+        if (isObra) return parseFloat(nj.val) || 0;
         var tipoFat = c.tipo_faturacao || "hora";
         if (tipoFat === "visita") return parseFloat(c.valor_visita) || 0;
         if (tipoFat === "mensal") return parseFloat(c.valor_visita) || 0;
@@ -1985,8 +1988,15 @@ function Routes() {
     setNj(Object.assign({}, nj, { date: e.target.value }));
   } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Data fim (opcional)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: nj.date_end || "", onChange: function(e) {
     setNj(Object.assign({}, nj, { date_end: e.target.value }));
-  } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Valor (\u20AC) \u2014 calculado automaticamente"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { background: "#F8FAFC", color: "#64748B", cursor: "not-allowed" }), type: "text", readOnly: true, value: (function() {
+  } })), (function() {
     var c = clients.find(function(x) { return x.name === nj.cn; });
+    var isObra = c && (c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda");
+    if (isObra) {
+      return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Valor desta obra (\u20AC, sem IVA)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: nj.val, placeholder: "Ex: 713.29", onFocus: function(e) { e.target.select(); }, onChange: function(e) {
+        setNj(Object.assign({}, nj, { val: e.target.value }));
+      } }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#F59E0B", fontWeight: 700, marginTop: 4 } }, "Cada obra tem o seu pr\xF3prio valor \u2014 escreve o valor orçamentado para esta obra espec\xEDfica."));
+    }
+    return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Valor (\u20AC) \u2014 calculado automaticamente"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { background: "#F8FAFC", color: "#64748B", cursor: "not-allowed" }), type: "text", readOnly: true, value: (function() {
     if (!c) return "\u2014";
     var tipoFat = c.tipo_faturacao || "hora";
     if (tipoFat === "visita" || tipoFat === "mensal") return fmt(parseFloat(c.valor_visita) || 0) + "\u20AC";
@@ -1994,7 +2004,8 @@ function Routes() {
     var teamSize = nj.team.length || 1;
     var preco = c.price_per_hour || PRICE_PER_HOUR;
     return fmt(teamSize * horas * preco) + "\u20AC";
-  })() })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Hora in\xEDcio"), /* @__PURE__ */ React.createElement("select", { style: inp, value: nj.t1, onChange: function(e) {
+  })() }));
+  })(), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Hora in\xEDcio"), /* @__PURE__ */ React.createElement("select", { style: inp, value: nj.t1, onChange: function(e) {
     setNj(Object.assign({}, nj, { t1: e.target.value }));
   } }, TIME_SLOTS.map(function(t) {
     return /* @__PURE__ */ React.createElement("option", { key: t }, t);
@@ -2535,9 +2546,7 @@ function Clients() {
       if (e.target.value === "0") e.target.select();
     }, onChange: function(e) {
       setEditForm(Object.assign({}, editForm, { hours_contracted: parseFloat(e.target.value) || 0 }));
-    } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tipo de fatura\xE7\xE3o"), /* @__PURE__ */ React.createElement("select", { style: inp, value: editForm.tipo_faturacao || "hora", onChange: function(e) { setEditForm(Object.assign({}, editForm, { tipo_faturacao: e.target.value })); } }, /* @__PURE__ */ React.createElement("option", { value: "hora" }, "Por hora"), /* @__PURE__ */ React.createElement("option", { value: "visita" }, "Por visita (valor fixo)"), /* @__PURE__ */ React.createElement("option", { value: "mensal" }, "Mensal fixo"))), (editForm.service === "Limpeza P\xF3s-Obra" || editForm.service === "Limpeza Profunda") ? /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Valor do or\xE7amento (sem IVA)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: editForm.price_per_hour, onFocus: function(e) { e.target.select(); }, onChange: function(e) {
-      setEditForm(Object.assign({}, editForm, { price_per_hour: parseFloat(e.target.value) || 0 }));
-    } }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#F59E0B", fontWeight: 700, marginTop: 4 } }, "50% adjudica\xE7\xE3o + 50% a 30 dias")) : /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Pre\xE7o/hora (sem IVA)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: editForm.price_per_hour, onChange: function(e) {
+    } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tipo de fatura\xE7\xE3o"), /* @__PURE__ */ React.createElement("select", { style: inp, value: editForm.tipo_faturacao || "hora", onChange: function(e) { setEditForm(Object.assign({}, editForm, { tipo_faturacao: e.target.value })); } }, /* @__PURE__ */ React.createElement("option", { value: "hora" }, "Por hora"), /* @__PURE__ */ React.createElement("option", { value: "visita" }, "Por visita (valor fixo)"), /* @__PURE__ */ React.createElement("option", { value: "mensal" }, "Mensal fixo"))), (editForm.service === "Limpeza P\xF3s-Obra" || editForm.service === "Limpeza Profunda") ? /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1", background: "#FFFBEB", border: "1.5px solid #F59E0B", borderRadius: 10, padding: "10px 14px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#92400E" } }, "\u2139 Cada obra deste cliente tem o seu pr\xF3prio valor, definido ao criar o serviço em Rotas."), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#78350F", marginTop: 2 } }, "50% adjudica\xE7\xE3o + 50% a 30 dias (condi\xE7\xE3o habitual)")) : /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Pre\xE7o/hora (sem IVA)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: editForm.price_per_hour, onChange: function(e) {
       setEditForm(Object.assign({}, editForm, { price_per_hour: parseFloat(e.target.value) || 0 }));
     } })), (editForm.tipo_faturacao === "visita" || editForm.tipo_faturacao === "mensal") && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, editForm.tipo_faturacao === "visita" ? "Valor por visita (sem IVA)" : "Valor mensal fixo (sem IVA)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: editForm.valor_visita || "", placeholder: "Ex: 27.51", onFocus: function(e) { e.target.select(); }, onChange: function(e) {
       setEditForm(Object.assign({}, editForm, { valor_visita: parseFloat(e.target.value) || 0 }));
@@ -2673,9 +2682,7 @@ function Clients() {
       setForm(Object.assign({}, form, { checklist: form.checklist.concat([""]) }));
     } }, "+ Tarefa")), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 12 } }, "Financeiro"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 } }, (form.service === "Limpeza P\xF3s-Obra" || form.service === "Limpeza Profunda") ? null : /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Horas contratadas/semana"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", min: "0", step: "0.5", value: form.hours_contracted || "", placeholder: "Ex: 2.5", onFocus: function(e) { e.target.select(); }, onChange: function(e) {
       setForm(Object.assign({}, form, { hours_contracted: parseFloat(e.target.value) || 0 }));
-    } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tipo de fatura\xE7\xE3o"), /* @__PURE__ */ React.createElement("select", { style: inp, value: form.tipo_faturacao || "hora", onChange: function(e) { setForm(Object.assign({}, form, { tipo_faturacao: e.target.value })); } }, /* @__PURE__ */ React.createElement("option", { value: "hora" }, "Por hora (horas \xD7 pre\xE7o/h)"), /* @__PURE__ */ React.createElement("option", { value: "visita" }, "Por visita (valor fixo/visita)"), /* @__PURE__ */ React.createElement("option", { value: "mensal" }, "Mensal fixo"))), (form.service === "Limpeza P\xF3s-Obra" || form.service === "Limpeza Profunda") ? /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Valor do or\xE7amento (sem IVA)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: form.price_per_hour || "", placeholder: "Ex: 1500", onFocus: function(e) { e.target.select(); }, onChange: function(e) {
-      setForm(Object.assign({}, form, { price_per_hour: parseFloat(e.target.value) || 0 }));
-    } }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#F59E0B", fontWeight: 700, marginTop: 4 } }, "50% adjudica\xE7\xE3o + 50% a 30 dias")) : /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Pre\xE7o/hora (sem IVA)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: form.price_per_hour || 13.66, onFocus: function(e) { e.target.select(); }, onChange: function(e) {
+    } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tipo de fatura\xE7\xE3o"), /* @__PURE__ */ React.createElement("select", { style: inp, value: form.tipo_faturacao || "hora", onChange: function(e) { setForm(Object.assign({}, form, { tipo_faturacao: e.target.value })); } }, /* @__PURE__ */ React.createElement("option", { value: "hora" }, "Por hora (horas \xD7 pre\xE7o/h)"), /* @__PURE__ */ React.createElement("option", { value: "visita" }, "Por visita (valor fixo/visita)"), /* @__PURE__ */ React.createElement("option", { value: "mensal" }, "Mensal fixo"))), (form.service === "Limpeza P\xF3s-Obra" || form.service === "Limpeza Profunda") ? /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1", background: "#FFFBEB", border: "1.5px solid #F59E0B", borderRadius: 10, padding: "10px 14px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#92400E" } }, "\u2139 Cada obra deste cliente ter\xE1 o seu pr\xF3prio valor, definido ao criar o serviço em Rotas."), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#78350F", marginTop: 2 } }, "50% adjudica\xE7\xE3o + 50% a 30 dias (condi\xE7\xE3o habitual)")) : /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Pre\xE7o/hora (sem IVA)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: form.price_per_hour || 13.66, onFocus: function(e) { e.target.select(); }, onChange: function(e) {
       setForm(Object.assign({}, form, { price_per_hour: parseFloat(e.target.value) || 0 }));
     } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Km desde o armaz\xE9m"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", min: "0", step: "0.1", value: form.km_armazem || 0, onFocus: function(e) { e.target.select(); }, onChange: function(e) {
       setForm(Object.assign({}, form, { km_armazem: parseFloat(e.target.value) || 0 }));
