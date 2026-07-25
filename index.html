@@ -5540,6 +5540,7 @@ function Manager(props) {
   const [pedidosColabPendentes, setPedidosColabPendentes] = useState(0);
   const [notasClientesNovas, setNotasClientesNovas] = useState(0);
   const [avaliacoesNovas, setAvaliacoesNovas] = useState(0);
+  const [ratingsMes, setRatingsMes] = useState({});
   const [alertasFreqCount, setAlertasFreqCount] = useState(0);
   const [monthFat, setMonthFat] = useState(0);
   const [monthDivida, setMonthDivida] = useState(0);
@@ -5559,7 +5560,8 @@ function Manager(props) {
       db.list("pedidos_colaboradores", "?select=id&estado=eq.pendente"),
       db.list("servicos", "?select=client_id,date&date=gte." + past60 + "&order=date.desc"),
       db.list("client_notes", "?select=id&partilhada=eq.false&expires_at=gte." + new Date().toISOString()),
-      db.list("avaliacoes", "?select=id&vista=is.false")
+      db.list("avaliacoes", "?select=id&vista=is.false"),
+      db.list("avaliacoes", "?select=stars,funcionario_id,created_at&created_at=gte." + new Date(now.getFullYear(), now.getMonth(), 1).toISOString())
     ]).then(function(results) {
       setClientCount(results[0] ? results[0].length : 0);
       setTodayJobs(results[1] || []);
@@ -5569,6 +5571,16 @@ function Manager(props) {
       setPedidosColabPendentes(results[6] ? results[6].length : 0);
       setNotasClientesNovas(results[8] ? results[8].length : 0);
       setAvaliacoesNovas(results[9] ? results[9].length : 0);
+      var ratingsMesCalc = {};
+      (results[10] || []).forEach(function(a) {
+        if (!ratingsMesCalc[a.funcionario_id]) ratingsMesCalc[a.funcionario_id] = { soma: 0, count: 0 };
+        ratingsMesCalc[a.funcionario_id].soma += a.stars || 0;
+        ratingsMesCalc[a.funcionario_id].count++;
+      });
+      Object.keys(ratingsMesCalc).forEach(function(eid) {
+        ratingsMesCalc[eid].media = Math.round(ratingsMesCalc[eid].soma / ratingsMesCalc[eid].count * 10) / 10;
+      });
+      setRatingsMes(ratingsMesCalc);
       const cm = {};
       (results[0] || []).forEach(function(c) {
         cm[c.id] = c;
@@ -5775,10 +5787,11 @@ function Manager(props) {
     return /* @__PURE__ */ React.createElement("div", { key: j.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 6, height: 6, borderRadius: "50%", background: j.status === "completed" ? "#16A34A" : "#F59E0B", flexShrink: 0 } }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, j.cn), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, (/* @__PURE__ */ new Date(j.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" }), " ", j.t1)), /* @__PURE__ */ React.createElement(Bdg, { label: j.status === "completed" ? "Feito" : "Pendente", bg: j.status === "completed" ? "#DCFCE7" : "#FEF3C7", tx: j.status === "completed" ? "#15803D" : "#92400E" }));
   }), /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setView("routes");
-  }, style: Object.assign({}, btnO, { width: "100%", marginTop: 12, fontSize: 12, padding: "8px 0", textAlign: "center" }) }, "Ver rotas")), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Ranking da Equipa"), emps.slice().sort(function(a, b) {
+  }, style: Object.assign({}, btnO, { width: "100%", marginTop: 12, fontSize: 12, padding: "8px 0", textAlign: "center" }) }, "Ver rotas")), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "Ranking da Equipa"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 10 } }, "Ordenado pela nota hist\xF3rica \u2014 nota deste m\xEAs ao lado"), emps.slice().sort(function(a, b) {
     return (b.rating || 0) - (a.rating || 0);
   }).map(function(e, i) {
-    return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: i === 0 ? "#F59E0B" : i === 1 ? "#94A3B8" : "#CD7C54", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 11, flexShrink: 0 } }, i + 1), /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 30, color: ["#2E6DA4", "#0F766E", "#7C3AED", "#C2410C"][i] || "#64748B" }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, e.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, e.role)), /* @__PURE__ */ React.createElement(Stars, { r: e.rating }));
+    var rMes = ratingsMes[e.id];
+    return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: i === 0 ? "#F59E0B" : i === 1 ? "#94A3B8" : "#CD7C54", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 11, flexShrink: 0 } }, i + 1), /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 30, color: ["#2E6DA4", "#0F766E", "#7C3AED", "#C2410C"][i] || "#64748B" }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, e.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, e.role)), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right" } }, /* @__PURE__ */ React.createElement(Stars, { r: e.rating }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: rMes ? "#2E6DA4" : "#CBD5E1", fontWeight: 700, marginTop: 2 } }, rMes ? "Este m\xEAs: " + rMes.media + " \u2605 (" + rMes.count + ")" : "Sem avalia\xE7\xF5es este m\xEAs")));
   })))) : null, view === "quadro_op" ? /* @__PURE__ */ React.createElement(QuadroOperacional, null) : null, view === "notas_op" ? /* @__PURE__ */ React.createElement(NotasOperacionais, null) : null, view === "finance" ? /* @__PURE__ */ React.createElement(Finance, null) : null, view === "routes" ? /* @__PURE__ */ React.createElement(Routes, null) : null, view === "clients" ? /* @__PURE__ */ React.createElement(Clients, null) : null, view === "fornecedores" ? /* @__PURE__ */ React.createElement(Fornecedores, null) : null, view === "pedidos_colab" ? /* @__PURE__ */ React.createElement(PedidosColab, { onUpdate: function(n) {
     setPedidosColabPendentes(n);
   } }) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "leads" ? /* @__PURE__ */ React.createElement(Leads, null) : null, view === "recrutamento" ? /* @__PURE__ */ React.createElement(Recrutamento, null) : null, view === "avaliacoes" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "formacao" ? /* @__PURE__ */ React.createElement(Formacao, null) : null, view === "relatorio" ? /* @__PURE__ */ React.createElement(RelatorioMensal, null) : null, view === "gestores" ? /* @__PURE__ */ React.createElement(GestoresAdmin, null) : null, view === "armazem_qr" ? /* @__PURE__ */ React.createElement(QRArmazem, null) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, null) : null));
