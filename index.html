@@ -1242,10 +1242,19 @@ function Routes() {
     "#607D8B",
     "#F4B400"
   ];
-  function jobColor(job) {
-    const firstEmp = (job.team || [])[0];
-    if (firstEmp) return empColor(firstEmp);
-    return "#4285F4";
+  const ROTA_PALETTE = ["#3B82F6", "#10B981", "#8B5CF6", "#F97316", "#F59E0B", "#06B6D4", "#EC4899", "#84CC16", "#6366F1", "#14B8A6"];
+  function jobColor(job, diaJobsOpcional) {
+    const teamSig = (job.team || []).slice().sort().join(",");
+    if (!teamSig) return "#94A3B8";
+    const diaJobs = (diaJobsOpcional || jobs.filter(function(j) { return j.date === job.date; }));
+    const sorted = diaJobs.slice().sort(function(a, b) { return timeToMin(a.t1) - timeToMin(b.t1); });
+    const equipasVistas = [];
+    sorted.forEach(function(j) {
+      const sig = (j.team || []).slice().sort().join(",");
+      if (sig && equipasVistas.indexOf(sig) === -1) equipasVistas.push(sig);
+    });
+    const idx = equipasVistas.indexOf(teamSig);
+    return ROTA_PALETTE[idx >= 0 ? idx % ROTA_PALETTE.length : 0];
   }
   useEffect(function() {
     Promise.all([
@@ -1654,7 +1663,7 @@ function Routes() {
       const lay = layout[job.id] || { col: 0, total: 1 };
       const top = (timeToMin(job.t1) / 60 - START_H) * HOUR_PX;
       const height = Math.max(24, (timeToMin(job.t2) - timeToMin(job.t1)) / 60 * HOUR_PX - 3);
-      const color = jobColor(job);
+      const color = jobColor(job, dayJobs);
       const isCompleted = job.status === "completed";
       const isPaid = job.paid;
       const pct = 100 / lay.total;
@@ -1742,7 +1751,7 @@ function Routes() {
           return /* @__PURE__ */ React.createElement("div", { key: job.id, onClick: function(e) {
             e.stopPropagation();
             openJob(job);
-          }, style: { background: jobColor(job), borderRadius: 3, padding: "2px 5px", fontSize: 9, fontWeight: 700, color: "#fff", marginBottom: 1, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", cursor: "pointer" } }, job.cn);
+          }, style: { background: jobColor(job, dayJobs), borderRadius: 3, padding: "2px 5px", fontSize: 9, fontWeight: 700, color: "#fff", marginBottom: 1, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", cursor: "pointer" } }, job.cn);
         }),
         dayJobs.length > 3 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", cursor: "pointer" } }, "+", dayJobs.length - 3, " mais")
       );
