@@ -1298,14 +1298,32 @@ function Routes() {
     });
     const cols = [];
     const result = {};
+    function mesmaEquipa(a, b) {
+      var ta = (a.team || []).slice().sort().join(",");
+      var tb = (b.team || []).slice().sort().join(",");
+      return ta !== "" && ta === tb;
+    }
     sorted.forEach(function(job) {
       let placed = false;
+      // Primeiro tenta continuar na coluna da mesma equipa, se n\xE3o houver sobreposi\xE7\xE3o de hor\xE1rio
       for (let ci = 0; ci < cols.length; ci++) {
-        if (timeToMin(job.t1) >= timeToMin(cols[ci][cols[ci].length - 1].t2)) {
+        var last = cols[ci][cols[ci].length - 1];
+        if (mesmaEquipa(last, job) && timeToMin(job.t1) >= timeToMin(last.t2)) {
           cols[ci].push(job);
           result[job.id] = { col: ci };
           placed = true;
           break;
+        }
+      }
+      // Sen\xE3o, primeira coluna livre no tempo
+      if (!placed) {
+        for (let ci = 0; ci < cols.length; ci++) {
+          if (timeToMin(job.t1) >= timeToMin(cols[ci][cols[ci].length - 1].t2)) {
+            cols[ci].push(job);
+            result[job.id] = { col: ci };
+            placed = true;
+            break;
+          }
         }
       }
       if (!placed) {
