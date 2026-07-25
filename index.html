@@ -3995,6 +3995,9 @@ function Fornecedores() {
   const [despForm, setDespForm] = useState({ descricao: "", valor: "", iva_percentagem: 23, iva_dedutivel: true, iva_percentagem_dedutivel: 100, data: localDateStr(), pago: false });
   const [saving, setSaving] = useState(false);
   const [fornSearch, setFornSearch] = useState("");
+  const [empsSS, setEmpsSS] = useState([]);
+  const [rhDataSS, setRhDataSS] = useState([]);
+  const [absDataSS, setAbsDataSS] = useState([]);
   const [showDespGeral, setShowDespGeral] = useState(false);
   const [despGeralForm, setDespGeralForm] = useState({ descricao: "", fornecedor_nome: "", categoria: "Manuten\xE7\xE3o de Viaturas", valor: "", iva_percentagem: 23, iva_dedutivel: true, iva_percentagem_dedutivel: 100, data: localDateStr(), pago: false });
   const CATS = ["Combust\xEDvel", "Produtos de Limpeza", "Contabilidade", "Seguros", "Rendas", "Telecomunica\xE7\xF5es", "Manuten\xE7\xE3o", "Fardamento", "Manuten\xE7\xE3o de Viaturas", "Alimenta\xE7\xE3o", "Empr\xE9stimos/Financiamento", "Portagens", "Outro"];
@@ -4002,10 +4005,16 @@ function Fornecedores() {
   useEffect(function() {
     Promise.all([
       db.list("fornecedores", "?select=*&order=nome"),
-      db.list("despesas", "?select=*&order=data.desc")
+      db.list("despesas", "?select=*&order=data.desc"),
+      db.list("funcionarios", "?select=*"),
+      db.list("funcionarios_rh", "?select=*"),
+      db.list("ausencias", "?select=*")
     ]).then(function(r) {
       setFornecedores(r[0] || []);
       setDespesas(r[1] || []);
+      setEmpsSS(r[2] || []);
+      setRhDataSS(r[3] || []);
+      setAbsDataSS(r[4] || []);
       setLoading(false);
     });
   }, []);
@@ -4237,7 +4246,27 @@ function Fornecedores() {
     { l: "Por pagar", v: fmt(porPagarGeral) + "\u20AC", c: "#F59E0B" }
   ].map(function(k) {
     return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 12 }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", fontWeight: 700, textTransform: "uppercase", marginBottom: 3 } }, k.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: k.c } }, k.v));
-  })), (function() {
+  })),
+  (function() {
+    var now2 = /* @__PURE__ */ new Date();
+    var contratoEmps = empsSS.filter(function(e) {
+      var rh = rhDataSS.find(function(r) { return r.funcionario_id === e.id; });
+      return rh && (rh.tipo_contrato || "Contrato") !== "Recibo Verde";
+    });
+    if (contratoEmps.length === 0) return null;
+    var totalSS = contratoEmps.reduce(function(s, e) {
+      return s + calcCustoColaboradorMes(e, rhDataSS, absDataSS, [], now2).detalhe.reduce(function(s2, d) {
+        return s2 + (d.l.indexOf("Seg. Social") !== -1 ? d.v : 0);
+      }, 0);
+    }, 0);
+    return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, background: "#EFF6FF", border: "1.5px solid #2E6DA4" }) },
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "\uD83D\uDCCB Seguran\xE7a Social patronal a pagar este m\xEAs"),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 10 } }, "Apenas informativo \u2014 j\xE1 est\xE1 inclu\xEDdo no custo de m\xE3o-de-obra, n\xE3o precisas de o lan\xE7ar aqui como despesa. Serve s\xF3 para preparares o pagamento."),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 26, fontWeight: 900, color: "#2E6DA4" } }, fmt(totalSS), "\u20AC"),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 4 } }, contratoEmps.length, " colaborador", contratoEmps.length !== 1 ? "es" : "", " a contrato (23,75% sobre o sal\xE1rio efectivo de cada um)")
+    );
+  })(),
+  (function() {
     var despGerais = despesas.filter(function(d) { return !d.fornecedor_id; });
     if (despGerais.length === 0) return null;
     var byCat = {};
