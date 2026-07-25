@@ -139,6 +139,13 @@ async function removerFuncionarioDeServicosFuturos(empId, dataInicio, dataFim) {
 }
 const SVCS = ["Limpeza Residencial", "Limpeza Comercial", "Limpeza P\xF3s-Obra", "Limpeza Profunda", "Limpeza de Estofos", "Limpeza de Vidros", "Limpeza de Condom\xEDnio"];
 const FREQS = ["Pontual", "Semanal", "Quinzenal", "Mensal", "Trimestral"];
+function horasReais(t1, t2) {
+  var toMin = function(t) { var p = (t || "0:0").split(":"); return parseInt(p[0]) * 60 + parseInt(p[1]); };
+  var inicio = toMin(t1), fim = toMin(t2);
+  var duracao = Math.max(0, fim - inicio);
+  if (inicio <= 12 * 60 && fim >= 13 * 60) duracao -= 60;
+  return duracao / 60;
+}
 function localDateStr(d) {
   const dt = d || /* @__PURE__ */ new Date();
   const y = dt.getFullYear();
@@ -386,6 +393,7 @@ function Finance() {
   const [monthJobsAll, setMonthJobsAll] = useState([]);
   const [last6Months, setLast6Months] = useState([]);
   const [despesas6Months, setDespesas6Months] = useState([]);
+  const [absData6Months, setAbsData6Months] = useState([]);
   const [chartMetricas, setChartMetricas] = useState(["fat"]);
   const [clientsMap, setClientsMap] = useState({});
   const [despesas, setDespesas] = useState([]);
@@ -422,6 +430,7 @@ function Finance() {
       db.list("funcionarios_rh", "?select=*"),
       db.list("funcionarios", "?select=*"),
       db.list("ausencias", "?select=*&data_inicio=lte." + monthEnd + "&data_fim=gte." + monthStart),
+      db.list("ausencias", "?select=*&data_fim=gte." + sixMonthsAgo),
       db.list("cash_config", "?select=*&order=data_inicio.desc&limit=1"),
       db.list("cash_movimentos", "?select=*&order=data.desc"),
       db.list("metas_financeiras", "?select=*&order=created_at.desc"),
@@ -431,18 +440,19 @@ function Finance() {
       const cm = {};
       (results[2] || []).forEach(function(c) { cm[c.id] = c; });
       setMonthJobs((results[0] || []).filter(function(j) { return cm[j.client_id]; }));
-      setMonthJobsAll((results[11] || []).filter(function(j) { return cm[j.client_id]; }));
+      setMonthJobsAll((results[12] || []).filter(function(j) { return cm[j.client_id]; }));
       setLast6Months((results[1] || []).filter(function(j) { return cm[j.client_id]; }));
-      setDespesas6Months(results[12] || []);
+      setDespesas6Months(results[13] || []);
       setClientsMap(cm);
       setClientes(results[2] || []);
       setDespesas(results[3] || []);
       setRhData(results[5] || []);
       setEmps(results[6] || []);
       setAbsData(results[7] || []);
-      setCashConfig(results[8] && results[8][0] ? results[8][0] : null);
-      setCashMovimentos(results[9] || []);
-      setMetas(results[10] || []);
+      setAbsData6Months(results[8] || []);
+      setCashConfig(results[9] && results[9][0] ? results[9][0] : null);
+      setCashMovimentos(results[10] || []);
+      setMetas(results[11] || []);
       // Calculate alertas for quinzenal/mensal clients
       const recentJobs = results[4] || [];
       const lastJobByClient = {};
@@ -535,7 +545,7 @@ function Finance() {
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const key = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
-      buckets[key] = { m: d.toLocaleDateString("pt-PT", { month: "short" }), fat: 0, rec: 0, custo: 0 };
+      buckets[key] = { m: d.toLocaleDateString("pt-PT", { month: "short" }), fat: 0, rec: 0, custo: 0, mo: 0, refDate: new Date(d.getFullYear(), d.getMonth(), 15) };
     }
     last6Months.forEach(function(j) {
       const key = j.date.slice(0, 7);
@@ -549,9 +559,16 @@ function Finance() {
       const key = (d.data || "").slice(0, 7);
       if (buckets[key]) buckets[key].custo += d.valor || 0;
     });
+    Object.keys(buckets).forEach(function(key) {
+      var b = buckets[key];
+      var jobsDoMes = last6Months.filter(function(j) { return j.date.slice(0, 7) === key; });
+      b.mo = emps.reduce(function(s, e) {
+        return s + calcCustoColaboradorMes(e, rhData, absData6Months, jobsDoMes, b.refDate).total;
+      }, 0);
+    });
     return Object.keys(buckets).sort().map(function(k) {
       var b = buckets[k];
-      return Object.assign({}, b, { margem: b.fat / 1.23 - b.custo });
+      return Object.assign({}, b, { margem: b.fat / 1.23 - b.custo - b.mo });
     });
   })();
   const maxB = Math.max.apply(null, monthsData.map(function(m) {
@@ -649,8 +666,7 @@ function Finance() {
     var c = custoColaborador(e);
     var horasEmp = monthJobs.filter(function(j) { return (j.team || []).indexOf(e.id) !== -1; })
       .reduce(function(s, j) {
-        var t1 = (j.t1 || "0:0").split(":"); var t2 = (j.t2 || "0:0").split(":");
-        return s + (parseInt(t2[0])*60+parseInt(t2[1]) - parseInt(t1[0])*60-parseInt(t1[1])) / 60;
+        return s + horasReais(j.t1, j.t2);
       }, 0);
     var custoH = custoHoraReal(e);
     var custoAteHoje = calcCustoAteHojeReal(e, rhData, absData, monthJobs, now);
@@ -662,10 +678,16 @@ function Finance() {
   // ── Custos operacionais para alocar proporcionalmente ──
   var totalDespesas = despesas.reduce(function(s, d) { return s + (parseFloat(d.valor) || 0); }, 0);
 
-  // Total horas de todos os serviços concluídos do mês (horas × equipa)
+  // Clientes de valor fixo (Pós-Obra/Profunda) ficam fora do rateio de custos operacionais
+  var clientesOrcamento = {};
+  clientes.forEach(function(c) {
+    if (c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda") clientesOrcamento[c.id] = true;
+  });
+
+  // Total horas de todos os serviços concluídos do mês (horas × equipa), excluindo projectos de valor fixo
   var totalHorasMes = monthJobs.reduce(function(s, j) {
-    var t1 = (j.t1 || "0:0").split(":"); var t2 = (j.t2 || "0:0").split(":");
-    var horas = (parseInt(t2[0])*60+parseInt(t2[1]) - parseInt(t1[0])*60-parseInt(t1[1])) / 60;
+    if (clientesOrcamento[j.client_id]) return s;
+    var horas = horasReais(j.t1, j.t2);
     return s + horas * ((j.team || []).length || 1);
   }, 0);
 
@@ -673,12 +695,12 @@ function Finance() {
   var margensPorCliente = clientes.map(function(c) {
     var jobs = monthJobs.filter(function(j) { return j.client_id === c.id; });
     if (jobs.length === 0) return null;
+    var isOrcamentoCliente = clientesOrcamento[c.id];
     var receita = jobs.reduce(function(s, j) { return s + (j.val || 0); }, 0);
     var custoMO = 0;
     var horasCliente = 0;
     jobs.forEach(function(j) {
-      var t1 = (j.t1 || "0:0").split(":"); var t2 = (j.t2 || "0:0").split(":");
-      var horas = (parseInt(t2[0])*60+parseInt(t2[1]) - parseInt(t1[0])*60-parseInt(t1[1])) / 60;
+      var horas = horasReais(j.t1, j.t2);
       var teamSize = (j.team || []).length || 1;
       horasCliente += horas * teamSize;
       (j.team || []).forEach(function(eid) {
@@ -686,8 +708,8 @@ function Finance() {
         if (empObj) custoMO += custoHoraReal(empObj) * horas;
       });
     });
-    var proporcao = totalHorasMes > 0 ? horasCliente / totalHorasMes : 0;
-    var custosOp = totalDespesas * proporcao;
+    var proporcao = (!isOrcamentoCliente && totalHorasMes > 0) ? horasCliente / totalHorasMes : 0;
+    var custosOp = isOrcamentoCliente ? 0 : totalDespesas * proporcao;
     var custoTotal = custoMO + custosOp;
     var margem = receita - custoTotal;
     var margemPct = receita > 0 ? Math.round(margem / receita * 100) : 0;
@@ -723,7 +745,10 @@ function Finance() {
           datasets: [["fat", "Factura\xE7\xE3o", "#2E6DA4"], ["custo", "Despesas", "#EF4444"], ["margem", "Margem", "#16A34A"]].filter(function(m) { return chartMetricas.indexOf(m[0]) !== -1; }).map(function(m) {
             return { label: m[1], data: monthsData.map(function(md) { return md[m[0]].toFixed(2); }), borderColor: m[2], backgroundColor: m[2] + "22", tension: 0.3, fill: false };
           })
-        }, options: { plugins: { legend: { position: "bottom" } } } })
+        }, options: { plugins: { legend: { position: "bottom" } } } }),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#CBD5E1", marginTop: 8 } }, monthsData.map(function(md) {
+          return md.m + ": fat=" + md.fat.toFixed(2) + " custo=" + md.custo.toFixed(2) + " mo=" + md.mo.toFixed(2) + " margem=" + md.margem.toFixed(2);
+        }).join(" | "))
       ),
       /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
         /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Factura\xE7\xE3o vs Recebido \u2014 \xFAltimos 6 meses"),
@@ -988,8 +1013,7 @@ function Finance() {
             var jobs = monthJobsAll.filter(function(j) { return j.client_id === c.id; });
             if (!jobs.length) return;
             var horas = jobs.reduce(function(s, j) {
-              var t1 = (j.t1 || "0:0").split(":"); var t2 = (j.t2 || "0:0").split(":");
-              return s + (parseInt(t2[0])*60+parseInt(t2[1]) - parseInt(t1[0])*60-parseInt(t1[1])) / 60;
+              return s + horasReais(j.t1, j.t2);
             }, 0);
             var calc = calcValorFaturacao(c, jobs, horas);
             var valor = calc.valor;
@@ -1021,7 +1045,7 @@ function Finance() {
             var totalGeral = 0;
             clientes.filter(function(c) { return monthJobsAll.some(function(j) { return j.client_id === c.id; }); }).forEach(function(c) {
               var jobs = monthJobsAll.filter(function(j) { return j.client_id === c.id; });
-              var horas = jobs.reduce(function(s, j) { var t1 = (j.t1 || "0:0").split(":"); var t2 = (j.t2 || "0:0").split(":"); return s + (parseInt(t2[0])*60+parseInt(t2[1]) - parseInt(t1[0])*60-parseInt(t1[1])) / 60; }, 0);
+              var horas = jobs.reduce(function(s, j) { return s + horasReais(j.t1, j.t2); }, 0);
               var calc = calcValorFaturacao(c, jobs, horas);
               var valorSemIva = calc.valor;
               var isOrcamento = calc.tipo === "orcamento";
@@ -1041,8 +1065,7 @@ function Finance() {
         clientes.filter(function(c) { return monthJobsAll.some(function(j) { return j.client_id === c.id; }); }).map(function(c) {
           var jobs = monthJobsAll.filter(function(j) { return j.client_id === c.id; });
           var horas = jobs.reduce(function(s, j) {
-            var t1 = (j.t1 || "0:0").split(":"); var t2 = (j.t2 || "0:0").split(":");
-            return s + (parseInt(t2[0])*60+parseInt(t2[1]) - parseInt(t1[0])*60-parseInt(t1[1])) / 60;
+            return s + horasReais(j.t1, j.t2);
           }, 0);
           var calc = calcValorFaturacao(c, jobs, horas);
           var valorSemIva = calc.valor;
@@ -1096,7 +1119,7 @@ function Finance() {
               fmt(clientes.filter(function(c) { return monthJobsAll.some(function(j) { return j.client_id === c.id; }); }).reduce(function(s, c) {
                 var jobs = monthJobsAll.filter(function(j) { return j.client_id === c.id; });
                 var isOrc = c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda";
-                var horas = jobs.reduce(function(h, j) { var t1 = (j.t1||"0:0").split(":"); var t2 = (j.t2||"0:0").split(":"); return h + (parseInt(t2[0])*60+parseInt(t2[1])-parseInt(t1[0])*60-parseInt(t1[1]))/60; }, 0);
+                var horas = jobs.reduce(function(h, j) { return h + horasReais(j.t1, j.t2); }, 0);
                 return s + (isOrc ? (c.price_per_hour || 0) : horas * (c.price_per_hour || 0));
               }, 0)), "\u20AC"
             )
@@ -1319,7 +1342,7 @@ function Routes() {
     if (!c) return null;
     var tipoFat = c.tipo_faturacao || "hora";
     if (tipoFat === "visita" || tipoFat === "mensal") return parseFloat(c.valor_visita) || 0;
-    var horas = Math.max(0, (timeToMin(t2) - timeToMin(t1)) / 60);
+    var horas = horasReais(t1, t2);
     var preco = c.price_per_hour || PRICE_PER_HOUR;
     return (teamSize || 1) * horas * preco;
   }
@@ -1388,7 +1411,7 @@ function Routes() {
         var e = emps.find(function(x) { return x.id === eid; });
         avisos.push((e ? e.name.split(" ")[0] : eid) + " estava ausente em " + dataAtual + " \u2014 removido da equipa desse dia.");
       });
-      var visitHoursVal = Math.max(0, (timeToMin(nj.t2) - timeToMin(nj.t1)) / 60);
+      var visitHoursVal = horasReais(nj.t1, nj.t2);
       var teamSize = teamDisponivel.length || 1;
       var valCalculado = (function() {
         if (!c) return parseFloat(nj.val) || 0;
@@ -1443,9 +1466,9 @@ function Routes() {
           return j.client_id === c.id && j.date === date;
         });
         if (exists) { skipped.push(c.name + " em " + date + " (já existe)"); return; }
-        const visitHrs = Math.max(0, (timeToMin(d.time_end) - timeToMin(d.time_start)) / 60);
+        const visitHrs = horasReais(d.time_start, d.time_end);
         const weekTotal = sch.reduce(function(s, dd) {
-          return s + Math.max(0, (timeToMin(dd.time_end) - timeToMin(dd.time_start)) / 60);
+          return s + horasReais(dd.time_start, dd.time_end);
         }, 0);
         const share = weekTotal > 0 ? visitHrs / weekTotal : 1;
         // Filter out absent employees
@@ -1481,7 +1504,7 @@ function Routes() {
             var tipoFat = c.tipo_faturacao || "hora";
             if (tipoFat === "visita") return parseFloat(c.valor_visita) || 0;
             if (tipoFat === "mensal") return parseFloat(c.valor_visita) || 0;
-            var visitHoursVal = Math.max(0, (timeToMin(d.time_end) - timeToMin(d.time_start)) / 60);
+            var visitHoursVal = horasReais(d.time_start, d.time_end);
             var teamSize = teamDisponivel.length || 1;
             var preco = c.price_per_hour || PRICE_PER_HOUR;
             return teamSize * visitHoursVal * preco;
@@ -1727,7 +1750,7 @@ function Routes() {
     ),
     emps.map(function(e) {
       const ausente = dates.some(function(d) { return isEmpAusente(e.id, d); });
-      const horasSemana = wJobs.filter(function(j) { return (j.team || []).indexOf(e.id) !== -1; }).reduce(function(s, j) { return s + (timeToMin(j.t2) - timeToMin(j.t1)) / 60; }, 0);
+      const horasSemana = wJobs.filter(function(j) { return (j.team || []).indexOf(e.id) !== -1; }).reduce(function(s, j) { return s + horasReais(j.t1, j.t2); }, 0);
       const cor = ausente ? "#EF4444" : horasSemana > 0 ? empColor(e.id) : "#94A3B8";
       return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "grid", gridTemplateColumns: "2fr repeat(7,1fr) 1fr", gap: 4, marginBottom: 4, alignItems: "center" } },
         /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
@@ -1736,7 +1759,7 @@ function Routes() {
         ),
         dates.map(function(d) {
           const ausenteDia = isEmpAusente(e.id, d);
-          const horasDia = wJobs.filter(function(j) { return j.date === d && (j.team || []).indexOf(e.id) !== -1; }).reduce(function(s, j) { return s + (timeToMin(j.t2) - timeToMin(j.t1)) / 60; }, 0);
+          const horasDia = wJobs.filter(function(j) { return j.date === d && (j.team || []).indexOf(e.id) !== -1; }).reduce(function(s, j) { return s + horasReais(j.t1, j.t2); }, 0);
           return /* @__PURE__ */ React.createElement("div", { key: d, style: { textAlign: "center", fontSize: 10, fontWeight: 600, color: ausenteDia ? "#EF4444" : horasDia > 0 ? empColor(e.id) : "#CBD5E1", background: ausenteDia ? "#FEE2E2" : horasDia > 0 ? empColor(e.id) + "15" : "transparent", borderRadius: 4, padding: "2px 0" } },
             ausenteDia ? "—" : horasDia > 0 ? horasDia.toFixed(1) + "h" : ""
           );
@@ -1825,7 +1848,7 @@ function Routes() {
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 8 } }, "Horas alocadas por colaborador:"),
       /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 } }, emps.map(function(e) {
         const ausente = getWeekDates(wk).some(function(d) { return isEmpAusente(e.id, d); });
-        const horas = preview.filter(function(j) { return (j.team || []).indexOf(e.id) !== -1; }).reduce(function(s, j) { return s + (timeToMin(j.t2) - timeToMin(j.t1)) / 60; }, 0);
+        const horas = preview.filter(function(j) { return (j.team || []).indexOf(e.id) !== -1; }).reduce(function(s, j) { return s + horasReais(j.t1, j.t2); }, 0);
         const cor = ausente ? "#EF4444" : horas > 0 ? "#2E6DA4" : "#94A3B8";
         const bg = ausente ? "#FEE2E2" : horas > 0 ? "#EFF6FF" : "#F8FAFC";
         return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 8, background: bg, borderRadius: 8, padding: "6px 10px" } },
@@ -1889,7 +1912,7 @@ function Routes() {
     if (!c) return "\u2014";
     var tipoFat = c.tipo_faturacao || "hora";
     if (tipoFat === "visita" || tipoFat === "mensal") return fmt(parseFloat(c.valor_visita) || 0) + "\u20AC";
-    var horas = Math.max(0, (timeToMin(nj.t2) - timeToMin(nj.t1)) / 60);
+    var horas = horasReais(nj.t1, nj.t2);
     var teamSize = nj.team.length || 1;
     var preco = c.price_per_hour || PRICE_PER_HOUR;
     return fmt(teamSize * horas * preco) + "\u20AC";
@@ -4639,11 +4662,15 @@ function RelatorioMensal() {
     // Horas totais (horas × equipa) para alocação proporcional dos custos operacionais — igual ao Financeiro
     var refDate = new Date(ano, mes, 15);
     function jobHoras(j) {
-      var t1 = (j.t1 || "0:0").split(":"); var t2 = (j.t2 || "0:0").split(":");
-      return Math.max(0, (parseInt(t2[0]) * 60 + parseInt(t2[1]) - parseInt(t1[0]) * 60 - parseInt(t1[1])) / 60);
+      return horasReais(j.t1, j.t2);
     }
     var totalHorasMes = completed.reduce(function(s, j) { return s + jobHoras(j) * ((j.team || []).length || 1); }, 0);
     var totalDespesasComKm = totalCustos;
+    var clientesOrcamento = {};
+    clientes.forEach(function(c) {
+      if (c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda") clientesOrcamento[c.id] = true;
+    });
+    var totalHorasMesRateio = completed.reduce(function(s, j) { return clientesOrcamento[j.client_id] ? s : s + jobHoras(j) * ((j.team || []).length || 1); }, 0);
     const byClient = {};
     completed.forEach(function(j) {
       if (!byClient[j.client_id]) byClient[j.client_id] = { servicos: 0, fat: 0, km: 0, checkIncomplete: 0, horas: 0, custoMO: 0 };
@@ -4661,8 +4688,8 @@ function RelatorioMensal() {
       });
     });
     Object.keys(byClient).forEach(function(cid) {
-      var proporcao = totalHorasMes > 0 ? byClient[cid].horas / totalHorasMes : 0;
-      byClient[cid].custosOp = totalDespesasComKm * proporcao;
+      var proporcao = (!clientesOrcamento[cid] && totalHorasMesRateio > 0) ? byClient[cid].horas / totalHorasMesRateio : 0;
+      byClient[cid].custosOp = clientesOrcamento[cid] ? 0 : totalDespesasComKm * proporcao;
       byClient[cid].margemReal = byClient[cid].fat / 1.23 - byClient[cid].custoMO - byClient[cid].custosOp;
     });
     const byEmp = {};
