@@ -377,7 +377,7 @@ function ChartCanvas(props) {
 }
 function calcValorFaturacao(c, jobs, horas) {
   var isOrcamento = c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda";
-  if (isOrcamento) return { valor: c.price_per_hour || 0, tipo: "orcamento" };
+  if (isOrcamento) return { valor: jobs.reduce(function(s, j) { return s + (j.val || 0); }, 0), tipo: "orcamento" };
   var tipoFat = c.tipo_faturacao || "hora";
   if (tipoFat === "mensal") return { valor: parseFloat(c.valor_visita) || 0, tipo: "mensal" };
   if (tipoFat === "visita") return { valor: jobs.length * (parseFloat(c.valor_visita) || 0), tipo: "visita" };
@@ -1209,7 +1209,7 @@ function Finance() {
                 var jobs = monthJobsAll.filter(function(j) { return j.client_id === c.id; });
                 var isOrc = c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda";
                 var horas = jobs.reduce(function(h, j) { return h + horasReais(j.t1, j.t2); }, 0);
-                return s + (isOrc ? (c.price_per_hour || 0) : horas * (c.price_per_hour || 0));
+                return s + (isOrc ? jobs.reduce(function(h2, j) { return h2 + (j.val || 0); }, 0) : horas * (c.price_per_hour || 0));
               }, 0)), "\u20AC"
             )
           )
