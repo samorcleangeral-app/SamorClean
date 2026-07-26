@@ -5048,19 +5048,24 @@ function RelatorioMensal() {
     });
     var totalHorasMesRateio = completed.reduce(function(s, j) { return clientesOrcamento[j.client_id] ? s : s + jobHoras(j) * ((j.team || []).length || 1); }, 0);
     const byClient = {};
+    function idEfetivo(clientId) {
+      var c = cm[clientId];
+      return (c && c.cliente_principal_id) || clientId;
+    }
     completed.forEach(function(j) {
-      if (!byClient[j.client_id]) byClient[j.client_id] = { servicos: 0, fat: 0, km: 0, checkIncomplete: 0, horas: 0, custoMO: 0 };
-      byClient[j.client_id].servicos++;
-      byClient[j.client_id].fat += withIva(j);
+      var cid = idEfetivo(j.client_id);
+      if (!byClient[cid]) byClient[cid] = { servicos: 0, fat: 0, km: 0, checkIncomplete: 0, horas: 0, custoMO: 0 };
+      byClient[cid].servicos++;
+      byClient[cid].fat += withIva(j);
       const c = cm[j.client_id];
-      if (c && c.km_armazem) byClient[j.client_id].km += c.km_armazem * 2;
-      if (j.checklist_incomplete) byClient[j.client_id].checkIncomplete++;
+      if (c && c.km_armazem) byClient[cid].km += c.km_armazem * 2;
+      if (j.checklist_incomplete) byClient[cid].checkIncomplete++;
       var horasJob = jobHoras(j);
       var teamSize = (j.team || []).length || 1;
-      byClient[j.client_id].horas += horasJob * teamSize;
+      byClient[cid].horas += horasJob * teamSize;
       (j.team || []).forEach(function(eid) {
         var empObj = fm[eid];
-        if (empObj) byClient[j.client_id].custoMO += calcCustoHoraReal(empObj, rhSafe, refDate) * horasJob;
+        if (empObj) byClient[cid].custoMO += calcCustoHoraReal(empObj, rhSafe, refDate) * horasJob;
       });
     });
     Object.keys(byClient).forEach(function(cid) {
@@ -5779,7 +5784,14 @@ function Manager(props) {
     if (i.k === "gestores" || i.k === "armazem_qr") return isDirector;
     return canSee(i.k);
   });
-  return /* @__PURE__ */ React.createElement("div", { style: { background: "#F4F8FB", minHeight: "100vh", color: "#334155" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 220, background: "#1A3A5C", minHeight: "100vh", display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "24px 20px 20px", borderBottom: "1px solid rgba(255,255,255,0.1)" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: "#fff" } }, "SamorClean"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#38B6D8", fontWeight: 600, letterSpacing: 1.5, marginTop: 2 } }, "GEST\xC3O OPERACIONAL"), liveGestao && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5, marginTop: 8 } }, /* @__PURE__ */ React.createElement("span", { style: { width: 6, height: 6, borderRadius: "50%", background: "#22C55E" } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 9, color: "rgba(255,255,255,0.5)", fontWeight: 700, letterSpacing: 1 } }, "AO VIVO"))), /* @__PURE__ */ React.createElement("nav", { style: { flex: 1, padding: "12px" } }, navItems.map(function(item) {
+  return /* @__PURE__ */ React.createElement("div", { style: { background: "#F4F8FB", minHeight: "100vh", color: "#334155" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 220, background: "#1A3A5C", minHeight: "100vh", display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "20px 20px 18px", borderBottom: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", gap: 12 } },
+    /* @__PURE__ */ React.createElement("img", { src: "https://dtydrnezzaykiaglwxfv.supabase.co/storage/v1/object/public/formacao/samorclean_logo.jpg", style: { width: 44, height: 44, borderRadius: 10, background: "#fff", padding: 3, flexShrink: 0 }, onError: function(e) { e.target.style.display = "none"; } }),
+    /* @__PURE__ */ React.createElement("div", null,
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: "#fff" } }, "SamorClean"),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#38B6D8", fontWeight: 600, letterSpacing: 1.5, marginTop: 2 } }, "GEST\xC3O OPERACIONAL"),
+      liveGestao && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5, marginTop: 8 } }, /* @__PURE__ */ React.createElement("span", { style: { width: 6, height: 6, borderRadius: "50%", background: "#22C55E" } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 9, color: "rgba(255,255,255,0.5)", fontWeight: 700, letterSpacing: 1 } }, "AO VIVO"))
+    )
+  ), /* @__PURE__ */ React.createElement("nav", { style: { flex: 1, padding: "12px" } }, navItems.map(function(item) {
     const badge = item.k === "pedidos" && pedidosPendentes > 0 ? pedidosPendentes : item.k === "pedidos_colab" && pedidosColabPendentes > 0 ? pedidosColabPendentes : item.k === "clients" && notasClientesNovas > 0 ? notasClientesNovas : item.k === "avaliacoes" && avaliacoesNovas > 0 ? avaliacoesNovas : 0;
     return /* @__PURE__ */ React.createElement("button", { key: item.k, onClick: function() {
       setView(item.k);
