@@ -1522,11 +1522,25 @@ function Routes() {
     });
     setSelJob(null);
   }
-  function calcularValorJob(c, t1, t2, teamSize) {
+  function calcularValorJob(c, t1, t2, teamSize, date, jobIdAtual) {
     if (!c) return null;
     if (c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda") return null;
     var tipoFat = c.tipo_faturacao || "hora";
-    if (tipoFat === "visita" || tipoFat === "mensal") return parseFloat(c.valor_visita) || 0;
+    if (tipoFat === "mensal") {
+      if (!date) return parseFloat(c.valor_visita) || 0;
+      var mesAno = date.slice(0, 7);
+      var jobsMesmoMes = jobs.filter(function(j) { return j.client_id === c.id && (j.date || "").slice(0, 7) === mesAno; });
+      if (jobIdAtual && !jobsMesmoMes.some(function(j) { return j.id === jobIdAtual; })) {
+        jobsMesmoMes = jobsMesmoMes.concat([{ id: jobIdAtual, date: date }]);
+      }
+      jobsMesmoMes.sort(function(a, b) {
+        if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+        return a.id < b.id ? -1 : 1;
+      });
+      var primeiro = jobsMesmoMes[0];
+      return (primeiro && primeiro.id === jobIdAtual) ? (parseFloat(c.valor_visita) || 0) : 0;
+    }
+    if (tipoFat === "visita") return parseFloat(c.valor_visita) || 0;
     var horas = horasReais(t1, t2);
     var preco = c.price_per_hour || PRICE_PER_HOUR;
     return (teamSize || 1) * horas * preco;
@@ -1538,7 +1552,7 @@ function Routes() {
     for (var i = 0; i < pendentes.length; i++) {
       var j = pendentes[i];
       var c = clients.find(function(x) { return x.id === j.client_id; });
-      var novoVal = calcularValorJob(c, j.t1, j.t2, (j.team || []).length);
+      var novoVal = calcularValorJob(c, j.t1, j.t2, (j.team || []).length, j.date, j.id);
       if (novoVal === null) continue;
       if (Math.abs((j.val || 0) - novoVal) > 0.01) {
         await db.update("servicos", j.id, { val: novoVal });
@@ -1549,7 +1563,7 @@ function Routes() {
       return p.map(function(j) {
         if (j.status === "completed") return j;
         var c = clients.find(function(x) { return x.id === j.client_id; });
-        var novoVal = calcularValorJob(c, j.t1, j.t2, (j.team || []).length);
+        var novoVal = calcularValorJob(c, j.t1, j.t2, (j.team || []).length, j.date, j.id);
         return novoVal !== null ? Object.assign({}, j, { val: novoVal }) : j;
       });
     });
@@ -1559,7 +1573,7 @@ function Routes() {
     if (!moveDate || !moveT1 || !moveT2) return;
     if (selJob.paid) { alert("Servi\xE7o j\xE1 pago \u2014 n\xE3o pode ser alterado."); return; }
     const c = clients.find(function(x) { return x.id === selJob.client_id; });
-    const novoVal = calcularValorJob(c, moveT1, moveT2, (selJob.team || []).length);
+    const novoVal = calcularValorJob(c, moveT1, moveT2, (selJob.team || []).length, moveDate, selJob.id);
     await updateJob(selJob.id, { date: moveDate, t1: moveT1, t2: moveT2, val: novoVal !== null ? novoVal : selJob.val });
     setPopupAction(null);
   }
@@ -1569,7 +1583,7 @@ function Routes() {
       return x !== eid;
     });
     const c = clients.find(function(x) { return x.id === selJob.client_id; });
-    const novoVal = calcularValorJob(c, selJob.t1, selJob.t2, t.length);
+    const novoVal = calcularValorJob(c, selJob.t1, selJob.t2, t.length, selJob.date, selJob.id);
     await updateJob(selJob.id, { team: t, val: novoVal !== null ? novoVal : selJob.val });
   }
   function openJob(job) {
@@ -1606,7 +1620,11 @@ function Routes() {
         if (isObra) return di === 0 ? (parseFloat(nj.val) || 0) : 0;
         var tipoFat = c.tipo_faturacao || "hora";
         if (tipoFat === "visita") return parseFloat(c.valor_visita) || 0;
-        if (tipoFat === "mensal") return parseFloat(c.valor_visita) || 0;
+        if (tipoFat === "mensal") {
+          var mesAtual = dataAtual.slice(0, 7);
+          var jaExisteNoMes = jobs.some(function(j) { return j.client_id === c.id && (j.date || "").slice(0, 7) === mesAtual; }) || newJobs.some(function(j) { return j.client_id === c.id && (j.date || "").slice(0, 7) === mesAtual; });
+          return jaExisteNoMes ? 0 : (parseFloat(c.valor_visita) || 0);
+        }
         var preco = c.price_per_hour || PRICE_PER_HOUR;
         return teamSize * visitHoursVal * preco;
       })();
