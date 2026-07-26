@@ -432,6 +432,7 @@ function Finance() {
   const [absData6Months, setAbsData6Months] = useState([]);
   const [chartMetricas, setChartMetricas] = useState(["fat"]);
   const [selCobrar, setSelCobrar] = useState(null);
+  const [selMargemCliente, setSelMargemCliente] = useState(null);
   const [allPendingJobs, setAllPendingJobs] = useState([]);
   const [verTudoCobrar, setVerTudoCobrar] = useState(false);
   const [clientsMap, setClientsMap] = useState({});
@@ -1054,11 +1055,14 @@ function Finance() {
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 900, color: k.c } }, k.v)
           );
         })),
-        margensPorCliente.map(function(c) {
+        selMargemCliente ? (function() {
+          var c = margensPorCliente.find(function(x) { return x.name === selMargemCliente; });
+          if (!c) return null;
           var corMargem = c.margemPct >= 30 ? "#16A34A" : c.margemPct >= 15 ? "#F59E0B" : "#EF4444";
-          return /* @__PURE__ */ React.createElement("div", { key: c.name, style: Object.assign({}, card, { marginBottom: 8, padding: "12px 16px" }) },
+          return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { padding: "12px 16px" }) },
+            /* @__PURE__ */ React.createElement("button", { onClick: function() { setSelMargemCliente(null); }, style: Object.assign({}, btnO, { fontSize: 12, padding: "6px 12px", marginBottom: 14 }) }, "\u2190 Voltar"),
             /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } },
-              /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C" } }, c.name),
+              /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 15, color: "#1A3A5C" } }, c.name),
               /* @__PURE__ */ React.createElement("span", { style: { background: corMargem + "20", color: corMargem, borderRadius: 8, padding: "2px 10px", fontSize: 12, fontWeight: 800 } }, c.margemPct, "%")
             ),
             /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 8 } },
@@ -1090,7 +1094,20 @@ function Finance() {
               );
             })()
           );
-        })
+        })() :
+        /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 12 } },
+          margensPorCliente.slice().sort(function(a, b) { return b.margemPct - a.margemPct; }).map(function(c) {
+            var corMargem = c.margemPct >= 30 ? "#16A34A" : c.margemPct >= 15 ? "#F59E0B" : "#EF4444";
+            return /* @__PURE__ */ React.createElement("div", { key: c.name, onClick: function() { setSelMargemCliente(c.name); }, style: { border: "1px solid #E2EBF4", borderLeft: "4px solid " + corMargem, borderRadius: 10, padding: "12px 14px", cursor: "pointer" } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.name),
+              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+                /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, fmt(c.receita), "\u20AC"),
+                /* @__PURE__ */ React.createElement("span", { style: { background: corMargem + "20", color: corMargem, borderRadius: 8, padding: "2px 10px", fontSize: 12, fontWeight: 800 } }, c.margemPct, "%")
+              ),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 4 } }, c.jobs, " servi\xE7o", c.jobs !== 1 ? "s" : "")
+            );
+          })
+        )
       )
     ),
     finTab === "faturacao" && /* @__PURE__ */ React.createElement("div", null,
