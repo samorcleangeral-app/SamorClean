@@ -464,7 +464,7 @@ function Finance() {
     Promise.all([
       db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd + "&status=eq.completed"),
       db.list("servicos", "?select=*&date=gte." + sixMonthsAgo + "&status=eq.completed"),
-      db.list("clientes", "?select=id,name,freq,iva_type,service,price_per_hour,tipo_faturacao,valor_visita&excluir_financeiro=is.false"),
+      db.list("clientes", "?select=id,name,freq,iva_type,service,price_per_hour,tipo_faturacao,valor_visita,cliente_principal_id,horas_estimadas_obra,km_armazem&excluir_financeiro=is.false"),
       db.list("despesas", "?select=*&data=gte." + monthStart + "&data=lte." + monthEnd),
       db.list("servicos", "?select=client_id,date&date=gte." + past60 + "&order=date.desc"),
       db.list("funcionarios_rh", "?select=*"),
