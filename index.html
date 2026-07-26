@@ -727,6 +727,10 @@ function Finance() {
   var totalCustoMaoObra = custosColab.reduce(function(s, c) { return s + c.custo; }, 0);
 
   // ── Custos operacionais para alocar proporcionalmente ──
+  function jobsDoGrupo(c, jobsAll) {
+    var idsGrupo = [c.id].concat(clientes.filter(function(cc) { return cc.cliente_principal_id === c.id; }).map(function(cc) { return cc.id; }));
+    return jobsAll.filter(function(j) { return idsGrupo.indexOf(j.client_id) !== -1; });
+  }
   var totalDespesas = despesas.reduce(function(s, d) { return s + (parseFloat(d.valor) || 0); }, 0);
 
   // Clientes de valor fixo (Pós-Obra/Profunda) ficam fora do rateio de custos operacionais
@@ -744,7 +748,8 @@ function Finance() {
 
   // ── Margens por cliente ──
   var margensPorCliente = clientes.map(function(c) {
-    var jobs = monthJobs.filter(function(j) { return j.client_id === c.id; });
+    if (c.cliente_principal_id) return null;
+    var jobs = jobsDoGrupo(c, monthJobs);
     if (jobs.length === 0) return null;
     var isOrcamentoCliente = clientesOrcamento[c.id];
     var receita = jobs.reduce(function(s, j) { return s + (j.val || 0); }, 0);
@@ -1098,8 +1103,8 @@ function Finance() {
           /* @__PURE__ */ React.createElement("button", { onClick: function() {
           var lines = ["RESUMO DE FATURAÇÃO — " + now.toLocaleDateString("pt-PT", { month: "long", year: "numeric" }).toUpperCase(), ""];
           var total = 0;
-          clientes.forEach(function(c) {
-            var jobs = monthJobsAll.filter(function(j) { return j.client_id === c.id; });
+          clientes.filter(function(c) { return !c.cliente_principal_id; }).forEach(function(c) {
+            var jobs = jobsDoGrupo(c, monthJobsAll);
             if (!jobs.length) return;
             var horas = jobs.reduce(function(s, j) {
               return s + horasReais(j.t1, j.t2);
@@ -1132,8 +1137,8 @@ function Finance() {
           /* @__PURE__ */ React.createElement("button", { onClick: function() {
             var rows = "";
             var totalGeral = 0;
-            clientes.filter(function(c) { return monthJobsAll.some(function(j) { return j.client_id === c.id; }); }).forEach(function(c) {
-              var jobs = monthJobsAll.filter(function(j) { return j.client_id === c.id; });
+            clientes.filter(function(c) { return !c.cliente_principal_id && jobsDoGrupo(c, monthJobsAll).length > 0; }).forEach(function(c) {
+              var jobs = jobsDoGrupo(c, monthJobsAll);
               var horas = jobs.reduce(function(s, j) { return s + horasReais(j.t1, j.t2); }, 0);
               var calc = calcValorFaturacao(c, jobs, horas);
               var valorSemIva = calc.valor;
@@ -1151,8 +1156,8 @@ function Finance() {
       ),
       monthJobsAll.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Sem servi\xE7os este m\xEAs.") :
       /* @__PURE__ */ React.createElement("div", null,
-        clientes.filter(function(c) { return monthJobsAll.some(function(j) { return j.client_id === c.id; }); }).map(function(c) {
-          var jobs = monthJobsAll.filter(function(j) { return j.client_id === c.id; });
+        clientes.filter(function(c) { return !c.cliente_principal_id && jobsDoGrupo(c, monthJobsAll).length > 0; }).map(function(c) {
+          var jobs = jobsDoGrupo(c, monthJobsAll);
           var horas = jobs.reduce(function(s, j) {
             return s + horasReais(j.t1, j.t2);
           }, 0);
@@ -1205,8 +1210,8 @@ function Finance() {
           /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
             /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: 700 } }, "TOTAL A FATURAR (s/IVA)"),
             /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontSize: 22, fontWeight: 900 } },
-              fmt(clientes.filter(function(c) { return monthJobsAll.some(function(j) { return j.client_id === c.id; }); }).reduce(function(s, c) {
-                var jobs = monthJobsAll.filter(function(j) { return j.client_id === c.id; });
+              fmt(clientes.filter(function(c) { return !c.cliente_principal_id && jobsDoGrupo(c, monthJobsAll).length > 0; }).reduce(function(s, c) {
+                var jobs = jobsDoGrupo(c, monthJobsAll);
                 var isOrc = c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda";
                 var horas = jobs.reduce(function(h, j) { return h + horasReais(j.t1, j.t2); }, 0);
                 return s + (isOrc ? jobs.reduce(function(h2, j) { return h2 + (j.val || 0); }, 0) : horas * (c.price_per_hour || 0));
@@ -1279,15 +1284,25 @@ function Finance() {
       var pendingRowsAtivo = verTudoCobrar ? allPendingJobs : pendingRows;
       if (pendingRowsAtivo.length === 0) return /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24 } }, "Tudo cobrado! \u{1F389}");
       var byClientCobrar = {};
+      var principalNome = {};
+      clientes.forEach(function(cc) {
+        if (cc.cliente_principal_id) {
+          var p = clientes.find(function(x) { return x.id === cc.cliente_principal_id; });
+          principalNome[cc.id] = p ? p.name : cc.name;
+        }
+      });
       pendingRowsAtivo.forEach(function(j) {
-        if (!byClientCobrar[j.client_id]) byClientCobrar[j.client_id] = { cn: j.cn, count: 0, semIva: 0, comIva: 0, ultimaData: j.date, maxDias: 0, jobs: [] };
+        var gidCliente = clientes.find(function(cc) { return cc.id === j.client_id; });
+        var gid = (gidCliente && gidCliente.cliente_principal_id) || j.client_id;
+        var gnome = principalNome[j.client_id] || j.cn;
+        if (!byClientCobrar[gid]) byClientCobrar[gid] = { cn: gnome, count: 0, semIva: 0, comIva: 0, ultimaData: j.date, maxDias: 0, jobs: [] };
         var diffDays = Math.floor((now - new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3));
-        byClientCobrar[j.client_id].count++;
-        byClientCobrar[j.client_id].semIva += (j.val || 0);
-        byClientCobrar[j.client_id].comIva += withIva(j.val || 0, j);
-        byClientCobrar[j.client_id].jobs.push(Object.assign({}, j, { diffDays: diffDays }));
-        if (j.date > byClientCobrar[j.client_id].ultimaData) byClientCobrar[j.client_id].ultimaData = j.date;
-        if (diffDays > byClientCobrar[j.client_id].maxDias) byClientCobrar[j.client_id].maxDias = diffDays;
+        byClientCobrar[gid].count++;
+        byClientCobrar[gid].semIva += (j.val || 0);
+        byClientCobrar[gid].comIva += withIva(j.val || 0, j);
+        byClientCobrar[gid].jobs.push(Object.assign({}, j, { diffDays: diffDays }));
+        if (j.date > byClientCobrar[gid].ultimaData) byClientCobrar[gid].ultimaData = j.date;
+        if (diffDays > byClientCobrar[gid].maxDias) byClientCobrar[gid].maxDias = diffDays;
       });
       if (selCobrar && byClientCobrar[selCobrar]) {
         var d = byClientCobrar[selCobrar];
@@ -2617,7 +2632,11 @@ function Clients() {
       setEditForm(Object.assign({}, editForm, { type: e.target.value }));
     } }, ["Empresa", "Particular"].map(function(t) {
       return /* @__PURE__ */ React.createElement("option", { key: t }, t);
-    }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Servi\xE7o"), /* @__PURE__ */ React.createElement("select", { style: inp, value: editForm.service, onChange: function(e) {
+    }))), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1", background: "#EFF6FF", border: "1.5px solid #93C5FD", borderRadius: 10, padding: "10px 14px" } }, /* @__PURE__ */ React.createElement("label", { style: Object.assign({}, lbl, { color: "#1E40AF" }) }, "Cliente principal (opcional \u2014 para agrupar v\xE1rios QR/zonas do mesmo cliente real)"), /* @__PURE__ */ React.createElement("select", { style: inp, value: editForm.cliente_principal_id || "", onChange: function(e) {
+      setEditForm(Object.assign({}, editForm, { cliente_principal_id: e.target.value || null }));
+    } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014 Nenhum (cliente independente)"), clients.filter(function(c2) { return c2.id !== sel.id; }).map(function(c2) {
+      return /* @__PURE__ */ React.createElement("option", { key: c2.id, value: c2.id }, c2.name);
+    })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#1E40AF", marginTop: 4 } }, "Se escolheres um cliente principal, os servi\xE7os desta ficha passam a contar para a margem/faturação dele, n\xE3o desta ficha isolada.")), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Servi\xE7o"), /* @__PURE__ */ React.createElement("select", { style: inp, value: editForm.service, onChange: function(e) {
       setEditForm(Object.assign({}, editForm, { service: e.target.value }));
     } }, SVCS.map(function(s) {
       return /* @__PURE__ */ React.createElement("option", { key: s }, s);
@@ -2733,7 +2752,11 @@ function Clients() {
       return /* @__PURE__ */ React.createElement("button", { key: t, onClick: function() {
         setForm(Object.assign({}, form, { type: t }));
       }, style: Object.assign({}, form.type === t ? btn : btnO, { flex: 1, padding: "9px 0", fontSize: 13 }) }, t);
-    }))), [["name", "Nome", "Ex: Construtora Silva"], ["contact", "Respons\xE1vel", "Nome do responsavel"], ["phone", "Telefone", "9XX XXX XXX"], ["email", "Email", "email@exemplo.pt"], ["address", "Morada", "Rua, N, CP, Local"]].map(function(f) {
+    }))), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12, background: "#EFF6FF", border: "1.5px solid #93C5FD", borderRadius: 10, padding: "10px 14px" } }, /* @__PURE__ */ React.createElement("label", { style: Object.assign({}, lbl, { color: "#1E40AF" }) }, "Cliente principal (opcional)"), /* @__PURE__ */ React.createElement("select", { style: inp, value: form.cliente_principal_id || "", onChange: function(e) {
+      setForm(Object.assign({}, form, { cliente_principal_id: e.target.value || null }));
+    } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014 Nenhum (cliente independente)"), clients.map(function(c2) {
+      return /* @__PURE__ */ React.createElement("option", { key: c2.id, value: c2.id }, c2.name);
+    })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#1E40AF", marginTop: 4 } }, "Usa isto quando este \xE9 s\xF3 mais um QR/zona de um cliente que j\xE1 existe (ex: mais um pr\xE9dio do mesmo condom\xEDnio).")), [["name", "Nome", "Ex: Construtora Silva"], ["contact", "Respons\xE1vel", "Nome do responsavel"], ["phone", "Telefone", "9XX XXX XXX"], ["email", "Email", "email@exemplo.pt"], ["address", "Morada", "Rua, N, CP, Local"]].map(function(f) {
       const k = f[0], la = f[1], ph = f[2];
       return /* @__PURE__ */ React.createElement("div", { key: k, style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, la), /* @__PURE__ */ React.createElement("input", { style: inp, value: form[k], onChange: function(e) {
         const u = Object.assign({}, form);
