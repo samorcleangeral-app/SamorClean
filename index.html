@@ -377,9 +377,11 @@ function ChartCanvas(props) {
 }
 function calcValorFaturacao(c, jobs, horas) {
   var isOrcamento = c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda";
-  var tipoFat = isOrcamento ? "orcamento" : (c.tipo_faturacao || "hora");
-  var valor = jobs.reduce(function(s, j) { return s + (j.val || 0); }, 0);
-  return { valor: valor, tipo: tipoFat };
+  if (isOrcamento) return { valor: jobs.reduce(function(s, j) { return s + (j.val || 0); }, 0), tipo: "orcamento" };
+  var tipoFat = c.tipo_faturacao || "hora";
+  if (tipoFat === "mensal") return { valor: parseFloat(c.valor_visita) || 0, tipo: "mensal" };
+  if (tipoFat === "visita") return { valor: jobs.length * (parseFloat(c.valor_visita) || 0), tipo: "visita" };
+  return { valor: horas * (c.price_per_hour || 0), tipo: "hora" };
 }
 function calcCustoAteHojeReal(emp, rhData, absData, monthJobs, hoje) {
   var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
@@ -1218,11 +1220,19 @@ function Finance() {
             ),
             isOrcamento ?
               /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF3C7", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#92400E", fontWeight: 600 } }, "\uD83D\uDCCB Por or\xE7amento \u2014 50% na adjudica\xE7\xE3o + 50% a 30 dias") :
-              /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 } }, [
+              /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 } }, (calc.tipo === "mensal" ? [
+                { l: "Visitas", v: jobs.length },
+                { l: "Horas totais", v: horas.toFixed(1) + "h" },
+                { l: "Valor mensal fixo", v: fmt(parseFloat(c.valor_visita) || 0) + "€" }
+              ] : calc.tipo === "visita" ? [
+                { l: "Visitas", v: jobs.length },
+                { l: "Horas totais", v: horas.toFixed(1) + "h" },
+                { l: "Valor/visita", v: fmt(parseFloat(c.valor_visita) || 0) + "€" }
+              ] : [
                 { l: "Visitas", v: jobs.length },
                 { l: "Horas totais", v: horas.toFixed(1) + "h" },
                 { l: "Preço/hora", v: fmt(c.price_per_hour || 0) + "€" }
-              ].map(function(k) {
+              ]).map(function(k) {
                 return /* @__PURE__ */ React.createElement("div", { key: k.l, style: { background: "#F8FAFC", borderRadius: 6, padding: "6px 10px", textAlign: "center" } },
                   /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase" } }, k.l),
                   /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: "#1A3A5C" } }, k.v)
