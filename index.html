@@ -751,7 +751,16 @@ function Finance() {
     var jobs = jobsDoGrupo(c, monthJobs);
     if (jobs.length === 0) return null;
     var isOrcamentoCliente = clientesOrcamento[c.id];
-    var receita = jobs.reduce(function(s, j) { return s + (j.val || 0); }, 0);
+    var receita;
+    if (isOrcamentoCliente) {
+      receita = jobs.reduce(function(s, j) { return s + (j.val || 0); }, 0);
+    } else if (c.tipo_faturacao === "visita") {
+      receita = jobs.length * (parseFloat(c.valor_visita) || 0);
+    } else if (c.tipo_faturacao === "mensal") {
+      receita = parseFloat(c.valor_visita) || 0;
+    } else {
+      receita = jobs.reduce(function(s, j) { return s + (j.val || 0); }, 0);
+    }
     var custoMO = 0;
     var horasCliente = 0;
     jobs.forEach(function(j) {
@@ -5130,6 +5139,14 @@ function RelatorioMensal() {
       });
     });
     Object.keys(byClient).forEach(function(cid) {
+      var cPrincipal = cm[cid];
+      if (cPrincipal && cPrincipal.tipo_faturacao === "mensal") {
+        var ivaT = cPrincipal.iva_type || "normal";
+        var valorFixo = parseFloat(cPrincipal.valor_visita) || 0;
+        byClient[cid].fat = ivaT === "autoliquida\xE7\xE3o" ? valorFixo : valorFixo * 1.23;
+      }
+    });
+    Object.keys(byClient).forEach(function(cid) {
       var proporcao = (!clientesOrcamento[cid] && totalHorasMesRateio > 0) ? byClient[cid].horas / totalHorasMesRateio : 0;
       byClient[cid].custosOp = clientesOrcamento[cid] ? 0 : totalDespesasComKm * proporcao;
       byClient[cid].margemReal = byClient[cid].fat / 1.23 - byClient[cid].custoMO - byClient[cid].custosOp;
@@ -7621,7 +7638,9 @@ function PortalArmazem() {
     const rows = res.ok ? await res.json() : [];
     if (rows && rows.length > 0) {
       setPinErr(false);
-      setLastTipo("");
+      const ultimaRes = await fetch(SUPABASE_URL + "/rest/v1/picagens_armazem?select=tipo&funcionario_id=eq." + encodeURIComponent(sel.id) + "&order=created_at.desc&limit=1", { headers: dbHeaders() });
+      const ultimaRows = ultimaRes.ok ? await ultimaRes.json() : [];
+      setLastTipo(ultimaRows && ultimaRows.length > 0 ? ultimaRows[0].tipo : "");
     } else {
       setPinErr(true);
       setPin("");
@@ -7654,7 +7673,7 @@ function PortalArmazem() {
   if (done) return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 80, marginBottom: 16 } }, done.tipo === "entrada" ? "\u{1F7E2}" : "\u{1F534}"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, fontWeight: 900, color: "#fff", marginBottom: 8 } }, done.tipo === "entrada" ? "Bom trabalho!" : "At\xE9 amanh\xE3!"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, color: "#38B6D8", fontWeight: 700 } }, done.nome), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "rgba(255,255,255,0.6)", marginTop: 8 } }, done.tipo === "entrada" ? "Entrada" : "Sa\xEDda", " registada \xE0s ", done.hora), done.tipo === "saida" && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 20 } }, "A fechar...")));
   if (lastTipo !== null) {
     const sugestao = lastTipo === "entrada" ? "saida" : "entrada";
-    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "rgba(255,255,255,0.06)", borderRadius: 20, padding: 32, maxWidth: 340, width: "100%", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 4 } }, "Ol\xE1, ", sel.name.split(" ")[0], "!"), lastTipo && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 24 } }, "\xDAltima ac\xE7\xE3o: ", lastTipo), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "rgba(255,255,255,0.06)", borderRadius: 20, padding: 32, maxWidth: 340, width: "100%", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 4 } }, "Ol\xE1, ", sel.name.split(" ")[0], "!"), lastTipo && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 24 } }, "\xDAltima ac\xE7\xE3o: ", lastTipo === "entrada" ? "Entrada" : "Sa\xEDda"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
       registar("entrada");
     }, style: { background: sugestao === "entrada" ? "#16A34A" : "rgba(255,255,255,0.08)", border: "2px solid " + (sugestao === "entrada" ? "#16A34A" : "rgba(255,255,255,0.2)"), borderRadius: 14, padding: "20px 12px", color: "#fff", cursor: "pointer" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 36, marginBottom: 8 } }, "\u{1F7E2}"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 800 } }, "Entrada")), /* @__PURE__ */ React.createElement("button", { onClick: function() {
       registar("saida");
