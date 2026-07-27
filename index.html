@@ -748,8 +748,20 @@ function Finance() {
       db.list("despesas", "?select=data,valor&data=gte." + inicioAtual + "&data=lte." + fimAtual),
       db.list("despesas", "?select=data,valor&data=gte." + inicioAnterior + "&data=lte." + fimAnterior),
       db.list("historico_financeiro", "?select=*&ano=eq." + ano),
-      db.list("historico_financeiro", "?select=*&ano=eq." + (ano - 1))
+      db.list("historico_financeiro", "?select=*&ano=eq." + (ano - 1)),
+      db.list("funcionarios", "?select=*"),
+      db.list("funcionarios_rh", "?select=*"),
+      db.list("ausencias", "?select=*&data_inicio=lte." + fimAtual + "&data_fim=gte." + inicioAnterior)
     ]);
+    var funcs = res[6] || [];
+    var rhData = res[7] || [];
+    var absData = res[8] || [];
+    function custoMOMes(anoRef, mesIdx) {
+      var refDate = new Date(anoRef, mesIdx, 15);
+      return funcs.reduce(function(s, e) {
+        return s + calcCustoColaboradorMes(e, rhData, absData, [], refDate).total;
+      }, 0);
+    }
     function porMes(jobsAno) {
       var buckets = {};
       for (var m = 0; m < 12; m++) buckets[m] = 0;
@@ -768,13 +780,14 @@ function Finance() {
         return { mes: m, valor: buckets[m], acumulado: acumulado };
       });
     }
-    function despesasPorMes(despAno) {
+    function despesasPorMes(despAno, anoRef) {
       var buckets = {};
       for (var m = 0; m < 12; m++) buckets[m] = 0;
       (despAno || []).forEach(function(d) {
         var mes = parseInt((d.data || "").slice(5, 7), 10) - 1;
         if (buckets[mes] !== undefined) buckets[mes] += (parseFloat(d.valor) || 0);
       });
+      for (var m2 = 0; m2 < 12; m2++) buckets[m2] += custoMOMes(anoRef, m2);
       var acumulado = 0;
       return Array.from({ length: 12 }, function(_, m) {
         acumulado += buckets[m];
@@ -804,8 +817,8 @@ function Finance() {
     }
     var atualBase = porMes(res[0]);
     var anteriorBase = porMes(res[1]);
-    var despAtualBase = despesasPorMes(res[2]);
-    var despAnteriorBase = despesasPorMes(res[3]);
+    var despAtualBase = despesasPorMes(res[2], ano);
+    var despAnteriorBase = despesasPorMes(res[3], ano - 1);
     var mergeAtual = aplicarHistorico(atualBase, despAtualBase, res[4]);
     var mergeAnterior = aplicarHistorico(anteriorBase, despAnteriorBase, res[5]);
     setDadosAnuais({ atual: mergeAtual.fat, anterior: mergeAnterior.fat, despesasAtual: mergeAtual.desp, despesasAnterior: mergeAnterior.desp, ano: ano });
@@ -940,7 +953,7 @@ function Finance() {
             /* @__PURE__ */ React.createElement("button", { onClick: function() { setVerComparacaoAnual(!verComparacaoAnual); }, style: Object.assign({}, btnO, { padding: "6px 12px", fontSize: 12, background: verComparacaoAnual ? "#EFF6FF" : "#fff" }) }, verComparacaoAnual ? "\u2713 " : "", "Comparar com ", anoSelecionado - 1)
           )
         ),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8" } }, "Baseado em servi\xE7os conclu\xEDdos, valores com IVA")
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8" } }, "Baseado em servi\xE7os conclu\xEDdos, valores com IVA \u2014 despesas incluem custo de m\xE3o-de-obra")
       ),
       loadingAnual || !dadosAnuais ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "A carregar...") :
       (function() {
