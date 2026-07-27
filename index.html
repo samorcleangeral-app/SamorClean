@@ -377,11 +377,9 @@ function ChartCanvas(props) {
 }
 function calcValorFaturacao(c, jobs, horas) {
   var isOrcamento = c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda";
-  if (isOrcamento) return { valor: jobs.reduce(function(s, j) { return s + (j.val || 0); }, 0), tipo: "orcamento" };
-  var tipoFat = c.tipo_faturacao || "hora";
-  if (tipoFat === "mensal") return { valor: parseFloat(c.valor_visita) || 0, tipo: "mensal" };
-  if (tipoFat === "visita") return { valor: jobs.length * (parseFloat(c.valor_visita) || 0), tipo: "visita" };
-  return { valor: horas * (c.price_per_hour || 0), tipo: "hora" };
+  var tipoFat = isOrcamento ? "orcamento" : (c.tipo_faturacao || "hora");
+  var valor = jobs.reduce(function(s, j) { return s + (j.val || 0); }, 0);
+  return { valor: valor, tipo: tipoFat };
 }
 function calcCustoAteHojeReal(emp, rhData, absData, monthJobs, hoje) {
   var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
@@ -1124,7 +1122,7 @@ function Finance() {
             var jobs = jobsDoGrupo(c, monthJobsAll);
             if (!jobs.length) return;
             var horas = jobs.reduce(function(s, j) {
-              return s + horasReais(j.t1, j.t2);
+              return s + horasReais(j.t1, j.t2) * ((j.team || []).length || 1);
             }, 0);
             var calc = calcValorFaturacao(c, jobs, horas);
             var valor = calc.valor;
@@ -1156,7 +1154,7 @@ function Finance() {
             var totalGeral = 0;
             clientes.filter(function(c) { return !c.cliente_principal_id && jobsDoGrupo(c, monthJobsAll).length > 0; }).forEach(function(c) {
               var jobs = jobsDoGrupo(c, monthJobsAll);
-              var horas = jobs.reduce(function(s, j) { return s + horasReais(j.t1, j.t2); }, 0);
+              var horas = jobs.reduce(function(s, j) { return s + horasReais(j.t1, j.t2) * ((j.team || []).length || 1); }, 0);
               var calc = calcValorFaturacao(c, jobs, horas);
               var valorSemIva = calc.valor;
               var isOrcamento = calc.tipo === "orcamento";
@@ -1176,7 +1174,7 @@ function Finance() {
         clientes.filter(function(c) { return !c.cliente_principal_id && jobsDoGrupo(c, monthJobsAll).length > 0; }).map(function(c) {
           var jobs = jobsDoGrupo(c, monthJobsAll);
           var horas = jobs.reduce(function(s, j) {
-            return s + horasReais(j.t1, j.t2);
+            return s + horasReais(j.t1, j.t2) * ((j.team || []).length || 1);
           }, 0);
           var calc = calcValorFaturacao(c, jobs, horas);
           var valorSemIva = calc.valor;
@@ -1230,7 +1228,7 @@ function Finance() {
               fmt(clientes.filter(function(c) { return !c.cliente_principal_id && jobsDoGrupo(c, monthJobsAll).length > 0; }).reduce(function(s, c) {
                 var jobs = jobsDoGrupo(c, monthJobsAll);
                 var isOrc = c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda";
-                var horas = jobs.reduce(function(h, j) { return h + horasReais(j.t1, j.t2); }, 0);
+                var horas = jobs.reduce(function(h, j) { return h + horasReais(j.t1, j.t2) * ((j.team || []).length || 1); }, 0);
                 return s + (isOrc ? jobs.reduce(function(h2, j) { return h2 + (j.val || 0); }, 0) : horas * (c.price_per_hour || 0));
               }, 0)), "\u20AC"
             )
