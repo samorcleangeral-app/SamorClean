@@ -746,7 +746,9 @@ function Finance() {
       db.list("servicos", "?select=date,val,iva_override,client_id&date=gte." + inicioAtual + "&date=lte." + fimAtual + "&status=eq.completed"),
       db.list("servicos", "?select=date,val,iva_override,client_id&date=gte." + inicioAnterior + "&date=lte." + fimAnterior + "&status=eq.completed"),
       db.list("despesas", "?select=data,valor&data=gte." + inicioAtual + "&data=lte." + fimAtual),
-      db.list("despesas", "?select=data,valor&data=gte." + inicioAnterior + "&data=lte." + fimAnterior)
+      db.list("despesas", "?select=data,valor&data=gte." + inicioAnterior + "&data=lte." + fimAnterior),
+      db.list("historico_financeiro", "?select=*&ano=eq." + ano),
+      db.list("historico_financeiro", "?select=*&ano=eq." + (ano - 1))
     ]);
     function porMes(jobsAno) {
       var buckets = {};
@@ -779,7 +781,34 @@ function Finance() {
         return { mes: m, valor: buckets[m], acumulado: acumulado };
       });
     }
-    setDadosAnuais({ atual: porMes(res[0]), anterior: porMes(res[1]), despesasAtual: despesasPorMes(res[2]), despesasAnterior: despesasPorMes(res[3]), ano: ano });
+    function aplicarHistorico(porMesArr, despesasArr, historicoRows) {
+      var hist = {};
+      (historicoRows || []).forEach(function(h) { hist[h.mes - 1] = h; });
+      var novoFat = porMesArr.map(function(x) { return x.valor; });
+      var novoDesp = despesasArr.map(function(x) { return x.valor; });
+      for (var m = 0; m < 12; m++) {
+        if (hist[m]) {
+          novoFat[m] = parseFloat(hist[m].faturado) || 0;
+          if (parseFloat(hist[m].despesas) > 0) novoDesp[m] = parseFloat(hist[m].despesas);
+        }
+      }
+      var accF = 0, accD = 0;
+      var outFat = [], outDesp = [];
+      for (var m = 0; m < 12; m++) {
+        accF += novoFat[m];
+        accD += novoDesp[m];
+        outFat.push({ mes: m, valor: novoFat[m], acumulado: accF });
+        outDesp.push({ mes: m, valor: novoDesp[m], acumulado: accD });
+      }
+      return { fat: outFat, desp: outDesp };
+    }
+    var atualBase = porMes(res[0]);
+    var anteriorBase = porMes(res[1]);
+    var despAtualBase = despesasPorMes(res[2]);
+    var despAnteriorBase = despesasPorMes(res[3]);
+    var mergeAtual = aplicarHistorico(atualBase, despAtualBase, res[4]);
+    var mergeAnterior = aplicarHistorico(anteriorBase, despAnteriorBase, res[5]);
+    setDadosAnuais({ atual: mergeAtual.fat, anterior: mergeAnterior.fat, despesasAtual: mergeAtual.desp, despesasAnterior: mergeAnterior.desp, ano: ano });
     setLoadingAnual(false);
   }
   var totalDespesas = despesas.reduce(function(s, d) { return s + (parseFloat(d.valor) || 0); }, 0);
