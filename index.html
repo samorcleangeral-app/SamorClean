@@ -433,7 +433,7 @@ function Finance() {
   const [chartMetricas, setChartMetricas] = useState(["fat"]);
   const [selCobrar, setSelCobrar] = useState(null);
   const [selMargemCliente, setSelMargemCliente] = useState(null);
-  const [anoSelecionado, setAnoSelecionado] = useState(now.getFullYear());
+  const [anoSelecionado, setAnoSelecionado] = useState((/* @__PURE__ */ new Date()).getFullYear());
   const [dadosAnuais, setDadosAnuais] = useState(null);
   const [loadingAnual, setLoadingAnual] = useState(false);
   const [verComparacaoAnual, setVerComparacaoAnual] = useState(true);
@@ -744,7 +744,9 @@ function Finance() {
     var fimAnterior = (ano - 1) + "-12-31";
     var res = await Promise.all([
       db.list("servicos", "?select=date,val,iva_override,client_id&date=gte." + inicioAtual + "&date=lte." + fimAtual + "&status=eq.completed"),
-      db.list("servicos", "?select=date,val,iva_override,client_id&date=gte." + inicioAnterior + "&date=lte." + fimAnterior + "&status=eq.completed")
+      db.list("servicos", "?select=date,val,iva_override,client_id&date=gte." + inicioAnterior + "&date=lte." + fimAnterior + "&status=eq.completed"),
+      db.list("despesas", "?select=data,valor&data=gte." + inicioAtual + "&data=lte." + fimAtual),
+      db.list("despesas", "?select=data,valor&data=gte." + inicioAnterior + "&data=lte." + fimAnterior)
     ]);
     function porMes(jobsAno) {
       var buckets = {};
@@ -764,7 +766,20 @@ function Finance() {
         return { mes: m, valor: buckets[m], acumulado: acumulado };
       });
     }
-    setDadosAnuais({ atual: porMes(res[0]), anterior: porMes(res[1]), ano: ano });
+    function despesasPorMes(despAno) {
+      var buckets = {};
+      for (var m = 0; m < 12; m++) buckets[m] = 0;
+      (despAno || []).forEach(function(d) {
+        var mes = parseInt((d.data || "").slice(5, 7), 10) - 1;
+        if (buckets[mes] !== undefined) buckets[mes] += (parseFloat(d.valor) || 0);
+      });
+      var acumulado = 0;
+      return Array.from({ length: 12 }, function(_, m) {
+        acumulado += buckets[m];
+        return { mes: m, valor: buckets[m], acumulado: acumulado };
+      });
+    }
+    setDadosAnuais({ atual: porMes(res[0]), anterior: porMes(res[1]), despesasAtual: despesasPorMes(res[2]), despesasAnterior: despesasPorMes(res[3]), ano: ano });
     setLoadingAnual(false);
   }
   var totalDespesas = despesas.reduce(function(s, d) { return s + (parseFloat(d.valor) || 0); }, 0);
@@ -903,41 +918,49 @@ function Finance() {
         var d = dadosAnuais;
         var totalAtual = d.atual[11].acumulado;
         var totalAnterior = d.anterior[11].acumulado;
+        var totalDespAtual = d.despesasAtual[11].acumulado;
+        var totalDespAnterior = d.despesasAnterior[11].acumulado;
         var crescimento = totalAnterior > 0 ? Math.round((totalAtual - totalAnterior) / totalAnterior * 1000) / 10 : null;
         var mesesNomes = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
         var melhorMes = d.atual.reduce(function(best, m) { return m.valor > best.valor ? m : best; }, d.atual[0]);
         return /* @__PURE__ */ React.createElement("div", null,
-          /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: verComparacaoAnual ? "1fr 1fr 1fr" : "1fr", gap: 12, marginBottom: 16 } },
+          /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: verComparacaoAnual ? "1fr 1fr 1fr" : "1fr 1fr", gap: 12, marginBottom: 16 } },
             /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { padding: 16, textAlign: "center" }) },
-              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Total ", anoSelecionado),
-              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#1A3A5C" } }, fmt(totalAtual), "\u20AC")
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Facturado ", anoSelecionado),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#1A3A5C" } }, fmt(totalAtual), "\u20AC"),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 6 } }, "Despesas: ", fmt(totalDespAtual), "\u20AC")
             ),
             verComparacaoAnual && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { padding: 16, textAlign: "center" }) },
-              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Total ", anoSelecionado - 1),
-              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#64748B" } }, fmt(totalAnterior), "\u20AC")
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Facturado ", anoSelecionado - 1),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#64748B" } }, fmt(totalAnterior), "\u20AC"),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 6 } }, "Despesas: ", fmt(totalDespAnterior), "\u20AC")
             ),
-            verComparacaoAnual && crescimento !== null && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { padding: 16, textAlign: "center", background: crescimento >= 0 ? "#F0FDF4" : "#FEF2F2" }) },
-              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Crescimento"),
-              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: crescimento >= 0 ? "#16A34A" : "#EF4444" } }, crescimento >= 0 ? "+" : "", crescimento, "%")
+            /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { padding: 16, textAlign: "center", background: crescimento === null ? "#fff" : crescimento >= 0 ? "#F0FDF4" : "#FEF2F2" }) },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, verComparacaoAnual ? "Crescimento" : "Margem bruta " + anoSelecionado),
+              verComparacaoAnual ?
+                /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: crescimento === null ? "#94A3B8" : crescimento >= 0 ? "#16A34A" : "#EF4444" } }, crescimento === null ? "\u2014" : (crescimento >= 0 ? "+" : "") + crescimento + "%") :
+                /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#1A3A5C" } }, fmt(totalAtual / 1.23 - totalDespAtual), "\u20AC")
             )
           ),
           /* @__PURE__ */ React.createElement("div", { style: card },
-            /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } },
+            /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
               /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { borderBottom: "2px solid #E2EBF4" } },
-                ["Mês", anoSelecionado, verComparacaoAnual ? anoSelecionado - 1 : null, verComparacaoAnual ? "Var." : null, "Acumulado " + anoSelecionado].filter(Boolean).map(function(h) {
-                  return /* @__PURE__ */ React.createElement("th", { key: h, style: { textAlign: h === "Mês" ? "left" : "right", padding: "8px 10px", fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, h);
+                ["Mês", "Facturado " + anoSelecionado, verComparacaoAnual ? "Facturado " + (anoSelecionado - 1) : null, verComparacaoAnual ? "Var." : null, "Despesas", "Acumulado"].filter(Boolean).map(function(h) {
+                  return /* @__PURE__ */ React.createElement("th", { key: h, style: { textAlign: h === "Mês" ? "left" : "right", padding: "8px 8px", fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, h);
                 })
               )),
               /* @__PURE__ */ React.createElement("tbody", null, d.atual.map(function(mObj, i) {
                 var mAnt = d.anterior[i];
+                var mDesp = d.despesasAtual[i];
                 var varMes = mAnt.valor > 0 ? Math.round((mObj.valor - mAnt.valor) / mAnt.valor * 1000) / 10 : null;
                 var isMelhor = mObj.mes === melhorMes.mes && mObj.valor > 0;
                 return /* @__PURE__ */ React.createElement("tr", { key: i, style: { borderBottom: "1px solid #F1F5F9", background: isMelhor ? "#F0FDF4" : "transparent" } },
-                  /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", fontWeight: 600 } }, mesesNomes[i], isMelhor && " \uD83C\uDFC6"),
-                  /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", fontWeight: 700 } }, fmt(mObj.valor), "\u20AC"),
-                  verComparacaoAnual && /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#94A3B8" } }, fmt(mAnt.valor), "\u20AC"),
-                  verComparacaoAnual && /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", fontWeight: 700, color: varMes === null ? "#94A3B8" : varMes >= 0 ? "#16A34A" : "#EF4444" } }, varMes === null ? "\u2014" : (varMes >= 0 ? "+" : "") + varMes + "%"),
-                  /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#64748B" } }, fmt(mObj.acumulado), "\u20AC")
+                  /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 8px", fontWeight: 600 } }, mesesNomes[i], isMelhor && " \uD83C\uDFC6"),
+                  /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 8px", textAlign: "right", fontWeight: 700 } }, fmt(mObj.valor), "\u20AC"),
+                  verComparacaoAnual && /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 8px", textAlign: "right", color: "#94A3B8" } }, fmt(mAnt.valor), "\u20AC"),
+                  verComparacaoAnual && /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 8px", textAlign: "right", fontWeight: 700, color: varMes === null ? "#94A3B8" : varMes >= 0 ? "#16A34A" : "#EF4444" } }, varMes === null ? "\u2014" : (varMes >= 0 ? "+" : "") + varMes + "%"),
+                  /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 8px", textAlign: "right", color: "#EF4444" } }, fmt(mDesp.valor), "\u20AC"),
+                  /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 8px", textAlign: "right", color: "#64748B" } }, fmt(mObj.acumulado), "\u20AC")
                 );
               }))
             )
