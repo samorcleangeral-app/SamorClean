@@ -433,6 +433,10 @@ function Finance() {
   const [chartMetricas, setChartMetricas] = useState(["fat"]);
   const [selCobrar, setSelCobrar] = useState(null);
   const [selMargemCliente, setSelMargemCliente] = useState(null);
+  const [anoSelecionado, setAnoSelecionado] = useState(now.getFullYear());
+  const [dadosAnuais, setDadosAnuais] = useState(null);
+  const [loadingAnual, setLoadingAnual] = useState(false);
+  const [verComparacaoAnual, setVerComparacaoAnual] = useState(true);
   const [allPendingJobs, setAllPendingJobs] = useState([]);
   const [verTudoCobrar, setVerTudoCobrar] = useState(false);
   const [clientsMap, setClientsMap] = useState({});
@@ -732,6 +736,37 @@ function Finance() {
     var idsGrupo = [c.id].concat(clientes.filter(function(cc) { return cc.cliente_principal_id === c.id; }).map(function(cc) { return cc.id; }));
     return jobsAll.filter(function(j) { return idsGrupo.indexOf(j.client_id) !== -1; });
   }
+  async function carregarDadosAno(ano) {
+    setLoadingAnual(true);
+    var inicioAtual = ano + "-01-01";
+    var fimAtual = ano + "-12-31";
+    var inicioAnterior = (ano - 1) + "-01-01";
+    var fimAnterior = (ano - 1) + "-12-31";
+    var res = await Promise.all([
+      db.list("servicos", "?select=date,val,iva_override,client_id&date=gte." + inicioAtual + "&date=lte." + fimAtual + "&status=eq.completed"),
+      db.list("servicos", "?select=date,val,iva_override,client_id&date=gte." + inicioAnterior + "&date=lte." + fimAnterior + "&status=eq.completed")
+    ]);
+    function porMes(jobsAno) {
+      var buckets = {};
+      for (var m = 0; m < 12; m++) buckets[m] = 0;
+      var cMap = {};
+      clientes.forEach(function(cc) { cMap[cc.id] = cc; });
+      (jobsAno || []).forEach(function(j) {
+        var c = cMap[j.client_id];
+        var ivaT = j.iva_override || (c ? c.iva_type : "normal") || "normal";
+        var v = ivaT === "autoliquida\xE7\xE3o" ? (j.val || 0) : (j.val || 0) * 1.23;
+        var mes = parseInt(j.date.slice(5, 7), 10) - 1;
+        buckets[mes] += v;
+      });
+      var acumulado = 0;
+      return Array.from({ length: 12 }, function(_, m) {
+        acumulado += buckets[m];
+        return { mes: m, valor: buckets[m], acumulado: acumulado };
+      });
+    }
+    setDadosAnuais({ atual: porMes(res[0]), anterior: porMes(res[1]), ano: ano });
+    setLoadingAnual(false);
+  }
   var totalDespesas = despesas.reduce(function(s, d) { return s + (parseFloat(d.valor) || 0); }, 0);
 
   // Clientes de valor fixo (Pós-Obra/Profunda) ficam fora do rateio de custos operacionais
@@ -782,14 +817,17 @@ function Finance() {
     return { name: c.name, receita: receita, custoMO: custoMO, custosOp: custosOp, custoTotal: custoTotal, margem: margem, margemPct: margemPct, jobs: jobs.length, isOrcamento: isOrcamentoCliente, horasCliente: horasCliente, horasEstimadas: parseFloat(c.horas_estimadas_obra) || 0 };
   }).filter(Boolean).sort(function(a, b) { return b.receita - a.receita; });
 
+  useEffect(function() {
+    if (finTab === "anual" && !loading) carregarDadosAno(anoSelecionado);
+  }, [finTab, anoSelecionado, loading]);
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar dados financeiros...");
   return /* @__PURE__ */ React.createElement("div", null,
     /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } },
       /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Dashboard Financeiro"),
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, now.toLocaleDateString("pt-PT", { month: "long", year: "numeric" }))
     ),
-    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" } }, ["geral", "graficos", "caixa", "colaboradores", "clientes", "faturacao"].map(function(t) {
-      var labels = { geral: "Geral", graficos: "\uD83D\uDCCA Gr\xE1ficos", caixa: "\uD83D\uDCB0 Caixa", colaboradores: "Mão de Obra", clientes: "Margens por Cliente", faturacao: "📄 Faturação" };
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" } }, ["geral", "graficos", "anual", "caixa", "colaboradores", "clientes", "faturacao"].map(function(t) {
+      var labels = { geral: "Geral", graficos: "\uD83D\uDCCA Gr\xE1ficos", anual: "\uD83D\uDCC5 Anual", caixa: "\uD83D\uDCB0 Caixa", colaboradores: "Mão de Obra", clientes: "Margens por Cliente", faturacao: "📄 Faturação" };
       return /* @__PURE__ */ React.createElement("button", { key: t, onClick: function() { setFinTab(t); }, style: { padding: "8px 16px", borderRadius: 8, border: "1.5px solid " + (finTab === t ? "#2E6DA4" : "#E2EBF4"), background: finTab === t ? "#EFF6FF" : "#fff", color: finTab === t ? "#2E6DA4" : "#64748B", fontSize: 13, fontWeight: 700, cursor: "pointer" } }, labels[t]);
     })),
     finTab === "graficos" && /* @__PURE__ */ React.createElement("div", null,
@@ -847,6 +885,65 @@ function Finance() {
           })()
         )
       )
+    ),
+    finTab === "anual" && /* @__PURE__ */ React.createElement("div", null,
+      /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 4 } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C" } }, "Relat\xF3rio Anual \u2014 ", anoSelecionado),
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
+            /* @__PURE__ */ React.createElement("button", { onClick: function() { setAnoSelecionado(anoSelecionado - 1); }, style: Object.assign({}, btnO, { padding: "6px 12px", fontSize: 12 }) }, "\u2190 ", anoSelecionado - 1),
+            /* @__PURE__ */ React.createElement("button", { onClick: function() { setAnoSelecionado(anoSelecionado + 1); }, disabled: anoSelecionado >= now.getFullYear(), style: Object.assign({}, btnO, { padding: "6px 12px", fontSize: 12, opacity: anoSelecionado >= now.getFullYear() ? 0.4 : 1 }) }, anoSelecionado + 1, " \u2192"),
+            /* @__PURE__ */ React.createElement("button", { onClick: function() { setVerComparacaoAnual(!verComparacaoAnual); }, style: Object.assign({}, btnO, { padding: "6px 12px", fontSize: 12, background: verComparacaoAnual ? "#EFF6FF" : "#fff" }) }, verComparacaoAnual ? "\u2713 " : "", "Comparar com ", anoSelecionado - 1)
+          )
+        ),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8" } }, "Baseado em servi\xE7os conclu\xEDdos, valores com IVA")
+      ),
+      loadingAnual || !dadosAnuais ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "A carregar...") :
+      (function() {
+        var d = dadosAnuais;
+        var totalAtual = d.atual[11].acumulado;
+        var totalAnterior = d.anterior[11].acumulado;
+        var crescimento = totalAnterior > 0 ? Math.round((totalAtual - totalAnterior) / totalAnterior * 1000) / 10 : null;
+        var mesesNomes = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+        var melhorMes = d.atual.reduce(function(best, m) { return m.valor > best.valor ? m : best; }, d.atual[0]);
+        return /* @__PURE__ */ React.createElement("div", null,
+          /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: verComparacaoAnual ? "1fr 1fr 1fr" : "1fr", gap: 12, marginBottom: 16 } },
+            /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { padding: 16, textAlign: "center" }) },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Total ", anoSelecionado),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#1A3A5C" } }, fmt(totalAtual), "\u20AC")
+            ),
+            verComparacaoAnual && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { padding: 16, textAlign: "center" }) },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Total ", anoSelecionado - 1),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#64748B" } }, fmt(totalAnterior), "\u20AC")
+            ),
+            verComparacaoAnual && crescimento !== null && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { padding: 16, textAlign: "center", background: crescimento >= 0 ? "#F0FDF4" : "#FEF2F2" }) },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Crescimento"),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: crescimento >= 0 ? "#16A34A" : "#EF4444" } }, crescimento >= 0 ? "+" : "", crescimento, "%")
+            )
+          ),
+          /* @__PURE__ */ React.createElement("div", { style: card },
+            /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } },
+              /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { borderBottom: "2px solid #E2EBF4" } },
+                ["Mês", anoSelecionado, verComparacaoAnual ? anoSelecionado - 1 : null, verComparacaoAnual ? "Var." : null, "Acumulado " + anoSelecionado].filter(Boolean).map(function(h) {
+                  return /* @__PURE__ */ React.createElement("th", { key: h, style: { textAlign: h === "Mês" ? "left" : "right", padding: "8px 10px", fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, h);
+                })
+              )),
+              /* @__PURE__ */ React.createElement("tbody", null, d.atual.map(function(mObj, i) {
+                var mAnt = d.anterior[i];
+                var varMes = mAnt.valor > 0 ? Math.round((mObj.valor - mAnt.valor) / mAnt.valor * 1000) / 10 : null;
+                var isMelhor = mObj.mes === melhorMes.mes && mObj.valor > 0;
+                return /* @__PURE__ */ React.createElement("tr", { key: i, style: { borderBottom: "1px solid #F1F5F9", background: isMelhor ? "#F0FDF4" : "transparent" } },
+                  /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", fontWeight: 600 } }, mesesNomes[i], isMelhor && " \uD83C\uDFC6"),
+                  /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", fontWeight: 700 } }, fmt(mObj.valor), "\u20AC"),
+                  verComparacaoAnual && /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#94A3B8" } }, fmt(mAnt.valor), "\u20AC"),
+                  verComparacaoAnual && /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", fontWeight: 700, color: varMes === null ? "#94A3B8" : varMes >= 0 ? "#16A34A" : "#EF4444" } }, varMes === null ? "\u2014" : (varMes >= 0 ? "+" : "") + varMes + "%"),
+                  /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", textAlign: "right", color: "#64748B" } }, fmt(mObj.acumulado), "\u20AC")
+                );
+              }))
+            )
+          )
+        );
+      })()
     ),
     finTab === "caixa" && /* @__PURE__ */ React.createElement("div", null,
       !cashConfig ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40 }) },
