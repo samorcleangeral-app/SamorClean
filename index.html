@@ -2511,6 +2511,13 @@ function NotasCliente(props) {
     db.list("client_notes", "?select=*&client_id=eq." + encodeURIComponent(props.clientId) + "&expires_at=gte." + now + "&order=created_at.desc").then(function(rows) {
       setNotas(rows || []);
       setLoading(false);
+      var porVer = (rows || []).filter(function(n) { return !n.vista_gestao; });
+      if (porVer.length > 0) {
+        fetch(SUPABASE_URL + "/rest/v1/client_notes?client_id=eq." + encodeURIComponent(props.clientId) + "&vista_gestao=eq.false", {
+          method: "PATCH", headers: dbHeaders(),
+          body: JSON.stringify({ vista_gestao: true })
+        });
+      }
     });
   }, [props.clientId]);
 
@@ -2720,7 +2727,7 @@ function Clients() {
     Promise.all([
       db.list("clientes", "?select=*&order=id"),
       db.list("funcionarios", "?select=*&order=id"),
-      db.list("client_notes", "?select=client_id&partilhada=eq.false&expires_at=gte." + new Date().toISOString())
+      db.list("client_notes", "?select=client_id&vista_gestao=eq.false&expires_at=gte." + new Date().toISOString())
     ]).then(function(results) {
       setClients(results[0] || []);
       if (results[1] && results[1].length) setEmps(results[1]);
@@ -5950,7 +5957,7 @@ function Manager(props) {
       db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd + "&status=eq.completed"),
       db.list("pedidos_colaboradores", "?select=id&estado=eq.pendente"),
       db.list("servicos", "?select=client_id,date&date=gte." + past60 + "&order=date.desc"),
-      db.list("client_notes", "?select=id&partilhada=eq.false&expires_at=gte." + new Date().toISOString()),
+      db.list("client_notes", "?select=id&vista_gestao=eq.false&expires_at=gte." + new Date().toISOString()),
       db.list("avaliacoes", "?select=id&vista=is.false"),
       db.list("avaliacoes", "?select=stars,funcionario_id,created_at&created_at=gte." + new Date(now.getFullYear(), now.getMonth(), 1).toISOString())
     ]).then(function(results) {
