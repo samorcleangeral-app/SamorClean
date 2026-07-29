@@ -433,6 +433,9 @@ function Finance() {
   const [chartMetricas, setChartMetricas] = useState(["fat"]);
   const [selCobrar, setSelCobrar] = useState(null);
   const [selMargemCliente, setSelMargemCliente] = useState(null);
+  const [ordenadoGerencia, setOrdenadoGerencia] = useState(null);
+  const [ordenadoGerenciaInput, setOrdenadoGerenciaInput] = useState("");
+  const [savingOrdenado, setSavingOrdenado] = useState(false);
   const [anoSelecionado, setAnoSelecionado] = useState((/* @__PURE__ */ new Date()).getFullYear());
   const [dadosAnuais, setDadosAnuais] = useState(null);
   const [loadingAnual, setLoadingAnual] = useState(false);
@@ -481,7 +484,8 @@ function Finance() {
       db.list("metas_financeiras", "?select=*&order=created_at.desc"),
       db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd),
       db.list("despesas", "?select=data,valor&data=gte." + sixMonthsAgo),
-      db.list("servicos", "?select=*&status=eq.completed&paid=is.false")
+      db.list("servicos", "?select=*&status=eq.completed&paid=is.false"),
+      db.list("ordenado_gerencia", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1))
     ]).then(function(results) {
       const cm = {};
       (results[2] || []).forEach(function(c) { cm[c.id] = c; });
@@ -490,6 +494,9 @@ function Finance() {
       setLast6Months((results[1] || []).filter(function(j) { return cm[j.client_id]; }));
       setDespesas6Months(results[13] || []);
       setAllPendingJobs((results[14] || []).filter(function(j) { return cm[j.client_id]; }));
+      var ordenadoRow = results[15] && results[15][0] ? results[15][0] : null;
+      setOrdenadoGerencia(ordenadoRow);
+      setOrdenadoGerenciaInput(ordenadoRow ? String(ordenadoRow.valor) : "");
       setClientsMap(cm);
       setClientes(results[2] || []);
       setDespesas(results[3] || []);
@@ -559,9 +566,12 @@ function Finance() {
   }).reduce(function(s, d) {
     return s + d.valor;
   }, 0);
+  var custoOrdenadoGerenciaBase = ordenadoGerencia ? parseFloat(ordenadoGerencia.valor) || 0 : 0;
+  var custoOrdenadoGerenciaSS = custoOrdenadoGerenciaBase * 0.2375;
+  var custoOrdenadoGerenciaTotal = custoOrdenadoGerenciaBase + custoOrdenadoGerenciaSS;
   const totalCustoMaoObraGeral = emps.reduce(function(s, e) {
     return s + calcCustoColaboradorMes(e, rhData, absData, monthJobs, now).total;
-  }, 0);
+  }, 0) + custoOrdenadoGerenciaTotal;
   const margemBruta = fatSemIva - totalCustos - totalCustoMaoObraGeral;
   const margemPct = fatSemIva > 0 ? Math.round(margemBruta / fatSemIva * 100) : 0;
   const custosCat = {};
@@ -729,9 +739,24 @@ function Finance() {
     return { emp: e, custo: c.total, custoAteHoje: custoAteHoje, horas: horasEmp, dias: diasTrabalhadosEmp, detalhe: c.detalhe, tipo: c.tipo, custoHora: custoH, capacidadeHoras: capacidadeHoras, diasUteisDisponiveis: diasUteisDisponiveis, diasAusenciaEmp: diasAusenciaEmp, utilizacaoPct: utilizacaoPct };
   }).filter(function(x) { return x.custo > 0 || x.horas > 0; });
 
-  var totalCustoMaoObra = custosColab.reduce(function(s, c) { return s + c.custo; }, 0);
+  var totalCustoMaoObra = custosColab.reduce(function(s, c) { return s + c.custo; }, 0) + custoOrdenadoGerenciaTotal;
 
   // ── Custos operacionais para alocar proporcionalmente ──
+  async function salvarOrdenadoGerencia() {
+    var valor = parseFloat(ordenadoGerenciaInput) || 0;
+    setSavingOrdenado(true);
+    var payload = { ano: now.getFullYear(), mes: now.getMonth() + 1, valor: valor };
+    var res = await fetch(SUPABASE_URL + "/rest/v1/ordenado_gerencia", {
+      method: "POST",
+      headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation,resolution=merge-duplicates" }),
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      var d = await res.json();
+      setOrdenadoGerencia(d[0]);
+    }
+    setSavingOrdenado(false);
+  }
   function jobsDoGrupo(c, jobsAll) {
     var idsGrupo = [c.id].concat(clientes.filter(function(cc) { return cc.cliente_principal_id === c.id; }).map(function(cc) { return cc.id; }));
     return jobsAll.filter(function(j) { return idsGrupo.indexOf(j.client_id) !== -1; });
@@ -1133,6 +1158,21 @@ function Finance() {
           /* @__PURE__ */ React.createElement("div", null,
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.5)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Proje\xE7\xE3o mês completo"),
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: "rgba(255,255,255,0.7)" } }, fmt(totalCustoMaoObra), "€")
+          )
+        )
+      ),
+      /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#EFF6FF", border: "1.5px solid #2E6DA4" }) },
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "\uD83D\uDC54 Ordenado de Ger\xEAncia \u2014 este m\xEAs"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 10 } }, "Como o teu ordenado varia mês a mês, define aqui o valor deste mês. A app calcula sozinha a Seguran\xE7a Social patronal (23,75%) sobre este valor \u2014 n\xE3o precisas de o lan\xE7ar tamb\xE9m em Despesas."),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" } },
+          /* @__PURE__ */ React.createElement("div", null,
+            /* @__PURE__ */ React.createElement("label", { style: lbl }, "Ordenado bruto (\u20AC)"),
+            /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 160 }), type: "number", step: "0.01", value: ordenadoGerenciaInput, placeholder: "Ex: 1100", onFocus: function(e) { e.target.select(); }, onChange: function(e) { setOrdenadoGerenciaInput(e.target.value); } })
+          ),
+          /* @__PURE__ */ React.createElement("button", { onClick: salvarOrdenadoGerencia, disabled: savingOrdenado, style: Object.assign({}, btnG, { opacity: savingOrdenado ? 0.6 : 1 }) }, savingOrdenado ? "A guardar..." : "Guardar"),
+          custoOrdenadoGerenciaBase > 0 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#1A3A5C" } },
+            /* @__PURE__ */ React.createElement("div", null, "SS patronal (23,75%): ", /* @__PURE__ */ React.createElement("b", null, fmt(custoOrdenadoGerenciaSS), "\u20AC")),
+            /* @__PURE__ */ React.createElement("div", null, "Custo total: ", /* @__PURE__ */ React.createElement("b", null, fmt(custoOrdenadoGerenciaTotal), "\u20AC"))
           )
         )
       ),
