@@ -269,7 +269,7 @@ function diasAusenciaMes(emp, absData, refDate) {
   });
   return dias;
 }
-function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajustesRecibo) {
+function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajustesRecibo, premiosOpcionais) {
   var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
   if (!rh) return { total: 0, detalhe: [], tipo: null };
   var tipo = rh.tipo_contrato || "Contrato";
@@ -299,6 +299,9 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
   });
   var temAusencia = temAusenciaPenalizante || diasBaixa > 0;
   var premio = (temAusencia || diasFerias > 0) ? 0 : 50;
+  if (tipo === "Recibo Verde") {
+    premio = (premiosOpcionais && premiosOpcionais[emp.id]) || 0;
+  }
   if (tipo === "Recibo Verde") {
     var diasTrabalhados = new Set();
     monthJobs.forEach(function(j) {
@@ -347,7 +350,7 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
     detalhe.push({ l: "Seguro acidentes (1,5%)", v: seguro });
     total = salarioEfectivo + subAlim + subFerias + subNatal + ss + seguro;
   }
-  detalhe.push({ l: "Prémio assiduidade", v: premio });
+  detalhe.push({ l: tipo === "Recibo Verde" ? "Prémio assiduidade (opcional, decidido pela gest\xE3o)" : "Prémio assiduidade", v: premio });
   total += premio;
   return { total: total, detalhe: detalhe, tipo: tipo };
 }
@@ -436,6 +439,8 @@ function Finance() {
   const [selMargemCliente, setSelMargemCliente] = useState(null);
   const [ordenadoGerencia, setOrdenadoGerencia] = useState(null);
   const [ajustesRecibo, setAjustesRecibo] = useState({});
+  const [premiosOpcionais, setPremiosOpcionais] = useState({});
+  const [premiosOpcionaisInput, setPremiosOpcionaisInput] = useState({});
   const [ordenadoGerenciaInput, setOrdenadoGerenciaInput] = useState("");
   const [savingOrdenado, setSavingOrdenado] = useState(false);
   const [anoSelecionado, setAnoSelecionado] = useState((/* @__PURE__ */ new Date()).getFullYear());
@@ -488,7 +493,8 @@ function Finance() {
       db.list("despesas", "?select=data,valor&data=gte." + sixMonthsAgo),
       db.list("servicos", "?select=*&status=eq.completed&paid=is.false"),
       db.list("ordenado_gerencia", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
-      db.list("ajuste_dias_recibo_verde", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1))
+      db.list("ajuste_dias_recibo_verde", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
+      db.list("premio_assiduidade_opcional", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1))
     ]).then(function(results) {
       const cm = {};
       (results[2] || []).forEach(function(c) { cm[c.id] = c; });
@@ -503,6 +509,9 @@ function Finance() {
       var ajustesMap = {};
       (results[16] || []).forEach(function(a) { ajustesMap[a.funcionario_id] = parseFloat(a.dias_extra) || 0; });
       setAjustesRecibo(ajustesMap);
+      var premiosMap = {};
+      (results[17] || []).forEach(function(p) { premiosMap[p.funcionario_id] = parseFloat(p.valor) || 0; });
+      setPremiosOpcionais(premiosMap);
       setClientsMap(cm);
       setClientes(results[2] || []);
       setDespesas(results[3] || []);
@@ -576,7 +585,7 @@ function Finance() {
   var custoOrdenadoGerenciaSS = custoOrdenadoGerenciaBase * 0.2375;
   var custoOrdenadoGerenciaTotal = custoOrdenadoGerenciaBase + custoOrdenadoGerenciaSS;
   const totalCustoMaoObraGeral = emps.reduce(function(s, e) {
-    return s + calcCustoColaboradorMes(e, rhData, absData, monthJobs, now, ajustesRecibo).total;
+    return s + calcCustoColaboradorMes(e, rhData, absData, monthJobs, now, ajustesRecibo, premiosOpcionais).total;
   }, 0) + custoOrdenadoGerenciaTotal;
   const margemBruta = fatSemIva - totalCustos - totalCustoMaoObraGeral;
   const margemPct = fatSemIva > 0 ? Math.round(margemBruta / fatSemIva * 100) : 0;
@@ -661,7 +670,7 @@ function Finance() {
   const proporcaoMes = diasUteisDoMes > 0 ? diasUteisPassados / diasUteisDoMes : 1;
 
   function custoColaborador(emp) {
-    return calcCustoColaboradorMes(emp, rhData, absData, monthJobs, now, ajustesRecibo);
+    return calcCustoColaboradorMes(emp, rhData, absData, monthJobs, now, ajustesRecibo, premiosOpcionais);
   }
 
   function custoHoraReal(emp) {
@@ -762,6 +771,18 @@ function Finance() {
       setOrdenadoGerencia(d[0]);
     }
     setSavingOrdenado(false);
+  }
+  async function salvarPremioOpcional(funcionarioId) {
+    var valor = parseFloat(premiosOpcionaisInput[funcionarioId]) || 0;
+    var payload = { funcionario_id: funcionarioId, ano: now.getFullYear(), mes: now.getMonth() + 1, valor: valor };
+    var res = await fetch(SUPABASE_URL + "/rest/v1/premio_assiduidade_opcional", {
+      method: "POST",
+      headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation,resolution=merge-duplicates" }),
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      setPremiosOpcionais(Object.assign({}, premiosOpcionais, { [funcionarioId]: valor }));
+    }
   }
   function jobsDoGrupo(c, jobsAll) {
     var idsGrupo = [c.id].concat(clientes.filter(function(cc) { return cc.cliente_principal_id === c.id; }).map(function(cc) { return cc.id; }));
@@ -1204,6 +1225,22 @@ function Finance() {
             );
           });
         })()
+      ),
+      custosColab.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#F5F3FF", border: "1.5px solid #7C3AED" }) },
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "\uD83C\uDF81 Prémio de assiduidade — Recibo Verde (opcional)"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 12 } }, "Para colaboradores a Recibo Verde, o prémio n\xE3o \xE9 autom\xE1tico \u2014 decides tu, colaborador a colaborador, se atribuis ou n\xE3o este m\xEAs."),
+        emps.filter(function(e) {
+          var rh = rhData.find(function(r) { return r.funcionario_id === e.id; });
+          return rh && rh.tipo_contrato === "Recibo Verde";
+        }).map(function(e) {
+          return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 8 } },
+            /* @__PURE__ */ React.createElement("div", { style: { flex: 1, fontSize: 13, color: "#334155", fontWeight: 600 } }, e.name),
+            /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { width: 100 }), type: "number", step: "0.01", value: premiosOpcionaisInput[e.id] !== undefined ? premiosOpcionaisInput[e.id] : (premiosOpcionais[e.id] || ""), placeholder: "0", onFocus: function(ev) { ev.target.select(); }, onChange: function(ev) {
+              setPremiosOpcionaisInput(Object.assign({}, premiosOpcionaisInput, { [e.id]: ev.target.value }));
+            } }),
+            /* @__PURE__ */ React.createElement("button", { onClick: function() { salvarPremioOpcional(e.id); }, style: Object.assign({}, btnG, { padding: "6px 14px", fontSize: 12 }) }, "Guardar")
+          );
+        })
       ),
       custosColab.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
         /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "Utiliza\xE7\xE3o da Equipa este m\xEAs"),
