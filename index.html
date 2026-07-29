@@ -2715,13 +2715,18 @@ function Clients() {
       alert("Erro ao apagar cliente. Verifica se existem registos associados no Supabase.");
     }
   }
+  const [clientesComNotaNova, setClientesComNotaNova] = useState({});
   useEffect(function() {
     Promise.all([
       db.list("clientes", "?select=*&order=id"),
-      db.list("funcionarios", "?select=*&order=id")
+      db.list("funcionarios", "?select=*&order=id"),
+      db.list("client_notes", "?select=client_id&partilhada=eq.false&expires_at=gte." + new Date().toISOString())
     ]).then(function(results) {
       setClients(results[0] || []);
       if (results[1] && results[1].length) setEmps(results[1]);
+      const marcados = {};
+      (results[2] || []).forEach(function(n) { marcados[n.client_id] = true; });
+      setClientesComNotaNova(marcados);
       setLoading(false);
     });
   }, []);
@@ -2770,6 +2775,10 @@ function Clients() {
     const matchQ = c.name.toLowerCase().indexOf(s) !== -1 || c.id.toLowerCase().indexOf(s) !== -1;
     const matchT = ft === "Todos" || c.type === ft;
     return matchQ && matchT;
+  }).slice().sort(function(a, b) {
+    const na = clientesComNotaNova[a.id] ? 1 : 0;
+    const nb = clientesComNotaNova[b.id] ? 1 : 0;
+    return nb - na;
   });
   async function saveC() {
     const existingIds = clients.map(function(c) {
@@ -2842,16 +2851,18 @@ function Clients() {
       const rec = horasPessoaSemanaEsperadas(c) * (c.price_per_hour || 13.66);
       const freqCor = (c.freq || "").toLowerCase() === "semanal" ? "#16A34A" : (c.freq || "").toLowerCase() === "quinzenal" ? "#F59E0B" : (c.freq || "").toLowerCase() === "mensal" ? "#2E6DA4" : "#94A3B8";
       const inativo = c.ativo === false;
-      return /* @__PURE__ */ React.createElement("div", { key: c.id, onClick: function() { setSel(c); setView("detail"); }, style: Object.assign({}, card, { cursor: "pointer", padding: "14px 18px", marginBottom: 8, display: "flex", alignItems: "center", gap: 16, borderLeft: "4px solid " + (inativo ? "#CBD5E1" : freqCor), opacity: inativo ? 0.6 : 1 }) },
-        /* @__PURE__ */ React.createElement("div", { style: { width: 40, height: 40, borderRadius: 10, background: freqCor + "20", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } },
-          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 18 } }, c.type === "Particular" ? "\uD83D\uDC64" : "\uD83C\uDFE2")
+      const temNotaNova = !!clientesComNotaNova[c.id];
+      return /* @__PURE__ */ React.createElement("div", { key: c.id, onClick: function() { setSel(c); setView("detail"); }, style: Object.assign({}, card, { cursor: "pointer", padding: "14px 18px", marginBottom: 8, display: "flex", alignItems: "center", gap: 16, borderLeft: "4px solid " + (temNotaNova ? "#F59E0B" : inativo ? "#CBD5E1" : freqCor), opacity: inativo ? 0.6 : 1, position: "relative" }) },
+        /* @__PURE__ */ React.createElement("div", { style: { width: 40, height: 40, borderRadius: 10, background: freqCor + "20", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, position: "relative" } },
+          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 18 } }, c.type === "Particular" ? "\uD83D\uDC64" : "\uD83C\uDFE2"),
+          temNotaNova && /* @__PURE__ */ React.createElement("span", { style: { position: "absolute", top: -3, right: -3, width: 12, height: 12, borderRadius: "50%", background: "#F59E0B", border: "2px solid #fff" } })
         ),
         /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } },
           /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.name),
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, c.service, c.address ? " \u2022 " + c.address : "")
         ),
         /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 } },
-          /* @__PURE__ */ React.createElement("span", { style: { background: freqCor + "20", color: freqCor, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, c.freq || "\u2014"),
+          temNotaNova ? /* @__PURE__ */ React.createElement("span", { style: { background: "#FEF3C7", color: "#92400E", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, "\uD83D\uDD14 Nota nova") : /* @__PURE__ */ React.createElement("span", { style: { background: freqCor + "20", color: freqCor, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, c.freq || "\u2014"),
           rec > 0 && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#16A34A" } }, fmt(rec), "\u20AC/sem")
         )
       );
