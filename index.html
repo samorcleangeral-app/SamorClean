@@ -269,7 +269,7 @@ function diasAusenciaMes(emp, absData, refDate) {
   });
   return dias;
 }
-function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate) {
+function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajustesRecibo) {
   var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
   if (!rh) return { total: 0, detalhe: [], tipo: null };
   var tipo = rh.tipo_contrato || "Contrato";
@@ -304,10 +304,11 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate) {
     monthJobs.forEach(function(j) {
       if ((j.team || []).indexOf(emp.id) !== -1) diasTrabalhados.add(j.date);
     });
-    var numDias = diasTrabalhados.size;
+    var ajusteEmp = (ajustesRecibo && ajustesRecibo[emp.id]) || 0;
+    var numDias = diasTrabalhados.size + ajusteEmp;
     var valorDia = parseFloat(rh.valor_dia) || 0;
     var custo = numDias * valorDia;
-    detalhe.push({ l: "Recibo Verde (" + numDias + " dias × " + fmt(valorDia) + "€)", v: custo });
+    detalhe.push({ l: "Recibo Verde (" + diasTrabalhados.size + " dias registados" + (ajusteEmp > 0 ? " + " + ajusteEmp + " dias ajuste manual" : "") + " × " + fmt(valorDia) + "€)", v: custo });
     total = custo;
   } else {
     var salario = parseFloat(rh.salario_base) || 0;
@@ -434,6 +435,7 @@ function Finance() {
   const [selCobrar, setSelCobrar] = useState(null);
   const [selMargemCliente, setSelMargemCliente] = useState(null);
   const [ordenadoGerencia, setOrdenadoGerencia] = useState(null);
+  const [ajustesRecibo, setAjustesRecibo] = useState({});
   const [ordenadoGerenciaInput, setOrdenadoGerenciaInput] = useState("");
   const [savingOrdenado, setSavingOrdenado] = useState(false);
   const [anoSelecionado, setAnoSelecionado] = useState((/* @__PURE__ */ new Date()).getFullYear());
@@ -485,7 +487,8 @@ function Finance() {
       db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd),
       db.list("despesas", "?select=data,valor&data=gte." + sixMonthsAgo),
       db.list("servicos", "?select=*&status=eq.completed&paid=is.false"),
-      db.list("ordenado_gerencia", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1))
+      db.list("ordenado_gerencia", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
+      db.list("ajuste_dias_recibo_verde", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1))
     ]).then(function(results) {
       const cm = {};
       (results[2] || []).forEach(function(c) { cm[c.id] = c; });
@@ -497,6 +500,9 @@ function Finance() {
       var ordenadoRow = results[15] && results[15][0] ? results[15][0] : null;
       setOrdenadoGerencia(ordenadoRow);
       setOrdenadoGerenciaInput(ordenadoRow ? String(ordenadoRow.valor) : "");
+      var ajustesMap = {};
+      (results[16] || []).forEach(function(a) { ajustesMap[a.funcionario_id] = parseFloat(a.dias_extra) || 0; });
+      setAjustesRecibo(ajustesMap);
       setClientsMap(cm);
       setClientes(results[2] || []);
       setDespesas(results[3] || []);
@@ -570,7 +576,7 @@ function Finance() {
   var custoOrdenadoGerenciaSS = custoOrdenadoGerenciaBase * 0.2375;
   var custoOrdenadoGerenciaTotal = custoOrdenadoGerenciaBase + custoOrdenadoGerenciaSS;
   const totalCustoMaoObraGeral = emps.reduce(function(s, e) {
-    return s + calcCustoColaboradorMes(e, rhData, absData, monthJobs, now).total;
+    return s + calcCustoColaboradorMes(e, rhData, absData, monthJobs, now, ajustesRecibo).total;
   }, 0) + custoOrdenadoGerenciaTotal;
   const margemBruta = fatSemIva - totalCustos - totalCustoMaoObraGeral;
   const margemPct = fatSemIva > 0 ? Math.round(margemBruta / fatSemIva * 100) : 0;
@@ -655,7 +661,7 @@ function Finance() {
   const proporcaoMes = diasUteisDoMes > 0 ? diasUteisPassados / diasUteisDoMes : 1;
 
   function custoColaborador(emp) {
-    return calcCustoColaboradorMes(emp, rhData, absData, monthJobs, now);
+    return calcCustoColaboradorMes(emp, rhData, absData, monthJobs, now, ajustesRecibo);
   }
 
   function custoHoraReal(emp) {
