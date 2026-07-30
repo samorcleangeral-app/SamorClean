@@ -935,10 +935,11 @@ function Finance() {
       /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Dashboard Financeiro"),
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, now.toLocaleDateString("pt-PT", { month: "long", year: "numeric" }))
     ),
-    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" } }, ["geral", "graficos", "anual", "caixa", "colaboradores", "clientes", "faturacao"].map(function(t) {
-      var labels = { geral: "Geral", graficos: "\uD83D\uDCCA Gr\xE1ficos", anual: "\uD83D\uDCC5 Anual", caixa: "\uD83D\uDCB0 Caixa", colaboradores: "Mão de Obra", clientes: "Margens por Cliente", faturacao: "📄 Faturação" };
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" } }, ["geral", "graficos", "anual", "caixa", "colaboradores", "clientes", "faturacao", "relatorio_mensal"].map(function(t) {
+      var labels = { geral: "Geral", graficos: "\uD83D\uDCCA Gr\xE1ficos", anual: "\uD83D\uDCC5 Anual", caixa: "\uD83D\uDCB0 Caixa", colaboradores: "Mão de Obra", clientes: "Margens por Cliente", faturacao: "📄 Faturação", relatorio_mensal: "\uD83D\uDCC3 Relat\xF3rio Mensal" };
       return /* @__PURE__ */ React.createElement("button", { key: t, onClick: function() { setFinTab(t); }, style: { padding: "8px 16px", borderRadius: 8, border: "1.5px solid " + (finTab === t ? "#2E6DA4" : "#E2EBF4"), background: finTab === t ? "#EFF6FF" : "#fff", color: finTab === t ? "#2E6DA4" : "#64748B", fontSize: 13, fontWeight: 700, cursor: "pointer" } }, labels[t]);
     })),
+    finTab === "relatorio_mensal" && /* @__PURE__ */ React.createElement(RelatorioMensal, null),
     finTab === "graficos" && /* @__PURE__ */ React.createElement("div", null,
       /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
         /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 14 } },
@@ -6155,19 +6156,18 @@ function Manager(props) {
   }, []);
   const allNavItems = [
     { k: "home", l: "In\xEDcio" },
-    { k: "finance", l: "Financeiro" },
     { k: "routes", l: "Rotas" },
-    { k: "clients", l: "Clientes" },
+    { k: "quadro_op", l: "\uD83D\uDCCA Quadro Operacional" },
+    { k: "finance", l: "Financeiro" },
     { k: "fornecedores", l: "Fornecedores" },
+    { k: "clients", l: "Clientes" },
+    { k: "pedidos", l: "Pedidos Extra" },
+    { k: "avaliacoes", l: "Avalia\xE7\xF5es" },
     { k: "leads", l: "\u{1F3AF} Leads" },
     { k: "recrutamento", l: "\uD83D\uDC65 Recrutamento" },
     { k: "pedidos_colab", l: "\u{1F4E5} Pedidos Equipa" },
-    { k: "pedidos", l: "Pedidos Extra" },
-    { k: "avaliacoes", l: "Avalia\xE7\xF5es" },
-    { k: "formacao", l: "Documentos RH" },
-    { k: "quadro_op", l: "\uD83D\uDCCA Quadro Operacional" },
-    { k: "relatorio", l: "Relat\xF3rio Mensal" },
     { k: "employees", l: "Funcion\xE1rios" },
+    { k: "formacao", l: "Documentos RH" },
     { k: "gestores", l: "\u2699 Utilizadores" },
     { k: "armazem_qr", l: "\u{1F4E6} QR Armaz\xE9m" }
   ];
