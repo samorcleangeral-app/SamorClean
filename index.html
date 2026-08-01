@@ -1704,7 +1704,7 @@ function Routes() {
   useEffect(function() {
     Promise.all([
       db.list("servicos", "?select=*&order=date"),
-      db.list("funcionarios", "?select=*&order=id"),
+      db.list("funcionarios", "?select=*&ativo=neq.false&order=id"),
       db.list("clientes", "?select=*&order=id"),
       db.list("ausencias", "?select=*")
     ]).then(function(r) {
