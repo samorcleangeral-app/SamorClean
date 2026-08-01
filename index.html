@@ -502,7 +502,7 @@ function Finance() {
       setMonthJobsAll((results[12] || []).filter(function(j) { return cm[j.client_id]; }));
       setLast6Months((results[1] || []).filter(function(j) { return cm[j.client_id]; }));
       setDespesas6Months(results[13] || []);
-      setAllPendingJobs((results[14] || []).filter(function(j) { return cm[j.client_id]; }));
+      setAllPendingJobs((results[14] || []).filter(function(j) { return cm[j.client_id] && cm[j.client_id].ativo !== false; }));
       var ordenadoRow = results[15] && results[15][0] ? results[15][0] : null;
       setOrdenadoGerencia(ordenadoRow);
       setOrdenadoGerenciaInput(ordenadoRow ? String(ordenadoRow.valor) : "");
@@ -604,11 +604,15 @@ function Finance() {
   var mostrarAvisoFaturacao = hojeStr >= localDateStr(ultimaSemanaCompleta.inicio);
   const emAtraso = mostrarAvisoFaturacao ? monthJobs.filter(function(j) {
     if (j.paid) return false;
+    var cRef = clientes.find(function(cc) { return cc.id === j.client_id; });
+    if (cRef && cRef.ativo === false) return false;
     const diffDays = Math.floor((now - ultimaSemanaCompleta.inicio) / (24 * 3600 * 1e3));
     return diffDays >= 0;
   }) : [];
   const pendingRows = monthJobs.filter(function(j) {
-    return !j.paid;
+    if (j.paid) return false;
+    var cRef2 = clientes.find(function(cc) { return cc.id === j.client_id; });
+    return !(cRef2 && cRef2.ativo === false);
   }).sort(function(a, b) {
     return a.date < b.date ? -1 : 1;
   });
@@ -1952,6 +1956,17 @@ function Routes() {
       if (c.ativo === false) { skipped.push(c.name + " (inactivo)"); return; }
       const sch = c.schedule || [];
       if (!sch.length || c.freq === "Pontual") { skipped.push(c.name + " (sem agenda ou pontual)"); return; }
+      if (c.freq === "Mensal") {
+        const mesAtual = nextDates[0] ? nextDates[0].slice(0, 7) : "";
+        const jaTemEsteMes = jobs.some(function(j) { return j.client_id === c.id && (j.date || "").slice(0, 7) === mesAtual; });
+        if (jaTemEsteMes) { skipped.push(c.name + " (j\xE1 tem servi\xE7o este m\xEAs \u2014 mensal)"); return; }
+      }
+      if (c.freq === "Quinzenal") {
+        const refDate2 = nextDates[0] ? new Date(nextDates[0] + "T12:00:00") : null;
+        const limiteAnterior = refDate2 ? new Date(refDate2.getTime() - 10 * 24 * 3600 * 1e3) : null;
+        const jaTemRecente = limiteAnterior ? jobs.some(function(j) { return j.client_id === c.id && j.date >= localDateStr(limiteAnterior) && j.date < nextDates[0]; }) : false;
+        if (jaTemRecente) { skipped.push(c.name + " (j\xE1 teve servi\xE7o h\xE1 menos de 2 semanas \u2014 quinzenal)"); return; }
+      }
       sch.forEach(function(d) {
         const dayIdx = d.day;
         if (dayIdx < 0 || dayIdx > 5) return;
