@@ -483,7 +483,7 @@ function Finance() {
       db.list("despesas", "?select=*&data=gte." + monthStart + "&data=lte." + monthEnd),
       db.list("servicos", "?select=client_id,date&date=gte." + past60 + "&order=date.desc"),
       db.list("funcionarios_rh", "?select=*"),
-      db.list("funcionarios", "?select=*"),
+      db.list("funcionarios", "?select=*&ativo=neq.false"),
       db.list("ausencias", "?select=*&data_inicio=lte." + monthEnd + "&data_fim=gte." + yearStart),
       db.list("ausencias", "?select=*&data_fim=gte." + sixMonthsAgo),
       db.list("cash_config", "?select=*&order=data_inicio.desc&limit=1"),
@@ -801,7 +801,7 @@ function Finance() {
       db.list("despesas", "?select=data,valor&data=gte." + inicioAnterior + "&data=lte." + fimAnterior),
       db.list("historico_financeiro", "?select=*&ano=eq." + ano),
       db.list("historico_financeiro", "?select=*&ano=eq." + (ano - 1)),
-      db.list("funcionarios", "?select=*"),
+      db.list("funcionarios", "?select=*&ativo=neq.false"),
       db.list("funcionarios_rh", "?select=*"),
       db.list("ausencias", "?select=*&data_inicio=lte." + fimAtual + "&data_fim=gte." + inicioAnterior)
     ]);
@@ -2848,7 +2848,7 @@ function Clients() {
   useEffect(function() {
     Promise.all([
       db.list("clientes", "?select=*&order=id"),
-      db.list("funcionarios", "?select=*&order=id"),
+      db.list("funcionarios", "?select=*&ativo=neq.false&order=id"),
       db.list("client_notes", "?select=client_id&vista_gestao=eq.false&expires_at=gte." + new Date().toISOString())
     ]).then(function(results) {
       setClients(results[0] || []);
@@ -3997,7 +3997,7 @@ function Formacao() {
   const [form, setForm] = useState({ name: "", cat: "Documentação Interna", role: "Todos", empId: "" });
   const [emps, setEmps] = useState([]);
   useEffect(function() {
-    db.list("funcionarios", "?select=id,name&order=name").then(function(rows) { setEmps(rows || []); });
+    db.list("funcionarios", "?select=id,name&ativo=neq.false&order=name").then(function(rows) { setEmps(rows || []); });
   }, []);
   const [file, setFile] = useState(null);
   const [filtCat, setFiltCat] = useState("Todos");
@@ -4271,7 +4271,7 @@ function NotasOperacionais() {
   useEffect(function() {
     Promise.all([
       db.list("notas_operacionais", "?select=*&order=created_at.desc"),
-      db.list("funcionarios", "?select=id,name&order=name")
+      db.list("funcionarios", "?select=id,name&ativo=neq.false&order=name")
     ]).then(function(r) {
       setNotas(r[0] || []);
       setEmps(r[1] || []);
@@ -4556,7 +4556,7 @@ function Fornecedores() {
     Promise.all([
       db.list("fornecedores", "?select=*&order=nome"),
       db.list("despesas", "?select=*&order=data.desc"),
-      db.list("funcionarios", "?select=*"),
+      db.list("funcionarios", "?select=*&ativo=neq.false"),
       db.list("funcionarios_rh", "?select=*"),
       db.list("ausencias", "?select=*")
     ]).then(function(r) {
@@ -5071,7 +5071,7 @@ function QRArmazem() {
   useEffect(function() {
     Promise.all([
       db.list("picagens_armazem", "?select=*&order=created_at.desc&limit=200"),
-      db.list("funcionarios", "?select=id,name&order=name")
+      db.list("funcionarios", "?select=id,name&ativo=neq.false&order=name")
     ]).then(function(r) {
       setPicagens(r[0] || []);
       setEmps(r[1] || []);
@@ -5706,7 +5706,7 @@ function Avaliacoes() {
     Promise.all([
       db.list("avaliacoes", "?select=*&order=created_at.desc"),
       db.list("clientes", "?select=id,name,email,contact,phone"),
-      db.list("funcionarios", "?select=id,name,av"),
+      db.list("funcionarios", "?select=id,name,av&ativo=neq.false"),
       db.list("servicos", "?select=id,client_id,date,rated&status=eq.completed"),
       db.list("client_contacts", "?select=client_id,name,email,phone")
     ]).then(function(results) {
@@ -6086,7 +6086,7 @@ function Manager(props) {
       db.list("clientes", "?select=id,name,freq,iva_type"),
       db.list("servicos", "?select=*&order=date&date=eq." + today),
       db.list("servicos", "?select=*&date=gte." + today + "&order=date&limit=4"),
-      db.list("funcionarios", "?select=*&order=id"),
+      db.list("funcionarios", "?select=*&ativo=neq.false&order=id"),
       db.list("pedidos_extra", "?select=id&status=eq.pendente"),
       db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd + "&status=eq.completed"),
       db.list("pedidos_colaboradores", "?select=id&estado=eq.pendente"),
@@ -6224,7 +6224,7 @@ function Manager(props) {
     const [clientes, servicos, funcs] = await Promise.all([
       db.list("clientes", "?select=*&order=id"),
       db.list("servicos", "?select=*&order=date.desc"),
-      db.list("funcionarios", "?select=*&order=id")
+      db.list("funcionarios", "?select=*&ativo=neq.false&order=id")
     ]);
     const dt = localDateStr();
     download("SamorClean_clientes_" + dt + ".csv", toCSV(clientes || [], [
@@ -6543,7 +6543,7 @@ function Employee(props) {
   const [showEarlyLeave, setShowEarlyLeave] = useState(false);
   const [popupEmpJob, setPopupEmpJob] = useState(null);
   useEffect(function() {
-    db.list("funcionarios", "?select=*&order=id").then(function(rows) {
+    db.list("funcionarios", "?select=*&ativo=neq.false&order=id").then(function(rows) {
       setEmps(rows && rows.length ? rows : EMPS);
     });
   }, []);
@@ -7299,7 +7299,7 @@ function ClientPortal(props) {
       Promise.all([
         db.list("clientes", "?select=*&id=eq." + encodeURIComponent(clientId)),
         db.list("client_contacts", "?select=*&client_id=eq." + encodeURIComponent(clientId)),
-        db.list("funcionarios", "?select=*&order=id")
+        db.list("funcionarios", "?select=*&ativo=neq.false&order=id")
       ]).then(function(results) {
         if (results[0] && results[0].length) setClient(results[0][0]);
         setContacts(results[1] || []);
@@ -7945,7 +7945,7 @@ function PortalArmazem() {
   const [lastTipo, setLastTipo] = useState(null);
   const [checking, setChecking] = useState(false);
   useEffect(function() {
-    db.list("funcionarios", "?select=*&order=name").then(function(rows) {
+    db.list("funcionarios", "?select=*&ativo=neq.false&order=name").then(function(rows) {
       setEmps(rows && rows.length ? rows : EMPS);
       setLoading(false);
     });
