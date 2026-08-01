@@ -4397,7 +4397,7 @@ function PedidosColab(props) {
       var det = selPedido.detalhes;
       var horaIni = det.parcial ? horaInicioEdit || det.hora_inicio : null;
       var horaFimF = det.parcial ? horaFimEdit || det.hora_fim : null;
-      await fetch(SUPABASE_URL + "/rest/v1/ausencias", {
+      var resAus = await fetch(SUPABASE_URL + "/rest/v1/ausencias", {
         method: "POST",
         headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }),
         body: JSON.stringify({
@@ -4405,9 +4405,14 @@ function PedidosColab(props) {
           tipo: det.tipo || "Outro",
           data_inicio: det.data_inicio,
           data_fim: det.data_fim || det.data_inicio,
+          estado: "aprovado",
           descricao: (det.parcial ? "Aus\xEAncia parcial das " + horaIni + " \xE0s " + horaFimF + " \u2014 " : "") + (det.descricao || selPedido.descricao || "")
         })
       });
+      if (!resAus.ok) {
+        var errTxt = await resAus.text();
+        alert("\u26A0 O pedido foi aprovado, mas houve um erro ao criar o registo de aus\xEAncia automaticamente. Regista manualmente em Colaboradores \u2192 " + selPedido.funcionario_nome + " \u2192 Aus\xEAncias.\n\nErro: " + errTxt.slice(0, 200));
+      }
       if (det.parcial) {
         alert(selPedido.funcionario_nome + " tem aus\xEAncia parcial no dia " + det.data_inicio + ", das " + horaIni + " \xE0s " + horaFimF + ". Ajusta manualmente a equipa desse per\xEDodo nas Rotas, se necess\xE1rio.");
       } else if (det.data_inicio) {
