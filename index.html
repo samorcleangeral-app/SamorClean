@@ -3920,6 +3920,17 @@ function FichaRH(props) {
       });
     });
   }
+  async function classificarFalta(id, tipoFinal) {
+    var res = await fetch(SUPABASE_URL + "/rest/v1/ausencias?id=eq." + id, {
+      method: "PATCH",
+      headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }),
+      body: JSON.stringify({ tipo: tipoFinal })
+    });
+    if (res.ok) {
+      var d = await res.json();
+      setAusencias(function(p) { return p.map(function(a) { return a.id === id ? d[0] : a; }); });
+    }
+  }
   async function deleteFardamento(id) {
     if (!window.confirm("Apagar este registo?")) return;
     await fetch(SUPABASE_URL + "/rest/v1/fardamento?id=eq." + id, { method: "DELETE", headers: dbHeaders() });
@@ -4035,7 +4046,7 @@ function FichaRH(props) {
   }, style: Object.assign({}, btnX, { flex: 1, textAlign: "center" }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: addAusencia, style: Object.assign({}, btnG, { flex: 1, textAlign: "center" }) }, editAusId ? "Guardar altera\xE7\xF5es" : "Guardar"))), ausencias.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Sem aus\xEAncias registadas.") : ausencias.map(function(a) {
     const corTipo = a.tipo === "Baixa M\xE9dica" ? "#FEE2E2" : a.tipo === "F\xE9rias" ? "#DCFCE7" : a.tipo === "Falta Injustificada" ? "#FEE2E2" : "#EFF6FF";
     const corTxt = a.tipo === "Baixa M\xE9dica" ? "#991B1B" : a.tipo === "F\xE9rias" ? "#15803D" : a.tipo === "Falta Injustificada" ? "#991B1B" : "#1E40AF";
-    return /* @__PURE__ */ React.createElement("div", { key: a.id, style: Object.assign({}, card, { marginBottom: 10, display: "flex", alignItems: "center", gap: 14, padding: 14 }) }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } }, /* @__PURE__ */ React.createElement("span", { style: { background: corTipo, color: corTxt, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, a.tipo), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#64748B" } }, a.data_inicio, a.data_fim ? " \u2192 " + a.data_fim : ""), a.subsidio_ferias_pago && /* @__PURE__ */ React.createElement("span", { style: { background: "#DBEAFE", color: "#1E40AF", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700 } }, "\u20AC subs\xEDdio pago")), a.descricao && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, a.descricao)), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    return /* @__PURE__ */ React.createElement("div", { key: a.id, style: Object.assign({}, card, { marginBottom: 10, display: "flex", alignItems: "center", gap: 14, padding: 14, border: a.tipo === "Falta" ? "1.5px solid #F59E0B" : undefined }) }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("span", { style: { background: corTipo, color: corTxt, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, a.tipo), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#64748B" } }, a.data_inicio, a.data_fim ? " \u2192 " + a.data_fim : ""), a.subsidio_ferias_pago && /* @__PURE__ */ React.createElement("span", { style: { background: "#DBEAFE", color: "#1E40AF", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700 } }, "\u20AC subs\xEDdio pago"), a.tipo === "Falta" && /* @__PURE__ */ React.createElement("span", { style: { background: "#FEF3C7", color: "#92400E", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700 } }, "\u26A0 por classificar")), a.descricao && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, a.descricao), a.tipo === "Falta" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginTop: 8 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() { classificarFalta(a.id, "Falta Justificada"); }, style: { padding: "5px 10px", borderRadius: 7, border: "1.5px solid #16A34A", background: "#F0FDF4", color: "#16A34A", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, "Marcar Justificada"), /* @__PURE__ */ React.createElement("button", { onClick: function() { classificarFalta(a.id, "Falta Injustificada"); }, style: { padding: "5px 10px", borderRadius: 7, border: "1.5px solid #DC2626", background: "#FEE2E2", color: "#DC2626", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, "Marcar Injustificada"))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
       setAusForm({ tipo: a.tipo, data_inicio: a.data_inicio || "", data_fim: a.data_fim || "", descricao: a.descricao || "", estado: a.estado || "aprovado", subsidio_ferias_pago: a.subsidio_ferias_pago || false, subsidio_ferias_valor: a.subsidio_ferias_valor || "" });
       setEditAusId(a.id);
       setShowAddAus(true);
@@ -4305,12 +4316,35 @@ function Employees() {
   const [errMsg, setErrMsg] = useState("");
   const [empSearch, setEmpSearch] = useState("");
   const [pinRecemGerado, setPinRecemGerado] = useState(null);
+  const [faltasLevantamento, setFaltasLevantamento] = useState([]);
   useEffect(function() {
     db.list("funcionarios", "?select=*&order=id").then(function(rows) {
       setEmps(rows || []);
       setLoading(false);
     });
+    var hoje = /* @__PURE__ */ new Date();
+    var monthStart = localDateStr(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
+    var monthEnd = localDateStr(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0));
+    Promise.all([
+      db.list("ausencias", "?select=*&tipo=eq.Falta&data_inicio=gte." + monthStart + "&data_inicio=lte." + monthEnd),
+      db.list("funcionarios_rh", "?select=funcionario_id,tipo_contrato")
+    ]).then(function(res) {
+      var rhMap = {};
+      (res[1] || []).forEach(function(r) { rhMap[r.funcionario_id] = r.tipo_contrato; });
+      var faltasContrato = (res[0] || []).filter(function(a) { return (rhMap[a.funcionario_id] || "Contrato") === "Contrato"; });
+      setFaltasLevantamento(faltasContrato);
+    });
   }, []);
+  async function classificarFaltaLista(id, tipoFinal) {
+    var res = await fetch(SUPABASE_URL + "/rest/v1/ausencias?id=eq." + id, {
+      method: "PATCH",
+      headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }),
+      body: JSON.stringify({ tipo: tipoFinal })
+    });
+    if (res.ok) {
+      setFaltasLevantamento(function(p) { return p.filter(function(a) { return a.id !== id; }); });
+    }
+  }
   function openEdit(e) {
     setSel(e);
     setEditForm({ name: e.name, role: e.role || "", av: e.av || "" });
@@ -4438,7 +4472,20 @@ function Employees() {
       setNewForm({ id: "", name: "", role: "T\xE9cnico", pin: "", av: "" });
       setErrMsg("");
       setView("new");
-    } }, "+ Novo Funcionario"))), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar funcionário...", value: empSearch, onChange: function(e) { setEmpSearch(e.target.value); } }), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 } }, emps.filter(function(e) { return !empSearch || e.name.toLowerCase().indexOf(empSearch.toLowerCase()) !== -1 || (e.role || "").toLowerCase().indexOf(empSearch.toLowerCase()) !== -1; }).map(function(e) {
+    } }, "+ Novo Funcionario"))), faltasLevantamento.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { background: "#FFFBEB", border: "1.5px solid #F59E0B", marginBottom: 16 }) },
+    /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#92400E", marginBottom: 4 } }, "\u26A0 Levantamento de faltas por classificar este m\xEAs (", faltasLevantamento.length, ")"),
+    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#78350F", marginBottom: 12 } }, "S\xF3 colaboradores a Contrato \u2014 recibo verde n\xE3o precisa de justificar faltas."),
+    faltasLevantamento.map(function(a) {
+      var emp = emps.find(function(x) { return x.id === a.funcionario_id; });
+      return /* @__PURE__ */ React.createElement("div", { key: a.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #FDE68A" } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, emp ? emp.name : a.funcionario_id, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 400, marginLeft: 8 } }, a.data_inicio, a.data_fim && a.data_fim !== a.data_inicio ? " \u2192 " + a.data_fim : "")),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } },
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { classificarFaltaLista(a.id, "Falta Justificada"); }, style: { padding: "5px 10px", borderRadius: 7, border: "1.5px solid #16A34A", background: "#F0FDF4", color: "#16A34A", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, "Justificada"),
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { classificarFaltaLista(a.id, "Falta Injustificada"); }, style: { padding: "5px 10px", borderRadius: 7, border: "1.5px solid #DC2626", background: "#FEE2E2", color: "#DC2626", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, "Injustificada")
+        )
+      );
+    })
+  ), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar funcionário...", value: empSearch, onChange: function(e) { setEmpSearch(e.target.value); } }), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 } }, emps.filter(function(e) { return !empSearch || e.name.toLowerCase().indexOf(empSearch.toLowerCase()) !== -1 || (e.role || "").toLowerCase().indexOf(empSearch.toLowerCase()) !== -1; }).map(function(e) {
       return /* @__PURE__ */ React.createElement("div", { key: e.id, onClick: function() {
         openEdit(e);
       }, style: Object.assign({}, card, { cursor: "pointer", padding: 18, borderLeft: "4px solid " + (e.ativo === false ? "#CBD5E1" : "#2E6DA4"), marginBottom: 0, display: "flex", alignItems: "center", gap: 14, opacity: e.ativo === false ? 0.6 : 1 }) }, /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 48, color: e.ativo === false ? "#94A3B8" : (EC[e.id] || "#2E6DA4") }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, e.name), e.ativo === false && /* @__PURE__ */ React.createElement("span", { style: { background: "#F1F5F9", color: "#94A3B8", borderRadius: 6, padding: "1px 7px", fontSize: 10, fontWeight: 700 } }, "Inactivo")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, e.role)), e.rating ? /* @__PURE__ */ React.createElement(Stars, { r: e.rating }) : null);
@@ -4855,6 +4902,7 @@ function PedidosColab(props) {
   const [filtroTipo, setFiltroTipo] = useState("todos");
   const [selPedido, setSelPedido] = useState(null);
   const [resposta, setResposta] = useState("");
+  const [classificacaoFalta, setClassificacaoFalta] = useState(null);
   const [horaInicioEdit, setHoraInicioEdit] = useState("");
   const [horaFimEdit, setHoraFimEdit] = useState("");
   const TIPO_ICON = { ausencia: "\u{1F4C5}", fardamento: "\u{1F455}", material: "\u{1F9F9}" };
@@ -4908,6 +4956,7 @@ function PedidosColab(props) {
     onUpdate(pendentesTotal);
     setSelPedido(null);
     setResposta("");
+    setClassificacaoFalta(null);
   }
   // Group by employee
   var byFunc = {};
@@ -4948,6 +4997,7 @@ function PedidosColab(props) {
         return /* @__PURE__ */ React.createElement("div", { key: p.id, onClick: function() {
           setSelPedido(p);
           setResposta(p.resposta || "");
+          setClassificacaoFalta(null);
           setHoraInicioEdit(p.detalhes && p.detalhes.hora_inicio || "");
           setHoraFimEdit(p.detalhes && p.detalhes.hora_fim || "");
         }, style: Object.assign({}, card, { marginBottom: 10, padding: 16, cursor: "pointer", borderLeft: "4px solid " + cor, display: "flex", alignItems: "center", gap: 14 }) },
@@ -6552,6 +6602,7 @@ function Manager(props) {
   const [monthFat, setMonthFat] = useState(0);
   const [monthDivida, setMonthDivida] = useState(0);
   const [alertasFreqHome, setAlertasFreqHome] = useState([]);
+  const [faltasPorClassificar, setFaltasPorClassificar] = useState([]);
   function loadHomeData() {
     const now = /* @__PURE__ */ new Date();
     const monthStart = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
@@ -6568,7 +6619,9 @@ function Manager(props) {
       db.list("servicos", "?select=client_id,date&date=gte." + past60 + "&order=date.desc"),
       db.list("client_notes", "?select=id&vista_gestao=eq.false&expires_at=gte." + new Date().toISOString()),
       db.list("avaliacoes", "?select=id&vista=is.false"),
-      db.list("avaliacoes", "?select=stars,funcionario_id,created_at&created_at=gte." + new Date(now.getFullYear(), now.getMonth(), 1).toISOString())
+      db.list("avaliacoes", "?select=stars,funcionario_id,created_at&created_at=gte." + new Date(now.getFullYear(), now.getMonth(), 1).toISOString()),
+      db.list("ausencias", "?select=id,funcionario_id,data_inicio&tipo=eq.Falta&data_inicio=gte." + monthStart + "&data_inicio=lte." + monthEnd),
+      db.list("funcionarios_rh", "?select=funcionario_id,tipo_contrato")
     ]).then(function(results) {
       setClientCount(results[0] ? results[0].length : 0);
       setTodayJobs(results[1] || []);
@@ -6622,6 +6675,12 @@ function Manager(props) {
       });
       alertas.sort(function(a, b) { return a.diasRestantes - b.diasRestantes; });
       setAlertasFreqHome(alertas);
+      const rhMap = {};
+      (results[12] || []).forEach(function(r) { rhMap[r.funcionario_id] = r.tipo_contrato; });
+      const faltasContrato = (results[11] || []).filter(function(a) {
+        return (rhMap[a.funcionario_id] || "Contrato") === "Contrato";
+      });
+      setFaltasPorClassificar(faltasContrato);
       setLoading(false);
     });
   }
@@ -6781,6 +6840,29 @@ function Manager(props) {
         )
       );
     })(),
+    (function() {
+      if (faltasPorClassificar.length === 0) return null;
+      var hoje = new Date();
+      var ano = hoje.getFullYear(), mes = hoje.getMonth();
+      var d = new Date(ano, mes + 1, 0);
+      var diasUteis = [];
+      while (diasUteis.length < 2) {
+        if (d.getDay() !== 0 && d.getDay() !== 6) diasUteis.push(new Date(d));
+        d.setDate(d.getDate() - 1);
+      }
+      var dataAviso = diasUteis[1];
+      var jaChegou = localDateStr(hoje) >= localDateStr(dataAviso);
+      if (!jaChegou) return null;
+      return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1", background: "#FFFBEB", border: "1.5px solid #F59E0B", cursor: "pointer" }), onClick: function() { setView("employees"); } },
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } },
+          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 24 } }, "\u26A0\uFE0F"),
+          /* @__PURE__ */ React.createElement("div", null,
+            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#92400E" } }, "O m\xEAs est\xE1 quase a fechar \u2014 tens ", faltasPorClassificar.length, " falta", faltasPorClassificar.length !== 1 ? "s" : "", " por classificar"),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#78350F" } }, "Vai a Colaboradores \u2192 ficha de cada um \u2192 Aus\xEAncias, e marca como Justificada ou Injustificada.")
+          )
+        )
+      );
+    })(),
     alertasFreqHome.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1", background: "#FFF7ED", border: "1.5px solid #F59E0B" }) },
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#92400E", marginBottom: 8 } }, "\u23F0 Clientes quinzenais/mensais a agendar:"),
       alertasFreqHome.map(function(a, i) {
@@ -6835,7 +6917,7 @@ function EmpPedidos(props) {
       });
     }
   }, [tab, empId]);
-  const TIPOS_AUS = ["F\xE9rias", "Falta Justificada", "Licen\xE7a", "Forma\xE7\xE3o Externa", "Dispensa", "Outro"];
+  const TIPOS_AUS = ["F\xE9rias", "Falta", "Licen\xE7a", "Forma\xE7\xE3o Externa", "Dispensa", "Outro"];
   async function submitAusencia() {
     setSaving(true);
     var descParcial = ausForm.parcial ? " | das " + ausForm.hora_inicio + " \xE0s " + ausForm.hora_fim : (ausForm.data_fim ? " \u2192 " + ausForm.data_fim : "");
