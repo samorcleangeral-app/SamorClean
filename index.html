@@ -1703,6 +1703,42 @@ function Routes() {
       setVoltasFixas(function(p) { return p.map(function(x) { return x.id === v.id ? d[0] : x; }); });
     }
   }
+  const [migrando, setMigrando] = useState(false);
+  async function migrarClientesExistentes() {
+    if (!window.confirm("Isto vai criar voltas fixas automaticamente para todos os clientes que ainda t\xEAm \"Dias de visita\" configurados na ficha (clientes pontuais/obra ficam de fora). \n\n\u26A0 Se j\xE1 criaste voltas manualmente para algum cliente (ex: Protecnil), este processo N\xC3O verifica duplicados \u2014 vais ficar com voltas repetidas para esse cliente, e ter\xE1s de apagar as extra. Continuar?")) return;
+    setMigrando(true);
+    var freqMap = { "Semanal": "semanal", "Quinzenal": "quinzenal", "Mensal": "mensal_enesimo" };
+    var criadas = 0, clientesComErro = [];
+    for (var i = 0; i < clients.length; i++) {
+      var c = clients[i];
+      if (c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda") continue;
+      var sch = c.schedule || [];
+      if (!sch.length) continue;
+      for (var j = 0; j < sch.length; j++) {
+        var d = sch[j];
+        var payload = {
+          client_id: c.id,
+          frequencia: freqMap[c.freq] || "semanal",
+          dia_semana: d.day,
+          semana_do_mes: (freqMap[c.freq] === "mensal_enesimo") ? 1 : null,
+          hora_inicio: d.time_start,
+          hora_fim: d.time_end,
+          equipa: d.team_ids || c.equipa_habitual || [],
+          data_inicio: localDateStr()
+        };
+        var res = await fetch(SUPABASE_URL + "/rest/v1/voltas_fixas", {
+          method: "POST",
+          headers: dbHeaders(),
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) { criadas++; } else { clientesComErro.push(c.name); }
+      }
+    }
+    var rows = await db.list("voltas_fixas", "?select=*&order=created_at.desc");
+    setVoltasFixas(rows || []);
+    setMigrando(false);
+    alert("Migra\xE7\xE3o conclu\xEDda: " + criadas + " voltas fixas criadas." + (clientesComErro.length > 0 ? "\n\nErros em: " + clientesComErro.join(", ") : "") + "\n\nAtenção: os clientes 'Mensal' foram migrados com a regra '1\xBA dia da semana do m\xEAs' por defeito \u2014 revê e ajusta manualmente os que precisarem de outra regra (ex: 3\xBA segunda-feira).");
+  }
   const [showGen, setShowGen] = useState(false);
   const [preview, setPreview] = useState([]);
   const [generating, setGenerating] = useState(false);
@@ -2149,6 +2185,7 @@ function Routes() {
         /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 900, fontSize: 20, color: "#1A3A5C" } }, "\u2699 Voltas Fixas"),
         /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } },
           /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowVoltasFixas(false); }, style: btnO }, "\u2190 Voltar \xE0s Rotas"),
+          /* @__PURE__ */ React.createElement("button", { onClick: migrarClientesExistentes, disabled: migrando, style: Object.assign({}, btnO, { background: "#FFFBEB", border: "1.5px solid #F59E0B", color: "#92400E", opacity: migrando ? 0.6 : 1 }) }, migrando ? "A migrar..." : "\uD83D\uDCE5 Migrar clientes existentes"),
           /* @__PURE__ */ React.createElement("button", { onClick: function() {
             setNovaVolta({ client_id: "", frequencia: "semanal", dia_semana: 0, dia_mes: 1, semana_do_mes: 1, hora_inicio: "08:00", hora_fim: "10:00", equipa: [], data_inicio: localDateStr() });
             setEditVoltaId(null);
