@@ -1769,6 +1769,8 @@ function Routes() {
     window.__geracaoEmAndamento = true;
     try {
     const jobsFrescos = await db.list("servicos", "?select=client_id,date,t1,t2");
+    const voltasFrescas = await db.list("voltas_fixas", "?select=*");
+    voltasParaUsar = voltasFrescas || voltasParaUsar;
     const hoje = /* @__PURE__ */ new Date();
     const inicioJanela = localDateStr(hoje);
     const fimJanela = localDateStr(new Date(hoje.getFullYear(), hoje.getMonth() + 2, 0));
