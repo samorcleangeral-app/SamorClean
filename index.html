@@ -1765,6 +1765,10 @@ function Routes() {
     return n === 5 ? lastMatch : null;
   }
   async function garantirServicosGerados(voltasParaUsar, jobsExistentes, clientesParaUsar) {
+    if (window.__geracaoEmAndamento) return 0;
+    window.__geracaoEmAndamento = true;
+    try {
+    const jobsFrescos = await db.list("servicos", "?select=client_id,date,t1,t2");
     const hoje = /* @__PURE__ */ new Date();
     const inicioJanela = localDateStr(hoje);
     const fimJanela = localDateStr(new Date(hoje.getFullYear(), hoje.getMonth() + 2, 0));
@@ -1810,7 +1814,7 @@ function Routes() {
       var jaGerouAntes = !!v.ultima_gerada;
       var primeiraDesteLote = datasAlvo.length > 0 ? datasAlvo[0] : null;
       datasAlvo.forEach(function(dataStr) {
-        var jaExiste = jobsExistentes.some(function(j) { return j.client_id === v.client_id && j.date === dataStr; }) || novosServicos.some(function(j) { return j.client_id === v.client_id && j.date === dataStr; });
+        var jaExiste = jobsFrescos.some(function(j) { return j.client_id === v.client_id && j.date === dataStr; }) || novosServicos.some(function(j) { return j.client_id === v.client_id && j.date === dataStr; });
         if (jaExiste) return;
         var horas = horasReais(v.hora_inicio, v.hora_fim);
         var teamSize = (v.equipa || []).length || 1;
@@ -1841,6 +1845,9 @@ function Routes() {
       });
     }
     return novosServicos.length;
+    } finally {
+      window.__geracaoEmAndamento = false;
+    }
   }
   async function gerarServiçosAgora() {
     setGerandoServicos(true);
