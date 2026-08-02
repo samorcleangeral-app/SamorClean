@@ -1713,6 +1713,7 @@ function Routes() {
     for (var i = 0; i < clients.length; i++) {
       var c = clients[i];
       if (c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda") continue;
+      if (c.ativo === false) continue;
       var sch = c.schedule || [];
       if (!sch.length) continue;
       for (var j = 0; j < sch.length; j++) {
@@ -1765,7 +1766,7 @@ function Routes() {
     const atualizarUltimaGerada = {};
     voltasParaUsar.filter(function(v) { return v.ativo !== false; }).forEach(function(v) {
       const c = clientesParaUsar.find(function(x) { return x.id === v.client_id; });
-      if (!c) return;
+      if (!c || c.ativo === false) return;
       var datasAlvo = [];
       var dataMin = v.data_inicio > inicioJanela ? v.data_inicio : inicioJanela;
       if (v.frequencia === "semanal") {
@@ -1800,6 +1801,8 @@ function Routes() {
           if (alvo2Str >= dataMin && alvo2Str <= fimJanela) datasAlvo.push(alvo2Str);
         }
       }
+      var jaGerouAntes = !!v.ultima_gerada;
+      var primeiraDesteLote = datasAlvo.length > 0 ? datasAlvo[0] : null;
       datasAlvo.forEach(function(dataStr) {
         var jaExiste = jobsExistentes.some(function(j) { return j.client_id === v.client_id && j.date === dataStr; }) || novosServicos.some(function(j) { return j.client_id === v.client_id && j.date === dataStr; });
         if (jaExiste) return;
@@ -1809,9 +1812,10 @@ function Routes() {
         var val;
         if (tipoFat === "visita" || tipoFat === "mensal") val = parseFloat(c.valor_visita) || 0;
         else val = teamSize * horas * (c.price_per_hour || PRICE_PER_HOUR);
+        var equipaAAtribuir = (!jaGerouAntes && dataStr === primeiraDesteLote) ? (v.equipa || []) : [];
         novosServicos.push({
           client_id: c.id, cn: c.name, addr: c.address, svc: c.service || "", t1: v.hora_inicio, t2: v.hora_fim,
-          team: v.equipa || [], status: "pending", cl: c.checklist || [], prods: [], val: val,
+          team: equipaAAtribuir, status: "pending", cl: c.checklist || [], prods: [], val: val,
           iva_override: c.iva_type || "normal", paid: false, date: dataStr
         });
         if (!atualizarUltimaGerada[v.id] || dataStr > atualizarUltimaGerada[v.id]) atualizarUltimaGerada[v.id] = dataStr;
