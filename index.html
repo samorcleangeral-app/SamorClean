@@ -1634,6 +1634,7 @@ function Routes() {
   const [clients, setClients] = useState([]);
   const [ausencias, setAusencias] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [autoGerado, setAutoGerado] = useState(false);
   const [wk, setWk] = useState(0);
   const [calView, setCalView] = useState("week");
   const [selJob, setSelJob] = useState(null);
@@ -1739,6 +1740,121 @@ function Routes() {
     setMigrando(false);
     alert("Migra\xE7\xE3o conclu\xEDda: " + criadas + " voltas fixas criadas." + (clientesComErro.length > 0 ? "\n\nErros em: " + clientesComErro.join(", ") : "") + "\n\nAtenção: os clientes 'Mensal' foram migrados com a regra '1\xBA dia da semana do m\xEAs' por defeito \u2014 revê e ajusta manualmente os que precisarem de outra regra (ex: 3\xBA segunda-feira).");
   }
+  const [gerandoServicos, setGerandoServicos] = useState(false);
+  function nthWeekdayOfMonth(ano, mes, diaSemana, n) {
+    var d = new Date(ano, mes, 1);
+    var count = 0;
+    var lastMatch = null;
+    while (d.getMonth() === mes) {
+      var jsDay = d.getDay();
+      var nossoDay = jsDay === 0 ? 6 : jsDay - 1;
+      if (nossoDay === diaSemana) {
+        count++;
+        lastMatch = new Date(d);
+        if (count === n) return new Date(d);
+      }
+      d.setDate(d.getDate() + 1);
+    }
+    return n === 5 ? lastMatch : null;
+  }
+  async function garantirServicosGerados(voltasParaUsar, jobsExistentes, clientesParaUsar) {
+    const hoje = /* @__PURE__ */ new Date();
+    const inicioJanela = localDateStr(hoje);
+    const fimJanela = localDateStr(new Date(hoje.getFullYear(), hoje.getMonth() + 2, 0));
+    const novosServicos = [];
+    const atualizarUltimaGerada = {};
+    voltasParaUsar.filter(function(v) { return v.ativo !== false; }).forEach(function(v) {
+      const c = clientesParaUsar.find(function(x) { return x.id === v.client_id; });
+      if (!c) return;
+      var datasAlvo = [];
+      var dataMin = v.data_inicio > inicioJanela ? v.data_inicio : inicioJanela;
+      if (v.frequencia === "semanal") {
+        var d = new Date(dataMin + "T12:00:00");
+        while (d.getDay() !== (v.dia_semana === 6 ? 0 : v.dia_semana + 1)) d.setDate(d.getDate() + 1);
+        while (localDateStr(d) <= fimJanela) {
+          datasAlvo.push(localDateStr(d));
+          d.setDate(d.getDate() + 7);
+        }
+      } else if (v.frequencia === "quinzenal") {
+        var ref = v.ultima_gerada ? new Date(v.ultima_gerada + "T12:00:00") : null;
+        var d2 = new Date(dataMin + "T12:00:00");
+        while (d2.getDay() !== (v.dia_semana === 6 ? 0 : v.dia_semana + 1)) d2.setDate(d2.getDate() + 1);
+        if (ref) {
+          while (d2 <= ref) d2.setDate(d2.getDate() + 14);
+        }
+        while (localDateStr(d2) <= fimJanela) {
+          datasAlvo.push(localDateStr(d2));
+          d2.setDate(d2.getDate() + 14);
+        }
+      } else if (v.frequencia === "mensal_dia_fixo") {
+        for (var mOff = 0; mOff < 2; mOff++) {
+          var alvo = new Date(hoje.getFullYear(), hoje.getMonth() + mOff, v.dia_mes);
+          var alvoStr = localDateStr(alvo);
+          if (alvoStr >= dataMin && alvoStr <= fimJanela) datasAlvo.push(alvoStr);
+        }
+      } else if (v.frequencia === "mensal_enesimo") {
+        for (var mOff2 = 0; mOff2 < 2; mOff2++) {
+          var alvo2 = nthWeekdayOfMonth(hoje.getFullYear(), hoje.getMonth() + mOff2, v.dia_semana, v.semana_do_mes);
+          if (!alvo2) continue;
+          var alvo2Str = localDateStr(alvo2);
+          if (alvo2Str >= dataMin && alvo2Str <= fimJanela) datasAlvo.push(alvo2Str);
+        }
+      }
+      datasAlvo.forEach(function(dataStr) {
+        var jaExiste = jobsExistentes.some(function(j) { return j.client_id === v.client_id && j.date === dataStr; }) || novosServicos.some(function(j) { return j.client_id === v.client_id && j.date === dataStr; });
+        if (jaExiste) return;
+        var horas = horasReais(v.hora_inicio, v.hora_fim);
+        var teamSize = (v.equipa || []).length || 1;
+        var tipoFat = c.tipo_faturacao || "hora";
+        var val;
+        if (tipoFat === "visita" || tipoFat === "mensal") val = parseFloat(c.valor_visita) || 0;
+        else val = teamSize * horas * (c.price_per_hour || PRICE_PER_HOUR);
+        novosServicos.push({
+          client_id: c.id, cn: c.name, addr: c.address, svc: c.service || "", t1: v.hora_inicio, t2: v.hora_fim,
+          team: v.equipa || [], status: "pending", cl: c.checklist || [], prods: [], val: val,
+          iva_override: c.iva_type || "normal", paid: false, date: dataStr
+        });
+        if (!atualizarUltimaGerada[v.id] || dataStr > atualizarUltimaGerada[v.id]) atualizarUltimaGerada[v.id] = dataStr;
+      });
+    });
+    if (novosServicos.length === 0) return 0;
+    await fetch(SUPABASE_URL + "/rest/v1/servicos", {
+      method: "POST",
+      headers: dbHeaders(),
+      body: JSON.stringify(novosServicos)
+    });
+    for (var vid in atualizarUltimaGerada) {
+      await fetch(SUPABASE_URL + "/rest/v1/voltas_fixas?id=eq." + vid, {
+        method: "PATCH",
+        headers: dbHeaders(),
+        body: JSON.stringify({ ultima_gerada: atualizarUltimaGerada[vid] })
+      });
+    }
+    return novosServicos.length;
+  }
+  async function gerarServiçosAgora() {
+    setGerandoServicos(true);
+    var n = await garantirServicosGerados(voltasFixas, jobs, clients);
+    if (n > 0) {
+      var freshJobs = await db.list("servicos", "?select=*&order=date");
+      setJobs(freshJobs || []);
+      var freshVoltas = await db.list("voltas_fixas", "?select=*&order=created_at.desc");
+      setVoltasFixas(freshVoltas || []);
+    }
+    setGerandoServicos(false);
+    alert(n > 0 ? n + " servi\xE7o(s) novo(s) criado(s) a partir das voltas fixas." : "J\xE1 estava tudo actualizado \u2014 nenhum servi\xE7o novo foi necess\xE1rio.");
+  }
+  useEffect(function() {
+    if (autoGerado || loading || !jobs.length && !voltasFixas.length) return;
+    if (voltasFixas.length === 0) return;
+    setAutoGerado(true);
+    garantirServicosGerados(voltasFixas, jobs, clients).then(function(n) {
+      if (n > 0) {
+        db.list("servicos", "?select=*&order=date").then(function(fresh) { setJobs(fresh || []); });
+        db.list("voltas_fixas", "?select=*&order=created_at.desc").then(function(fresh) { setVoltasFixas(fresh || []); });
+      }
+    });
+  }, [loading, voltasFixas.length]);
   const [showGen, setShowGen] = useState(false);
   const [preview, setPreview] = useState([]);
   const [generating, setGenerating] = useState(false);
@@ -2186,6 +2302,7 @@ function Routes() {
         /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } },
           /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowVoltasFixas(false); }, style: btnO }, "\u2190 Voltar \xE0s Rotas"),
           /* @__PURE__ */ React.createElement("button", { onClick: migrarClientesExistentes, disabled: migrando, style: Object.assign({}, btnO, { background: "#FFFBEB", border: "1.5px solid #F59E0B", color: "#92400E", opacity: migrando ? 0.6 : 1 }) }, migrando ? "A migrar..." : "\uD83D\uDCE5 Migrar clientes existentes"),
+          /* @__PURE__ */ React.createElement("button", { onClick: gerarServiçosAgora, disabled: gerandoServicos, style: Object.assign({}, btnG, { opacity: gerandoServicos ? 0.6 : 1 }) }, gerandoServicos ? "A gerar..." : "\u26A1 Gerar servi\xE7os agora"),
           /* @__PURE__ */ React.createElement("button", { onClick: function() {
             setNovaVolta({ client_id: "", frequencia: "semanal", dia_semana: 0, dia_mes: 1, semana_do_mes: 1, hora_inicio: "08:00", hora_fim: "10:00", equipa: [], data_inicio: localDateStr() });
             setEditVoltaId(null);
