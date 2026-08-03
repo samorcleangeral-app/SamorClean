@@ -1813,6 +1813,8 @@ function Routes() {
           if (alvo2Str >= dataMin && alvo2Str <= fimJanela) datasAlvo.push(alvo2Str);
         }
       }
+      var excluidas = v.datas_excluidas || [];
+      datasAlvo = datasAlvo.filter(function(ds) { return excluidas.indexOf(ds) === -1; });
       var jaGerouAntes = !!v.ultima_gerada;
       var primeiraDesteLote = datasAlvo.length > 0 ? datasAlvo[0] : null;
       datasAlvo.forEach(function(dataStr) {
@@ -2100,6 +2102,21 @@ function Routes() {
       });
     });
     setSelJob(null);
+    var voltaRef = voltasFixas.find(function(v) {
+      return v.client_id === job.client_id && v.hora_inicio === job.t1 && v.hora_fim === job.t2 && (v.frequencia === "mensal_dia_fixo" || v.dia_semana === weekdayIdx(job.date));
+    });
+    if (voltaRef) {
+      var novasExcluidas = (voltaRef.datas_excluidas || []).concat([job.date]);
+      var res = await fetch(SUPABASE_URL + "/rest/v1/voltas_fixas?id=eq." + voltaRef.id, {
+        method: "PATCH",
+        headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }),
+        body: JSON.stringify({ datas_excluidas: novasExcluidas })
+      });
+      if (res.ok) {
+        var d = await res.json();
+        setVoltasFixas(function(p) { return p.map(function(v) { return v.id === voltaRef.id ? d[0] : v; }); });
+      }
+    }
   }
   function calcularValorJob(c, t1, t2, teamSize, date, jobIdAtual) {
     if (!c) return null;
