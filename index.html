@@ -1894,7 +1894,7 @@ function Routes() {
         conflitos.push({ jobId: j.id, cn: j.cn, date: j.date, t1: j.t1, t2: j.t2, tipo: "feriado", equipaAlvo: equipaAlvo, resolvido: false });
         return;
       }
-      var ausentes = equipaAlvo.filter(function(eid) { return isEmpAusente(eid, j.date); });
+      var ausentes = equipaAlvo.filter(function(eid) { return isEmpAusente(eid, j.date, j.t1, j.t2); });
       if (ausentes.length > 0) {
         conflitos.push({ jobId: j.id, cn: j.cn, date: j.date, t1: j.t1, t2: j.t2, tipo: "ausencia", equipaAlvo: equipaAlvo, ausentes: ausentes, equipaFinal: equipaAlvo.filter(function(eid) { return ausentes.indexOf(eid) === -1; }), resolvido: false });
         return;
@@ -2185,8 +2185,8 @@ function Routes() {
     var avisos = [];
     for (var di = 0; di < dates.length; di++) {
       var dataAtual = dates[di];
-      var teamDisponivel = nj.team.filter(function(eid) { return !isEmpAusente(eid, dataAtual); });
-      var ausentesNeste = nj.team.filter(function(eid) { return isEmpAusente(eid, dataAtual); });
+      var teamDisponivel = nj.team.filter(function(eid) { return !isEmpAusente(eid, dataAtual, nj.t1, nj.t2); });
+      var ausentesNeste = nj.team.filter(function(eid) { return isEmpAusente(eid, dataAtual, nj.t1, nj.t2); });
       ausentesNeste.forEach(function(eid) {
         var e = emps.find(function(x) { return x.id === eid; });
         avisos.push((e ? e.name.split(" ")[0] : eid) + " estava ausente em " + dataAtual + " \u2014 removido da equipa desse dia.");
@@ -2225,13 +2225,17 @@ function Routes() {
     });
     setNj(Object.assign({}, nj, { team: t }));
   }
-  function isEmpAusente(empId, dateStr) {
+  function isEmpAusente(empId, dateStr, t1, t2) {
     return ausencias.some(function(a) {
       if (a.funcionario_id !== empId) return false;
       if (!a.data_inicio) return false;
       const start = a.data_inicio;
       const end = a.data_fim || a.data_inicio;
-      return dateStr >= start && dateStr <= end;
+      if (dateStr < start || dateStr > end) return false;
+      if (a.parcial && a.hora_inicio && a.hora_fim && t1 && t2) {
+        return t1 < a.hora_fim && t2 > a.hora_inicio;
+      }
+      return true;
     });
   }
   function generatePreview() {
@@ -2271,10 +2275,10 @@ function Routes() {
         // Filter out absent employees
         const teamOriginal = d.team_ids || (c.equipa_habitual || []);
         const teamDisponivel = teamOriginal.filter(function(eid) {
-          return !isEmpAusente(eid, date);
+          return !isEmpAusente(eid, date, d.time_start, d.time_end);
         });
         const ausentesNeste = teamOriginal.filter(function(eid) {
-          return isEmpAusente(eid, date);
+          return isEmpAusente(eid, date, d.time_start, d.time_end);
         });
         if (ausentesNeste.length > 0) {
           ausentesNeste.forEach(function(eid) {
@@ -2768,7 +2772,7 @@ function Routes() {
     setPopupAction(null);
   }, style: Object.assign({}, btnX, { padding: "4px 8px" }) }, "\u2190"), /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C" } }, "Alterar equipa")), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, emps.map(function(e) {
     const inTeam = (selJob.team || []).indexOf(e.id) !== -1;
-    const ausente = isEmpAusente(e.id, selJob.date);
+    const ausente = isEmpAusente(e.id, selJob.date, selJob.t1, selJob.t2);
     const conflito = !inTeam && jobs.some(function(j) {
       return j.id !== selJob.id && j.date === selJob.date && (j.team || []).indexOf(e.id) !== -1 &&
         timeToMin(j.t1) < timeToMin(selJob.t2) && timeToMin(j.t2) > timeToMin(selJob.t1);
@@ -2907,7 +2911,7 @@ function Routes() {
     return /* @__PURE__ */ React.createElement("option", { key: t }, t);
   }))), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Equipa"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, emps.map(function(e) {
     const checked = nj.team.indexOf(e.id) !== -1;
-    const ausenteHoje = nj.date ? isEmpAusente(e.id, nj.date) : false;
+    const ausenteHoje = nj.date ? isEmpAusente(e.id, nj.date, nj.t1, nj.t2) : false;
     const outrosServicos = nj.date ? jobs.filter(function(j) {
       if (j.date !== nj.date || j.status === "completed" || (j.team || []).indexOf(e.id) === -1 || j.cn === nj.cn) return false;
       var toMin = function(t) { var p = (t || "0:0").split(":"); return parseInt(p[0]) * 60 + parseInt(p[1]); };
@@ -2939,7 +2943,7 @@ function Routes() {
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#92400E", marginBottom: 8 } }, "\uD83D\uDEAB Ausente: ", cf.ausentes.map(function(eid) { var e = emps.find(function(x) { return x.id === eid; }); return e ? e.name.split(" ")[0] : eid; }).join(", ")),
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 6 } }, "Escolhe substituto(s), ou deixa sem essa pessoa:"),
           /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } },
-            emps.filter(function(e) { return !isEmpAusente(e.id, cf.date); }).map(function(e) {
+            emps.filter(function(e) { return !isEmpAusente(e.id, cf.date, cf.t1, cf.t2); }).map(function(e) {
               var sel = (cf.equipaFinal || []).indexOf(e.id) !== -1;
               return /* @__PURE__ */ React.createElement("button", { key: e.id, onClick: function() {
                 setConflitosAlocacao(function(prev) {
@@ -3728,7 +3732,7 @@ function FichaRH(props) {
   const [showAddFard, setShowAddFard] = useState(false);
   const [showAddDoc, setShowAddDoc] = useState(false);
   const [showAddAv, setShowAddAv] = useState(false);
-  const [ausForm, setAusForm] = useState({ tipo: "Baixa M\xE9dica", data_inicio: "", data_fim: "", descricao: "", estado: "aprovado", subsidio_ferias_pago: false, subsidio_ferias_valor: "" });
+  const [ausForm, setAusForm] = useState({ tipo: "Baixa M\xE9dica", data_inicio: "", data_fim: "", descricao: "", estado: "aprovado", subsidio_ferias_pago: false, subsidio_ferias_valor: "", parcial: false, hora_inicio: "", hora_fim: "" });
   const [fardForm, setFardForm] = useState({ item: "", tamanho: "", quantidade: 1, data_entrega: localDateStr(), estado: "activo", notas: "" });
   const [docFile, setDocFile] = useState(null);
   const [docForm, setDocForm] = useState({ tipo: "Contrato", nome: "", mes_ano: "" });
@@ -3817,7 +3821,7 @@ function FichaRH(props) {
         });
         setShowAddAus(false);
         setEditAusId(null);
-        setAusForm({ tipo: "Baixa M\xE9dica", data_inicio: "", data_fim: "", descricao: "", estado: "aprovado", subsidio_ferias_pago: false, subsidio_ferias_valor: "" });
+        setAusForm({ tipo: "Baixa M\xE9dica", data_inicio: "", data_fim: "", descricao: "", estado: "aprovado", subsidio_ferias_pago: false, subsidio_ferias_valor: "", parcial: false, hora_inicio: "", hora_fim: "" });
       } else {
         alert("Erro ao actualizar aus\xEAncia: " + await res.text());
       }
@@ -3834,7 +3838,7 @@ function FichaRH(props) {
         if (nRemovidos > 0) alert(sel.name + " foi removido de " + nRemovidos + " servi\xE7o" + (nRemovidos > 1 ? "s" : "") + " j\xE1 agendado" + (nRemovidos > 1 ? "s" : "") + " nesse per\xEDodo. Pode ser necess\xE1rio reatribuir equipa.");
       }
       setShowAddAus(false);
-      setAusForm({ tipo: "Baixa M\xE9dica", data_inicio: "", data_fim: "", descricao: "", estado: "aprovado", subsidio_ferias_pago: false, subsidio_ferias_valor: "" });
+      setAusForm({ tipo: "Baixa M\xE9dica", data_inicio: "", data_fim: "", descricao: "", estado: "aprovado", subsidio_ferias_pago: false, subsidio_ferias_valor: "", parcial: false, hora_inicio: "", hora_fim: "" });
     }
   }
   async function addFardamento() {
@@ -4010,7 +4014,7 @@ function FichaRH(props) {
     setRhForm(Object.assign({}, rhForm, { notas: e.target.value }));
   } })), /* @__PURE__ */ React.createElement("button", { onClick: saveRH, style: Object.assign({}, btnG, { width: "100%", textAlign: "center" }) }, "Guardar dados RH"))), tab === "ausencias" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, ausencias.length, " registo", ausencias.length !== 1 ? "s" : ""), /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setEditAusId(null);
-    setAusForm({ tipo: "Baixa M\xE9dica", data_inicio: "", data_fim: "", descricao: "", estado: "aprovado", subsidio_ferias_pago: false, subsidio_ferias_valor: "" });
+    setAusForm({ tipo: "Baixa M\xE9dica", data_inicio: "", data_fim: "", descricao: "", estado: "aprovado", subsidio_ferias_pago: false, subsidio_ferias_valor: "", parcial: false, hora_inicio: "", hora_fim: "" });
     setShowAddAus(true);
   }, style: btn }, "+ Registar aus\xEAncia")), showAddAus && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#F8FAFC" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 12 } }, editAusId ? "Editar aus\xEAncia" : "Nova aus\xEAncia"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tipo"), /* @__PURE__ */ React.createElement("select", { style: inp, value: ausForm.tipo, onChange: function(e) {
     setAusForm(Object.assign({}, ausForm, { tipo: e.target.value }));
@@ -4020,6 +4024,12 @@ function FichaRH(props) {
     setAusForm(Object.assign({}, ausForm, { data_inicio: e.target.value }));
   } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Data fim"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: ausForm.data_fim, onChange: function(e) {
     setAusForm(Object.assign({}, ausForm, { data_fim: e.target.value }));
+  } })), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", id: "ausParcialGestao", checked: ausForm.parcial, onChange: function(e) {
+    setAusForm(Object.assign({}, ausForm, { parcial: e.target.checked }));
+  } }), /* @__PURE__ */ React.createElement("label", { htmlFor: "ausParcialGestao", style: { fontSize: 12, color: "#334155", fontWeight: 600, cursor: "pointer" } }, "Aus\xEAncia parcial (s\xF3 algumas horas nesse dia)")), ausForm.parcial && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Das"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "time", value: ausForm.hora_inicio, onChange: function(e) {
+    setAusForm(Object.assign({}, ausForm, { hora_inicio: e.target.value }));
+  } })), ausForm.parcial && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "\xC0s"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "time", value: ausForm.hora_fim, onChange: function(e) {
+    setAusForm(Object.assign({}, ausForm, { hora_fim: e.target.value }));
   } })), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Descri\xE7\xE3o / Notas"), /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 50 }), value: ausForm.descricao, onChange: function(e) {
     setAusForm(Object.assign({}, ausForm, { descricao: e.target.value }));
   } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Estado"), /* @__PURE__ */ React.createElement("select", { style: inp, value: ausForm.estado, onChange: function(e) {
@@ -4047,7 +4057,7 @@ function FichaRH(props) {
     const corTipo = a.tipo === "Baixa M\xE9dica" ? "#FEE2E2" : a.tipo === "F\xE9rias" ? "#DCFCE7" : a.tipo === "Falta Injustificada" ? "#FEE2E2" : "#EFF6FF";
     const corTxt = a.tipo === "Baixa M\xE9dica" ? "#991B1B" : a.tipo === "F\xE9rias" ? "#15803D" : a.tipo === "Falta Injustificada" ? "#991B1B" : "#1E40AF";
     return /* @__PURE__ */ React.createElement("div", { key: a.id, style: Object.assign({}, card, { marginBottom: 10, display: "flex", alignItems: "center", gap: 14, padding: 14, border: a.tipo === "Falta" ? "1.5px solid #F59E0B" : undefined }) }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("span", { style: { background: corTipo, color: corTxt, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, a.tipo), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#64748B" } }, a.data_inicio, a.data_fim ? " \u2192 " + a.data_fim : ""), a.subsidio_ferias_pago && /* @__PURE__ */ React.createElement("span", { style: { background: "#DBEAFE", color: "#1E40AF", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700 } }, "\u20AC subs\xEDdio pago"), a.tipo === "Falta" && /* @__PURE__ */ React.createElement("span", { style: { background: "#FEF3C7", color: "#92400E", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700 } }, "\u26A0 por classificar")), a.descricao && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, a.descricao), a.tipo === "Falta" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginTop: 8 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() { classificarFalta(a.id, "Falta Justificada"); }, style: { padding: "5px 10px", borderRadius: 7, border: "1.5px solid #16A34A", background: "#F0FDF4", color: "#16A34A", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, "Marcar Justificada"), /* @__PURE__ */ React.createElement("button", { onClick: function() { classificarFalta(a.id, "Falta Injustificada"); }, style: { padding: "5px 10px", borderRadius: 7, border: "1.5px solid #DC2626", background: "#FEE2E2", color: "#DC2626", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, "Marcar Injustificada"))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
-      setAusForm({ tipo: a.tipo, data_inicio: a.data_inicio || "", data_fim: a.data_fim || "", descricao: a.descricao || "", estado: a.estado || "aprovado", subsidio_ferias_pago: a.subsidio_ferias_pago || false, subsidio_ferias_valor: a.subsidio_ferias_valor || "" });
+      setAusForm({ tipo: a.tipo, data_inicio: a.data_inicio || "", data_fim: a.data_fim || "", descricao: a.descricao || "", estado: a.estado || "aprovado", subsidio_ferias_pago: a.subsidio_ferias_pago || false, subsidio_ferias_valor: a.subsidio_ferias_valor || "", parcial: a.parcial || false, hora_inicio: a.hora_inicio || "", hora_fim: a.hora_fim || "" });
       setEditAusId(a.id);
       setShowAddAus(true);
     }, style: Object.assign({}, btnO, { fontSize: 11, padding: "5px 10px" }) }, "Editar"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
@@ -4934,6 +4944,9 @@ function PedidosColab(props) {
           data_inicio: det.data_inicio,
           data_fim: det.data_fim || det.data_inicio,
           estado: "aprovado",
+          parcial: !!det.parcial,
+          hora_inicio: det.parcial ? horaIni : null,
+          hora_fim: det.parcial ? horaFimF : null,
           descricao: (det.parcial ? "Aus\xEAncia parcial das " + horaIni + " \xE0s " + horaFimF + " \u2014 " : "") + (det.descricao || selPedido.descricao || "")
         })
       });
