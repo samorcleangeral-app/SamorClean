@@ -445,6 +445,7 @@ function Finance() {
   const [ajustesRecibo, setAjustesRecibo] = useState({});
   const [premiosOpcionais, setPremiosOpcionais] = useState({});
   const [premiosOpcionaisInput, setPremiosOpcionaisInput] = useState({});
+  const [despesaMediaMensal, setDespesaMediaMensal] = useState(0);
   const [ordenadoGerenciaInput, setOrdenadoGerenciaInput] = useState("");
   const [savingOrdenado, setSavingOrdenado] = useState(false);
   const [anoSelecionado, setAnoSelecionado] = useState((/* @__PURE__ */ new Date()).getFullYear());
@@ -498,7 +499,8 @@ function Finance() {
       db.list("servicos", "?select=*&status=eq.completed&paid=is.false"),
       db.list("ordenado_gerencia", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
       db.list("ajuste_dias_recibo_verde", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
-      db.list("premio_assiduidade_opcional", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1))
+      db.list("premio_assiduidade_opcional", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
+      db.list("historico_financeiro", "?select=ano,mes,despesas&ano=eq." + now.getFullYear() + "&order=mes.desc")
     ]).then(function(results) {
       const cm = {};
       (results[2] || []).forEach(function(c) { cm[c.id] = c; });
@@ -516,6 +518,9 @@ function Finance() {
       var premiosMap = {};
       (results[17] || []).forEach(function(p) { premiosMap[p.funcionario_id] = parseFloat(p.valor) || 0; });
       setPremiosOpcionais(premiosMap);
+      var historicoDesp = (results[17] || []).filter(function(h) { return parseFloat(h.despesas) > 0; }).slice(0, 3);
+      var mediaDesp = historicoDesp.length > 0 ? historicoDesp.reduce(function(s, h) { return s + parseFloat(h.despesas); }, 0) / historicoDesp.length : 0;
+      setDespesaMediaMensal(mediaDesp);
       setClientsMap(cm);
       setClientes(results[2] || []);
       setDespesas(results[3] || []);
@@ -1083,6 +1088,19 @@ function Finance() {
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 34, fontWeight: 900, color: saldoActual >= 0 ? "#16A34A" : "#EF4444" } }, fmt(saldoActual), "\u20AC"),
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 4 } }, "Desde ", new Date(cashConfig.data_inicio + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" }), " \u2014 saldo inicial ", fmt(cashConfig.saldo_inicial), "\u20AC")
         ),
+        despesaMediaMensal > 0 && (function() {
+          var mesesFolego = saldoActual / despesaMediaMensal;
+          var cor = mesesFolego >= 6 ? "#16A34A" : mesesFolego >= 3 ? "#F59E0B" : "#EF4444";
+          var bg = mesesFolego >= 6 ? "#F0FDF4" : mesesFolego >= 3 ? "#FFFBEB" : "#FEF2F2";
+          return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, padding: 20, background: bg, border: "1.5px solid " + cor }) },
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 } }, "\u23F3 F\xF4lego Financeiro"),
+            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 8 } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 30, fontWeight: 900, color: cor } }, mesesFolego >= 99 ? "99+" : mesesFolego.toFixed(1)),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", fontWeight: 700 } }, "meses de f\xF4lego, ao ritmo actual de despesa")
+            ),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 6 } }, "Baseado numa despesa m\xE9dia mensal de ", fmt(despesaMediaMensal), "\u20AC (\xFAltimos meses com dados completos, incluindo m\xE3o-de-obra)")
+          );
+        })(),
         /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "flex-end", marginBottom: 14 } },
           /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowMov(true); }, style: btnG }, "+ Movimento")
         ),
