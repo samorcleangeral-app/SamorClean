@@ -6627,6 +6627,7 @@ function Manager(props) {
   const [clientCount, setClientCount] = useState(0);
   const [todayJobs, setTodayJobs] = useState([]);
   const [recentJobs, setRecentJobs] = useState([]);
+  const [recentCompletedJobs, setRecentCompletedJobs] = useState([]);
   const [emps, setEmps] = useState(EMPS);
   const [loading, setLoading] = useState(true);
   const [pedidosPendentes, setPedidosPendentes] = useState(0);
@@ -6648,6 +6649,7 @@ function Manager(props) {
       db.list("clientes", "?select=id,name,freq,iva_type,ativo"),
       db.list("servicos", "?select=*&order=date&date=eq." + today),
       db.list("servicos", "?select=*&date=gte." + today + "&status=eq.pending&order=date.asc,t1.asc&limit=4"),
+      db.list("servicos", "?select=*&date=lte." + today + "&status=eq.completed&order=date.desc,t1.desc&limit=4"),
       db.list("funcionarios", "?select=*&ativo=neq.false&order=id"),
       db.list("pedidos_extra", "?select=id&status=eq.pendente"),
       db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd + "&status=eq.completed"),
@@ -6662,13 +6664,14 @@ function Manager(props) {
       setClientCount(results[0] ? results[0].length : 0);
       setTodayJobs(results[1] || []);
       setRecentJobs(results[2] || []);
-      setEmps(results[3] && results[3].length ? results[3] : EMPS);
-      setPedidosPendentes(results[4] ? results[4].length : 0);
-      setPedidosColabPendentes(results[6] ? results[6].length : 0);
-      setNotasClientesNovas(results[8] ? results[8].length : 0);
-      setAvaliacoesNovas(results[9] ? results[9].length : 0);
+      setRecentCompletedJobs(results[3] || []);
+      setEmps(results[4] && results[4].length ? results[4] : EMPS);
+      setPedidosPendentes(results[5] ? results[5].length : 0);
+      setPedidosColabPendentes(results[7] ? results[7].length : 0);
+      setNotasClientesNovas(results[9] ? results[9].length : 0);
+      setAvaliacoesNovas(results[10] ? results[10].length : 0);
       var ratingsMesCalc = {};
-      (results[10] || []).forEach(function(a) {
+      (results[11] || []).forEach(function(a) {
         if (!ratingsMesCalc[a.funcionario_id]) ratingsMesCalc[a.funcionario_id] = { soma: 0, count: 0 };
         ratingsMesCalc[a.funcionario_id].soma += a.stars || 0;
         ratingsMesCalc[a.funcionario_id].count++;
@@ -6681,7 +6684,7 @@ function Manager(props) {
       (results[0] || []).forEach(function(c) {
         cm[c.id] = c;
       });
-      const monthJobs = results[5] || [];
+      const monthJobs = results[6] || [];
       function withIva(j) {
         const ivaT = j.iva_override || (cm[j.client_id] ? cm[j.client_id].iva_type : "normal") || "normal";
         return ivaT === "autoliquida\xE7\xE3o" ? j.val || 0 : (j.val || 0) * 1.23;
@@ -6691,7 +6694,7 @@ function Manager(props) {
       setMonthFat(fat);
       setMonthDivida(fat - rec);
       // Alertas quinzenal/mensal
-      const recentJobs = results[7] || [];
+      const recentJobs = results[8] || [];
       const lastJobByClient = {};
       recentJobs.forEach(function(j) {
         if (!lastJobByClient[j.client_id]) lastJobByClient[j.client_id] = j.date;
@@ -6712,8 +6715,8 @@ function Manager(props) {
       alertas.sort(function(a, b) { return a.diasRestantes - b.diasRestantes; });
       setAlertasFreqHome(alertas);
       const rhMap = {};
-      (results[12] || []).forEach(function(r) { rhMap[r.funcionario_id] = r.tipo_contrato; });
-      const faltasContrato = (results[11] || []).filter(function(a) {
+      (results[13] || []).forEach(function(r) { rhMap[r.funcionario_id] = r.tipo_contrato; });
+      const faltasContrato = (results[12] || []).filter(function(a) {
         return (rhMap[a.funcionario_id] || "Contrato") === "Contrato";
       });
       setFaltasPorClassificar(faltasContrato);
@@ -6916,6 +6919,10 @@ function Manager(props) {
     ),
     /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Proximos servicos"), recentJobs.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8", padding: "12px 0" } }, "Sem servicos registados ainda.") : recentJobs.slice(0, 4).map(function(j) {
     return /* @__PURE__ */ React.createElement("div", { key: j.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 6, height: 6, borderRadius: "50%", background: j.status === "completed" ? "#16A34A" : "#F59E0B", flexShrink: 0 } }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, j.cn), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, (/* @__PURE__ */ new Date(j.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" }), " ", j.t1)), /* @__PURE__ */ React.createElement(Bdg, { label: j.status === "completed" ? "Feito" : "Pendente", bg: j.status === "completed" ? "#DCFCE7" : "#FEF3C7", tx: j.status === "completed" ? "#15803D" : "#92400E" }));
+  }), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    setView("routes");
+  }, style: Object.assign({}, btnO, { width: "100%", marginTop: 12, fontSize: 12, padding: "8px 0", textAlign: "center" }) }, "Ver rotas")), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Servi\xE7os realizados"), recentCompletedJobs.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8", padding: "12px 0" } }, "Ainda sem servi\xE7os conclu\xEDdos.") : recentCompletedJobs.map(function(j) {
+    return /* @__PURE__ */ React.createElement("div", { key: j.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 6, height: 6, borderRadius: "50%", background: "#16A34A", flexShrink: 0 } }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, j.cn), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, (/* @__PURE__ */ new Date(j.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" }), " ", j.t1)), /* @__PURE__ */ React.createElement(Bdg, { label: "Feito", bg: "#DCFCE7", tx: "#15803D" }));
   }), /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setView("routes");
   }, style: Object.assign({}, btnO, { width: "100%", marginTop: 12, fontSize: 12, padding: "8px 0", textAlign: "center" }) }, "Ver rotas")), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "Ranking da Equipa"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 10 } }, "Ordenado pela nota deste m\xEAs \u2014 nota hist\xF3rica ao lado"), emps.slice().map(function(e) {
