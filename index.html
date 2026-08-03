@@ -4468,9 +4468,15 @@ function Employees() {
         var nome = emp ? emp.name : fid;
         var totalDias = 0;
         byFunc[fid].forEach(function(a) {
-          var dias = diasNoMes(a);
-          totalDias += dias;
-          linhas += "<tr><td style='padding:8px 10px;font-weight:600'>" + nome + "</td><td style='padding:8px 10px'>" + (a.tipo || "\u2014") + "</td><td style='padding:8px 10px'>" + a.data_inicio + (a.data_fim && a.data_fim !== a.data_inicio ? " \u2192 " + a.data_fim : "") + "</td><td style='padding:8px 10px;text-align:center;font-weight:700'>" + dias + "</td></tr>";
+          var diasTxt;
+          if (a.parcial && a.hora_inicio && a.hora_fim) {
+            diasTxt = "Parcial (" + a.hora_inicio + "\u2013" + a.hora_fim + ")";
+          } else {
+            var dias = diasNoMes(a);
+            totalDias += dias;
+            diasTxt = String(dias);
+          }
+          linhas += "<tr><td style='padding:8px 10px;font-weight:600'>" + nome + "</td><td style='padding:8px 10px'>" + (a.tipo || "\u2014") + "</td><td style='padding:8px 10px'>" + a.data_inicio + (a.data_fim && a.data_fim !== a.data_inicio ? " \u2192 " + a.data_fim : "") + "</td><td style='padding:8px 10px;text-align:center;font-weight:700'>" + diasTxt + "</td></tr>";
         });
       });
     }
