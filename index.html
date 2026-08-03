@@ -5778,6 +5778,15 @@ function RelatorioMensal() {
   const MESES = ["Janeiro", "Fevereiro", "Mar\xE7o", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
   const CUSTO_KM = 0.4;
   const HORAS_CONTRATO = 40;
+  function diasUteisDoMes(anoRef, mesRef) {
+    var d = new Date(anoRef, mesRef, 1);
+    var count = 0;
+    while (d.getMonth() === mesRef) {
+      if (d.getDay() !== 0 && d.getDay() !== 6) count++;
+      d.setDate(d.getDate() + 1);
+    }
+    return count;
+  }
   async function gerar() {
     setLoading(true);
     try {
@@ -5960,7 +5969,8 @@ function RelatorioMensal() {
     const empRows = Object.values(byEmp).filter(function(e) {
       return e.servicos > 0;
     }).map(function(e) {
-      const prod = HORAS_CONTRATO > 0 ? Math.round(e.horas / HORAS_CONTRATO * 100) : 0;
+      const horasRefMes = diasUteisDoMes(ano, mes) * 8;
+      const prod = horasRefMes > 0 ? Math.round(e.horas / horasRefMes * 100) : 0;
       const mediaAvs = e.avsStars.length > 0 ? (e.avsStars.reduce(function(s, x) {
         return s + x;
       }, 0) / e.avsStars.length).toFixed(1) : "\u2014";
@@ -6096,7 +6106,8 @@ function RelatorioMensal() {
   }))), /* @__PURE__ */ React.createElement("tbody", null, Object.values(data.byEmp).filter(function(e) {
     return e.servicos > 0;
   }).map(function(e) {
-    const prod = Math.round(e.horas / HORAS_CONTRATO * 100);
+    const horasRefMes2 = diasUteisDoMes(ano, mes) * 8;
+    const prod = horasRefMes2 > 0 ? Math.round(e.horas / horasRefMes2 * 100) : 0;
     const mediaAvs = e.avsStars.length > 0 ? (e.avsStars.reduce(function(s, x) {
       return s + x;
     }, 0) / e.avsStars.length).toFixed(1) : "\u2014";
