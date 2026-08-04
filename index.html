@@ -446,6 +446,7 @@ function Finance() {
   const [premiosOpcionais, setPremiosOpcionais] = useState({});
   const [premiosOpcionaisInput, setPremiosOpcionaisInput] = useState({});
   const [despesaMediaMensal, setDespesaMediaMensal] = useState(0);
+  const [receitaMediaMensal, setReceitaMediaMensal] = useState(0);
   const [ordenadoGerenciaInput, setOrdenadoGerenciaInput] = useState("");
   const [savingOrdenado, setSavingOrdenado] = useState(false);
   const [anoSelecionado, setAnoSelecionado] = useState((/* @__PURE__ */ new Date()).getFullYear());
@@ -500,7 +501,7 @@ function Finance() {
       db.list("ordenado_gerencia", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
       db.list("ajuste_dias_recibo_verde", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
       db.list("premio_assiduidade_opcional", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
-      db.list("historico_financeiro", "?select=ano,mes,despesas&ano=eq." + now.getFullYear() + "&order=mes.desc")
+      db.list("historico_financeiro", "?select=ano,mes,despesas,faturado&ano=eq." + now.getFullYear() + "&order=mes.desc")
     ]).then(function(results) {
       const cm = {};
       (results[2] || []).forEach(function(c) { cm[c.id] = c; });
@@ -521,6 +522,9 @@ function Finance() {
       var historicoDesp = (results[17] || []).filter(function(h) { return parseFloat(h.despesas) > 0; }).slice(0, 3);
       var mediaDesp = historicoDesp.length > 0 ? historicoDesp.reduce(function(s, h) { return s + parseFloat(h.despesas); }, 0) / historicoDesp.length : 0;
       setDespesaMediaMensal(mediaDesp);
+      var historicoFat = (results[17] || []).filter(function(h) { return parseFloat(h.despesas) > 0; }).slice(0, 3);
+      var mediaFat = historicoFat.length > 0 ? historicoFat.reduce(function(s, h) { return s + (parseFloat(h.faturado) || 0); }, 0) / historicoFat.length : 0;
+      setReceitaMediaMensal(mediaFat);
       setClientsMap(cm);
       setClientes(results[2] || []);
       setDespesas(results[3] || []);
@@ -1147,6 +1151,14 @@ function Finance() {
               ),
               /* @__PURE__ */ React.createElement("div", { style: { background: "#F1F5F9", borderRadius: 4, height: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { background: cor, height: "100%", borderRadius: 4, width: pct + "%", transition: "width 0.3s" } }))
             ),
+            meta.tipo !== "margem_lucro" && actual !== null && receitaMediaMensal > 0 && (function() {
+              var fluxoLiquido = receitaMediaMensal / 1.23 - despesaMediaMensal;
+              var falta = meta.valor_alvo - actual;
+              if (falta <= 0) return /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#16A34A", fontWeight: 700, marginTop: 8 } }, "\u2713 Objectivo j\xE1 atingido!");
+              if (fluxoLiquido <= 0) return /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#EF4444", marginTop: 8 } }, "\u26A0 Ao ritmo actual (despesa acima da receita), este objectivo n\xE3o est\xE1 a ser alcan\xE7ado.");
+              var mesesFalta = falta / fluxoLiquido;
+              return /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 8 } }, "A este ritmo de poupan\xE7a (\u2248", fmt(fluxoLiquido), "\u20AC/m\xEAs), atinges em \u2248 ", mesesFalta.toFixed(1), " meses");
+            })(),
             meta.notas && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 8, fontStyle: "italic" } }, meta.notas)
           );
         })
