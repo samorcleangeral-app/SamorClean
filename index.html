@@ -7105,6 +7105,19 @@ function Employee(props) {
     return function() { window.removeEventListener("click", resetTimer); window.removeEventListener("touchstart", resetTimer); };
   }, [phase]);
   const [emp, setEmp] = useState(null);
+  const [ratingMesEmp, setRatingMesEmp] = useState(null);
+  useEffect(function() {
+    if (!emp) { setRatingMesEmp(null); return; }
+    var monthStart = new Date((/* @__PURE__ */ new Date()).getFullYear(), (/* @__PURE__ */ new Date()).getMonth(), 1).toISOString();
+    db.list("avaliacoes", "?select=stars&funcionario_id=eq." + encodeURIComponent(emp.id) + "&created_at=gte." + monthStart).then(function(rows) {
+      if (rows && rows.length > 0) {
+        var media = rows.reduce(function(s, r) { return s + (r.stars || 0); }, 0) / rows.length;
+        setRatingMesEmp(Math.round(media * 10) / 10);
+      } else {
+        setRatingMesEmp(null);
+      }
+    });
+  }, [emp && emp.id]);
   const [sEmp, setSEmp] = useState(null);
   const [pin, setPin] = useState("");
   const [pinErr, setPinErr] = useState(false);
@@ -7527,7 +7540,7 @@ function Employee(props) {
     { l: "Feitos", v: myJ.filter(function(j) {
       return j.status === "completed";
     }).length },
-    { l: "Avalia\xE7\xE3o", v: emp.rating ? emp.rating + "\u2605" : "--" }
+    { l: "Avalia\xE7\xE3o (m\xEAs)", v: ratingMesEmp ? ratingMesEmp + "\u2605" : "--" }
   ].map(function(s) {
     return /* @__PURE__ */ React.createElement("div", { key: s.l, style: { background: "rgba(255,255,255,0.08)", borderRadius: 10, padding: "10px 8px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 18 } }, s.v), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.4)", fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginTop: 2 } }, s.l));
   }))), /* @__PURE__ */ React.createElement("div", { style: { padding: "16px 16px 32px" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" } }, ["hoje", "hist\xF3rico", "semana", "assiduidade", "picagens", "formacao", "pedidos"].map(function(t) {
