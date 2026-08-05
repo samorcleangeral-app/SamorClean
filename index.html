@@ -4570,10 +4570,12 @@ function QuadroOperacional() {
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [notaForm, setNotaForm] = useState({ texto: "", tipo: "permanente", emp_id: "", expires_at: "" });
   const [showAddNota, setShowAddNota] = useState(false);
+  const [dataView, setDataView] = useState(today);
+  const [showTimeline, setShowTimeline] = useState(false);
   function load() {
     var nowStr = new Date().toISOString();
     Promise.all([
-      db.list("servicos", "?select=*&date=eq." + today + "&order=t1"),
+      db.list("servicos", "?select=*&date=eq." + dataView + "&order=t1"),
       db.list("funcionarios", "?select=*&ativo=neq.false&order=name"),
       db.list("notas_operacionais", "?select=*&order=created_at.desc")
     ]).then(function(r) {
@@ -4589,6 +4591,7 @@ function QuadroOperacional() {
   const [liveConnected, setLiveConnected] = useState(false);
   useEffect(function() {
     load();
+    if (dataView !== today) return;
     var interval = setInterval(load, 60000);
     var channel = null;
     if (supabaseRT) {
@@ -4598,7 +4601,7 @@ function QuadroOperacional() {
         .subscribe(function(status) { setLiveConnected(status === "SUBSCRIBED"); });
     }
     return function() { clearInterval(interval); if (channel) supabaseRT.removeChannel(channel); };
-  }, []);
+  }, [dataView]);
   async function addNota() {
     if (!notaForm.texto.trim()) return;
     var data = { texto: notaForm.texto.trim(), tipo: notaForm.tipo, destinatario: notaForm.emp_id ? "individual" : "todos", emp_id: notaForm.emp_id || null, expires_at: notaForm.tipo === "provisoria" && notaForm.expires_at ? new Date(notaForm.expires_at + "T23:59:59").toISOString() : null };
@@ -4616,11 +4619,37 @@ function QuadroOperacional() {
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } },
       /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Quadro Operacional"),
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
-        liveConnected && /* @__PURE__ */ React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 4, background: "#DCFCE7", color: "#15803D", borderRadius: 6, padding: "3px 8px", fontSize: 11, fontWeight: 700 } }, /* @__PURE__ */ React.createElement("span", { style: { width: 6, height: 6, borderRadius: "50%", background: "#16A34A" } }), "Ao vivo"),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { var d = new Date(dataView + "T12:00:00"); d.setDate(d.getDate() - 1); setDataView(localDateStr(d)); }, style: Object.assign({}, btnO, { fontSize: 12, padding: "6px 10px" }) }, "\u2039"),
+        /* @__PURE__ */ React.createElement("input", { type: "date", value: dataView, max: today, onChange: function(e) { if (e.target.value) setDataView(e.target.value); }, style: Object.assign({}, inp, { width: 140, padding: "6px 8px", fontSize: 12 }) }),
+        dataView !== today ? /* @__PURE__ */ React.createElement("button", { onClick: function() { setDataView(today); }, style: Object.assign({}, btnO, { fontSize: 12, padding: "6px 12px" }) }, "Hoje") : /* @__PURE__ */ React.createElement(liveConnected ? "span" : "span", { style: { display: "flex", alignItems: "center", gap: 4, background: "#DCFCE7", color: "#15803D", borderRadius: 6, padding: "3px 8px", fontSize: 11, fontWeight: 700 } }, liveConnected && /* @__PURE__ */ React.createElement("span", { style: { width: 6, height: 6, borderRadius: "50%", background: "#16A34A" } }), liveConnected ? "Ao vivo" : ""),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { var d = new Date(dataView + "T12:00:00"); d.setDate(d.getDate() + 1); setDataView(localDateStr(d)); }, disabled: dataView >= today, style: Object.assign({}, btnO, { fontSize: 12, padding: "6px 10px", opacity: dataView >= today ? 0.4 : 1 }) }, "\u203A"),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowTimeline(function(s) { return !s; }); }, style: Object.assign({}, btnO, { fontSize: 12, padding: "6px 12px", background: showTimeline ? "#EFF6FF" : undefined, border: showTimeline ? "1.5px solid #2E6DA4" : undefined }) }, "\uD83D\uDCDC Timeline"),
         /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, lastUpdate.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })),
         /* @__PURE__ */ React.createElement("button", { onClick: function() { setLoading(true); load(); }, style: Object.assign({}, btnO, { fontSize: 12, padding: "6px 12px" }) }, "\u21BB")
       )
     ),
+    showTimeline && (function() {
+      var eventos = [];
+      jobs.forEach(function(j) {
+        if (j.check_in) eventos.push({ hora: j.check_in, tipo: "entrada", texto: j.cn + " \u2014 in\xEDcio do servi\xE7o", cor: "#2E6DA4" });
+        if (j.check_out) eventos.push({ hora: j.check_out, tipo: "saida", texto: j.cn + " \u2014 servi\xE7o conclu\xEDdo", cor: "#16A34A" });
+      });
+      notas.filter(function(n) { return (n.created_at || "").slice(0, 10) === dataView; }).forEach(function(n) {
+        eventos.push({ hora: (n.created_at || "").slice(11, 16), tipo: "nota", texto: "\uD83D\uDCDD " + n.texto, cor: "#F59E0B" });
+      });
+      eventos.sort(function(a, b) { return (a.hora || "").localeCompare(b.hora || ""); });
+      return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20 }) },
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 12 } }, "\uD83D\uDCDC Timeline de ", new Date(dataView + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" })),
+        eventos.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8", padding: "12px 0" } }, "Sem eventos registados neste dia.") :
+        eventos.map(function(ev, i) {
+          return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderBottom: i < eventos.length - 1 ? "1px solid #F1F5F9" : "none" } },
+            /* @__PURE__ */ React.createElement("div", { style: { width: 48, fontSize: 12, fontWeight: 700, color: ev.cor, flexShrink: 0 } }, ev.hora),
+            /* @__PURE__ */ React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: ev.cor, flexShrink: 0 } }),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#334155" } }, ev.texto)
+          );
+        })
+      );
+    })(),
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" } },
       emps.map(function(e) {
         var emCurso = jobs.some(function(j) { return (j.team || []).indexOf(e.id) !== -1 && j.check_in && !j.check_out && j.status !== "completed"; });
