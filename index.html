@@ -5431,7 +5431,7 @@ function Stock() {
         /* @__PURE__ */ React.createElement("button", { onClick: function() { ajustarQtd(p, -1); }, style: Object.assign({}, btnO, { padding: "4px 12px", fontSize: 16 }) }, "\u2212"),
         /* @__PURE__ */ React.createElement("div", { style: { minWidth: 70, textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 900, fontSize: 18, color: emBaixoP ? "#EF4444" : "#1A3A5C" } }, p.quantidade), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", textTransform: "uppercase" } }, p.unidade || "unidade")),
         /* @__PURE__ */ React.createElement("button", { onClick: function() { ajustarQtd(p, 1); }, style: Object.assign({}, btnO, { padding: "4px 12px", fontSize: 16 }) }, "+"),
-        /* @__PURE__ */ React.createElement("button", { onClick: function() { setForm({ nome: p.nome, quantidade: p.quantidade, quantidade_minima: p.quantidade_minima, unidade: p.unidade || "unidade", preco_unitario: p.preco_unitario || "" }); setEditId(p.id); setShowForm(true); }, style: Object.assign({}, btnO, { fontSize: 11, padding: "6px 10px" }) }, "Editar"),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setForm({ nome: p.nome, quantidade: p.quantidade, quantidade_minima: p.quantidade_minima, unidade: p.unidade || "unidade", preco_unitario: p.preco_unitario || "" }); setEditId(p.id); setShowForm(true); window.scrollTo({ top: 0, behavior: "smooth" }); }, style: Object.assign({}, btnO, { fontSize: 11, padding: "6px 10px" }) }, "Editar"),
         /* @__PURE__ */ React.createElement("button", { onClick: function() { apagar(p.id); }, style: Object.assign({}, btnR, { fontSize: 11, padding: "6px 10px" }) }, "Del")
       );
     })
