@@ -5175,7 +5175,7 @@ function StockAnalise(props) {
             var y = 20 + 160 - v / maxValLinha * 160;
             return x + "," + y;
           }).join(" ");
-          return /* @__PURE__ */ React.createElement("polyline", { key: si, points: pts, fill: "none", stroke: s.cor, strokeWidth: 2.5, strokeLinejoin: "round", strokeLinecap: "round" });
+          return /* @__PURE__ */ React.createElement("polyline", { key: si, points: pts, fill: "none", stroke: s.cor, strokeWidth: 1.5, strokeLinejoin: "round", strokeLinecap: "round" });
         }),
         datasRange.map(function(d, i) {
           if (datasRange.length > 1 && i !== 0 && i !== datasRange.length - 1 && i !== Math.floor(datasRange.length / 2)) return null;
