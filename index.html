@@ -5135,21 +5135,23 @@ function StockAnalise(props) {
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, "\uD83D\uDCCA An\xE1lise de Consumo"),
       /* @__PURE__ */ React.createElement("button", { onClick: exportarPDF, style: Object.assign({}, btnO, { fontSize: 11, padding: "6px 12px" }) }, "\uD83D\uDCC4 Exportar PDF (tabela mensal)")
     ),
+    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 6 } }, "Cada linha do gr\xE1fico representa:"),
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16 } },
-      /* @__PURE__ */ React.createElement("button", { onClick: function() { setAnaliseTipo("colaborador"); }, style: { padding: "6px 14px", borderRadius: 8, border: "1.5px solid " + (analiseTipo === "colaborador" ? "#7C3AED" : "#E2EBF4"), background: analiseTipo === "colaborador" ? "#F5F3FF" : "#fff", color: analiseTipo === "colaborador" ? "#7C3AED" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "Por Colaborador"),
-      /* @__PURE__ */ React.createElement("button", { onClick: function() { setAnaliseTipo("produto"); }, style: { padding: "6px 14px", borderRadius: 8, border: "1.5px solid " + (analiseTipo === "produto" ? "#7C3AED" : "#E2EBF4"), background: analiseTipo === "produto" ? "#F5F3FF" : "#fff", color: analiseTipo === "produto" ? "#7C3AED" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "Por Produto")
+      /* @__PURE__ */ React.createElement("button", { onClick: function() { setAnaliseTipo("colaborador"); }, style: { padding: "6px 14px", borderRadius: 8, border: "1.5px solid " + (analiseTipo === "colaborador" ? "#7C3AED" : "#E2EBF4"), background: analiseTipo === "colaborador" ? "#F5F3FF" : "#fff", color: analiseTipo === "colaborador" ? "#7C3AED" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "1 Colaborador"),
+      /* @__PURE__ */ React.createElement("button", { onClick: function() { setAnaliseTipo("produto"); }, style: { padding: "6px 14px", borderRadius: 8, border: "1.5px solid " + (analiseTipo === "produto" ? "#7C3AED" : "#E2EBF4"), background: analiseTipo === "produto" ? "#F5F3FF" : "#fff", color: analiseTipo === "produto" ? "#7C3AED" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "1 Produto")
     ),
     /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 } },
       /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "De"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: dataInicio, onChange: function(e) { setDataInicio(e.target.value); } })),
       /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "At\xE9"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: dataFim, onChange: function(e) { setDataFim(e.target.value); } }))
     ),
-    analiseTipo === "colaborador" ? /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } },
+    /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } },
       /* @__PURE__ */ React.createElement("label", { style: lbl }, "Colaborador(es) \u2014 deixa vazio para todos"),
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, empsList.map(function(e) {
         var sel = filtroColabs.indexOf(e.id) !== -1;
         return /* @__PURE__ */ React.createElement("button", { key: e.id, onClick: function() { toggleSel(filtroColabs, setFiltroColabs, e.id); }, style: { padding: "5px 10px", borderRadius: 7, border: "1.5px solid " + (sel ? "#7C3AED" : "#E2EBF4"), background: sel ? "#F5F3FF" : "#fff", color: sel ? "#7C3AED" : "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, e.name.split(" ")[0]);
       }))
-    ) : /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } },
+    ),
+    /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } },
       /* @__PURE__ */ React.createElement("label", { style: lbl }, "Produto(s) \u2014 deixa vazio para todos"),
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, nomesProdutos.map(function(n) {
         var sel = filtroProdutos.indexOf(n) !== -1;
