@@ -5048,7 +5048,8 @@ function PedidosColab(props) {
     ),
     (function() {
       var porProduto = {};
-      pedidos.filter(function(p) { return p.tipo === "material" && p.detalhes && p.detalhes.item; }).forEach(function(p) {
+      var nomesStockValidos = produtosStock.map(function(sp) { return sp.nome; });
+      pedidos.filter(function(p) { return p.tipo === "material" && p.detalhes && p.detalhes.item && nomesStockValidos.indexOf(p.detalhes.item) !== -1; }).forEach(function(p) {
         var item = p.detalhes.item;
         if (!porProduto[item]) porProduto[item] = { total: 0, pendentes: 0, colabs: {} };
         porProduto[item].total++;
