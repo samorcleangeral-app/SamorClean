@@ -5062,7 +5062,7 @@ function Stock() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ nome: "", quantidade: "", quantidade_minima: "" });
+  const [form, setForm] = useState({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade" });
   const [q, setQ] = useState("");
   useEffect(function() {
     db.list("stock_produtos", "?select=*&order=nome").then(function(rows) {
@@ -5072,7 +5072,7 @@ function Stock() {
   }, []);
   async function salvar() {
     if (!form.nome.trim()) return;
-    var payload = { nome: form.nome.trim(), quantidade: parseFloat(form.quantidade) || 0, quantidade_minima: parseFloat(form.quantidade_minima) || 0 };
+    var payload = { nome: form.nome.trim(), quantidade: parseFloat(form.quantidade) || 0, quantidade_minima: parseFloat(form.quantidade_minima) || 0, unidade: form.unidade || "unidade" };
     if (editId) {
       var res = await fetch(SUPABASE_URL + "/rest/v1/stock_produtos?id=eq." + editId, {
         method: "PATCH",
@@ -5096,7 +5096,7 @@ function Stock() {
     }
     setShowForm(false);
     setEditId(null);
-    setForm({ nome: "", quantidade: "", quantidade_minima: "" });
+    setForm({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade" });
   }
   async function ajustarQtd(prod, delta) {
     var nova = Math.max(0, (parseFloat(prod.quantidade) || 0) + delta);
@@ -5121,16 +5121,17 @@ function Stock() {
   return /* @__PURE__ */ React.createElement("div", null,
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 } },
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 900, fontSize: 20, color: "#1A3A5C" } }, "\uD83D\uDCCB Stock"),
-      /* @__PURE__ */ React.createElement("button", { onClick: function() { setForm({ nome: "", quantidade: "", quantidade_minima: "" }); setEditId(null); setShowForm(true); }, style: btn }, "+ Novo Produto")
+      /* @__PURE__ */ React.createElement("button", { onClick: function() { setForm({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade" }); setEditId(null); setShowForm(true); }, style: btn }, "+ Novo Produto")
     ),
     emBaixo.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#FEF2F2", border: "1.5px solid #EF4444" }) },
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#991B1B", marginBottom: 6 } }, "\u26A0 ", emBaixo.length, " produto", emBaixo.length !== 1 ? "s" : "", " em baixo de stock:"),
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#7F1D1D" } }, emBaixo.map(function(p) { return p.nome + " (" + p.quantidade + ")"; }).join(", "))
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#7F1D1D" } }, emBaixo.map(function(p) { return p.nome + " (" + p.quantidade + " " + (p.unidade || "unidade") + ")"; }).join(", "))
     ),
     showForm && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, background: "#F8FAFC" }) },
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, editId ? "Editar produto" : "Novo produto"),
-      /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10, marginBottom: 14 } },
+      /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 10, marginBottom: 14 } },
         /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Nome"), /* @__PURE__ */ React.createElement("input", { style: inp, value: form.nome, onChange: function(e) { setForm(Object.assign({}, form, { nome: e.target.value })); } })),
+        /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Unidade"), /* @__PURE__ */ React.createElement("select", { style: inp, value: form.unidade, onChange: function(e) { setForm(Object.assign({}, form, { unidade: e.target.value })); } }, ["unidade", "litro", "kg", "caixa", "pack"].map(function(u) { return /* @__PURE__ */ React.createElement("option", { key: u, value: u }, u); }))),
         /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Quantidade"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", value: form.quantidade, onFocus: function(e) { e.target.select(); }, onChange: function(e) { setForm(Object.assign({}, form, { quantidade: e.target.value })); } })),
         /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "M\xEDnimo (avisa abaixo disto)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", value: form.quantidade_minima, onFocus: function(e) { e.target.select(); }, onChange: function(e) { setForm(Object.assign({}, form, { quantidade_minima: e.target.value })); } }))
       ),
@@ -5149,9 +5150,9 @@ function Stock() {
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, "M\xEDnimo: ", p.quantidade_minima, emBaixoP && /* @__PURE__ */ React.createElement("span", { style: { color: "#EF4444", fontWeight: 700, marginLeft: 8 } }, "\u26A0 Em baixo"))
         ),
         /* @__PURE__ */ React.createElement("button", { onClick: function() { ajustarQtd(p, -1); }, style: Object.assign({}, btnO, { padding: "4px 12px", fontSize: 16 }) }, "\u2212"),
-        /* @__PURE__ */ React.createElement("div", { style: { minWidth: 40, textAlign: "center", fontWeight: 900, fontSize: 18, color: emBaixoP ? "#EF4444" : "#1A3A5C" } }, p.quantidade),
+        /* @__PURE__ */ React.createElement("div", { style: { minWidth: 70, textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 900, fontSize: 18, color: emBaixoP ? "#EF4444" : "#1A3A5C" } }, p.quantidade), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", textTransform: "uppercase" } }, p.unidade || "unidade")),
         /* @__PURE__ */ React.createElement("button", { onClick: function() { ajustarQtd(p, 1); }, style: Object.assign({}, btnO, { padding: "4px 12px", fontSize: 16 }) }, "+"),
-        /* @__PURE__ */ React.createElement("button", { onClick: function() { setForm({ nome: p.nome, quantidade: p.quantidade, quantidade_minima: p.quantidade_minima }); setEditId(p.id); setShowForm(true); }, style: Object.assign({}, btnO, { fontSize: 11, padding: "6px 10px" }) }, "Editar"),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setForm({ nome: p.nome, quantidade: p.quantidade, quantidade_minima: p.quantidade_minima, unidade: p.unidade || "unidade" }); setEditId(p.id); setShowForm(true); }, style: Object.assign({}, btnO, { fontSize: 11, padding: "6px 10px" }) }, "Editar"),
         /* @__PURE__ */ React.createElement("button", { onClick: function() { apagar(p.id); }, style: Object.assign({}, btnR, { fontSize: 11, padding: "6px 10px" }) }, "Del")
       );
     })
