@@ -5064,6 +5064,7 @@ function StockAnalise(props) {
   const filtroProdutos = props.filtroProdutos, setFiltroProdutos = props.setFiltroProdutos;
   const dataInicio = props.dataInicio, setDataInicio = props.setDataInicio;
   const dataFim = props.dataFim, setDataFim = props.setDataFim;
+  const [tipoGrafico, setTipoGrafico] = useState("linhas");
   const nomesProdutos = produtos.map(function(p) { return p.nome; });
   const consumosFiltrados = consumos.filter(function(c) {
     if (c.data < dataInicio || c.data > dataFim) return false;
@@ -5135,6 +5136,11 @@ function StockAnalise(props) {
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, "\uD83D\uDCCA An\xE1lise de Consumo"),
       /* @__PURE__ */ React.createElement("button", { onClick: exportarPDF, style: Object.assign({}, btnO, { fontSize: 11, padding: "6px 12px" }) }, "\uD83D\uDCC4 Exportar PDF (tabela mensal)")
     ),
+    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 6 } }, "Tipo de gr\xE1fico:"),
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16 } },
+      /* @__PURE__ */ React.createElement("button", { onClick: function() { setTipoGrafico("linhas"); }, style: { padding: "6px 14px", borderRadius: 8, border: "1.5px solid " + (tipoGrafico === "linhas" ? "#2E6DA4" : "#E2EBF4"), background: tipoGrafico === "linhas" ? "#EFF6FF" : "#fff", color: tipoGrafico === "linhas" ? "#2E6DA4" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "\uD83D\uDCC8 Linhas (evolu\xE7\xE3o)"),
+      /* @__PURE__ */ React.createElement("button", { onClick: function() { setTipoGrafico("colunas"); }, style: { padding: "6px 14px", borderRadius: 8, border: "1.5px solid " + (tipoGrafico === "colunas" ? "#2E6DA4" : "#E2EBF4"), background: tipoGrafico === "colunas" ? "#EFF6FF" : "#fff", color: tipoGrafico === "colunas" ? "#2E6DA4" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "\uD83D\uDCCA Colunas (total)")
+    ),
     /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 6 } }, "Cada linha do gr\xE1fico representa:"),
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16 } },
       /* @__PURE__ */ React.createElement("button", { onClick: function() { setAnaliseTipo("colaborador"); }, style: { padding: "6px 14px", borderRadius: 8, border: "1.5px solid " + (analiseTipo === "colaborador" ? "#7C3AED" : "#E2EBF4"), background: analiseTipo === "colaborador" ? "#F5F3FF" : "#fff", color: analiseTipo === "colaborador" ? "#7C3AED" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "1 Colaborador"),
@@ -5160,6 +5166,34 @@ function StockAnalise(props) {
     ),
     (filtroColabs.length === 0 && filtroProdutos.length === 0) ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24, fontSize: 13 } }, "\uD83D\uDC46 Escolhe pelo menos um colaborador ou um produto acima, para o gr\xE1fico aparecer.") :
     seriesArr.length === 0 || datasRange.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24, fontSize: 13 } }, "Sem consumo registado neste per\xEDodo/filtro.") :
+    tipoGrafico === "colunas" ? (function() {
+      var totais = seriesArr.map(function(s) { return { nome: s.nome, cor: s.cor, total: s.pontos.reduce(function(a, b) { return a + b; }, 0) }; });
+      var maxTotal = Math.max.apply(null, totais.map(function(t) { return t.total; }).concat([1]));
+      var n = totais.length;
+      var largColuna = Math.min(70, 560 / n - 10);
+      return /* @__PURE__ */ React.createElement("div", null,
+        /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 600 220", style: { width: "100%", height: "auto" } },
+          [0, 0.5, 1].map(function(f, i) {
+            var y = 20 + (1 - f) * 160;
+            return /* @__PURE__ */ React.createElement("g", { key: i },
+              /* @__PURE__ */ React.createElement("line", { x1: 30, y1: y, x2: 590, y2: y, stroke: "#F1F5F9", strokeWidth: 1 }),
+              /* @__PURE__ */ React.createElement("text", { x: 26, y: y + 4, fontSize: 9, fill: "#94A3B8", textAnchor: "end" }, Math.round(maxTotal * f))
+            );
+          }),
+          totais.map(function(t, i) {
+            var espaco = 560 / n;
+            var x = 30 + i * espaco + (espaco - largColuna) / 2;
+            var h = t.total / maxTotal * 160;
+            var y = 20 + 160 - h;
+            return /* @__PURE__ */ React.createElement("g", { key: i },
+              /* @__PURE__ */ React.createElement("rect", { x: x, y: y, width: largColuna, height: h, fill: t.cor, rx: 3 }),
+              /* @__PURE__ */ React.createElement("text", { x: x + largColuna / 2, y: y - 5, fontSize: 10, fill: t.cor, fontWeight: 700, textAnchor: "middle" }, t.total),
+              /* @__PURE__ */ React.createElement("text", { x: x + largColuna / 2, y: 210, fontSize: 9, fill: "#94A3B8", textAnchor: "middle" }, t.nome.length > 10 ? t.nome.slice(0, 9) + "\u2026" : t.nome)
+            );
+          })
+        )
+      );
+    })() :
     /* @__PURE__ */ React.createElement("div", null,
       /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 600 220", style: { width: "100%", height: "auto" } },
         [0, 0.5, 1].map(function(f, i) {
