@@ -5039,6 +5039,106 @@ function PedidosColab(props) {
     )
   );
 }
+function Stock() {
+  const [produtos, setProdutos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [form, setForm] = useState({ nome: "", quantidade: "", quantidade_minima: "" });
+  const [q, setQ] = useState("");
+  useEffect(function() {
+    db.list("stock_produtos", "?select=*&order=nome").then(function(rows) {
+      setProdutos(rows || []);
+      setLoading(false);
+    });
+  }, []);
+  async function salvar() {
+    if (!form.nome.trim()) return;
+    var payload = { nome: form.nome.trim(), quantidade: parseFloat(form.quantidade) || 0, quantidade_minima: parseFloat(form.quantidade_minima) || 0 };
+    if (editId) {
+      var res = await fetch(SUPABASE_URL + "/rest/v1/stock_produtos?id=eq." + editId, {
+        method: "PATCH",
+        headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }),
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        var d = await res.json();
+        setProdutos(function(p) { return p.map(function(x) { return x.id === editId ? d[0] : x; }).sort(function(a, b) { return a.nome.localeCompare(b.nome); }); });
+      }
+    } else {
+      var res2 = await fetch(SUPABASE_URL + "/rest/v1/stock_produtos", {
+        method: "POST",
+        headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }),
+        body: JSON.stringify(payload)
+      });
+      if (res2.ok) {
+        var d2 = await res2.json();
+        setProdutos(function(p) { return p.concat(d2).sort(function(a, b) { return a.nome.localeCompare(b.nome); }); });
+      }
+    }
+    setShowForm(false);
+    setEditId(null);
+    setForm({ nome: "", quantidade: "", quantidade_minima: "" });
+  }
+  async function ajustarQtd(prod, delta) {
+    var nova = Math.max(0, (parseFloat(prod.quantidade) || 0) + delta);
+    var res = await fetch(SUPABASE_URL + "/rest/v1/stock_produtos?id=eq." + prod.id, {
+      method: "PATCH",
+      headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }),
+      body: JSON.stringify({ quantidade: nova })
+    });
+    if (res.ok) {
+      var d = await res.json();
+      setProdutos(function(p) { return p.map(function(x) { return x.id === prod.id ? d[0] : x; }); });
+    }
+  }
+  async function apagar(id) {
+    if (!window.confirm("Apagar este produto do stock?")) return;
+    await fetch(SUPABASE_URL + "/rest/v1/stock_produtos?id=eq." + id, { method: "DELETE", headers: dbHeaders() });
+    setProdutos(function(p) { return p.filter(function(x) { return x.id !== id; }); });
+  }
+  if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...");
+  var emBaixo = produtos.filter(function(p) { return p.quantidade <= p.quantidade_minima; });
+  var filtrados = produtos.filter(function(p) { return p.nome.toLowerCase().indexOf(q.toLowerCase()) !== -1; });
+  return /* @__PURE__ */ React.createElement("div", null,
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 } },
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 900, fontSize: 20, color: "#1A3A5C" } }, "\uD83D\uDCCB Stock"),
+      /* @__PURE__ */ React.createElement("button", { onClick: function() { setForm({ nome: "", quantidade: "", quantidade_minima: "" }); setEditId(null); setShowForm(true); }, style: btn }, "+ Novo Produto")
+    ),
+    emBaixo.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#FEF2F2", border: "1.5px solid #EF4444" }) },
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#991B1B", marginBottom: 6 } }, "\u26A0 ", emBaixo.length, " produto", emBaixo.length !== 1 ? "s" : "", " em baixo de stock:"),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#7F1D1D" } }, emBaixo.map(function(p) { return p.nome + " (" + p.quantidade + ")"; }).join(", "))
+    ),
+    showForm && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, background: "#F8FAFC" }) },
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, editId ? "Editar produto" : "Novo produto"),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10, marginBottom: 14 } },
+        /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Nome"), /* @__PURE__ */ React.createElement("input", { style: inp, value: form.nome, onChange: function(e) { setForm(Object.assign({}, form, { nome: e.target.value })); } })),
+        /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Quantidade"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", value: form.quantidade, onFocus: function(e) { e.target.select(); }, onChange: function(e) { setForm(Object.assign({}, form, { quantidade: e.target.value })); } })),
+        /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "M\xEDnimo (avisa abaixo disto)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", value: form.quantidade_minima, onFocus: function(e) { e.target.select(); }, onChange: function(e) { setForm(Object.assign({}, form, { quantidade_minima: e.target.value })); } }))
+      ),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10 } },
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowForm(false); setEditId(null); }, style: Object.assign({}, btnX, { flex: 1, textAlign: "center" }) }, "Cancelar"),
+        /* @__PURE__ */ React.createElement("button", { onClick: salvar, disabled: !form.nome.trim(), style: Object.assign({}, btnG, { flex: 1, textAlign: "center", opacity: !form.nome.trim() ? 0.5 : 1 }) }, "Guardar")
+      )
+    ),
+    /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 16 }), placeholder: "Pesquisar produto...", value: q, onChange: function(e) { setQ(e.target.value); } }),
+    filtrados.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Nenhum produto encontrado.") :
+    filtrados.map(function(p) {
+      var emBaixoP = p.quantidade <= p.quantidade_minima;
+      return /* @__PURE__ */ React.createElement("div", { key: p.id, style: Object.assign({}, card, { marginBottom: 10, display: "flex", alignItems: "center", gap: 14, padding: 14, borderLeft: "4px solid " + (emBaixoP ? "#EF4444" : "#16A34A") }) },
+        /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C" } }, p.nome),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, "M\xEDnimo: ", p.quantidade_minima, emBaixoP && /* @__PURE__ */ React.createElement("span", { style: { color: "#EF4444", fontWeight: 700, marginLeft: 8 } }, "\u26A0 Em baixo"))
+        ),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { ajustarQtd(p, -1); }, style: Object.assign({}, btnO, { padding: "4px 12px", fontSize: 16 }) }, "\u2212"),
+        /* @__PURE__ */ React.createElement("div", { style: { minWidth: 40, textAlign: "center", fontWeight: 900, fontSize: 18, color: emBaixoP ? "#EF4444" : "#1A3A5C" } }, p.quantidade),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { ajustarQtd(p, 1); }, style: Object.assign({}, btnO, { padding: "4px 12px", fontSize: 16 }) }, "+"),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setForm({ nome: p.nome, quantidade: p.quantidade, quantidade_minima: p.quantidade_minima }); setEditId(p.id); setShowForm(true); }, style: Object.assign({}, btnO, { fontSize: 11, padding: "6px 10px" }) }, "Editar"),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { apagar(p.id); }, style: Object.assign({}, btnR, { fontSize: 11, padding: "6px 10px" }) }, "Del")
+      );
+    })
+  );
+}
 function Fornecedores() {
   const [fornecedores, setFornecedores] = useState([]);
   const [despesas, setDespesas] = useState([]);
@@ -6710,6 +6810,7 @@ function Manager(props) {
     { k: "quadro_op", l: "\uD83D\uDCCA Quadro Operacional" },
     { k: "finance", l: "Financeiro" },
     { k: "fornecedores", l: "Fornecedores" },
+    { k: "stock", l: "\uD83D\uDCCB Stock" },
     { k: "clients", l: "Clientes" },
     { k: "pedidos", l: "Pedidos Extra" },
     { k: "avaliacoes", l: "Avalia\xE7\xF5es" },
@@ -6913,7 +7014,7 @@ function Manager(props) {
     return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: i === 0 ? "#F59E0B" : i === 1 ? "#94A3B8" : "#CD7C54", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 11, flexShrink: 0 } }, i + 1), /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 30, color: ["#2E6DA4", "#0F766E", "#7C3AED", "#C2410C"][i] || "#64748B" }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, e.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, e.role)), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right" } }, rMes ? /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end" } }, /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 900, fontSize: 15, color: "#2E6DA4" } }, rMes.media), /* @__PURE__ */ React.createElement("span", { style: { color: "#F59E0B" } }, "\u2605"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: "#94A3B8" } }, "(", rMes.count, ")")) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#CBD5E1", fontWeight: 700 } }, "Sem avalia\xE7\xF5es este m\xEAs"), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 2 } }, /* @__PURE__ */ React.createElement(Stars, { r: e.rating }))));
   })))) : null, view === "quadro_op" ? /* @__PURE__ */ React.createElement(QuadroOperacional, null) : null, view === "notas_op" ? /* @__PURE__ */ React.createElement(NotasOperacionais, null) : null, view === "finance" ? /* @__PURE__ */ React.createElement(Finance, null) : null, view === "routes" ? /* @__PURE__ */ React.createElement(Routes, null) : null, view === "clients" ? /* @__PURE__ */ React.createElement(Clients, null) : null, view === "fornecedores" ? /* @__PURE__ */ React.createElement(Fornecedores, null) : null, view === "pedidos_colab" ? /* @__PURE__ */ React.createElement(PedidosColab, { onUpdate: function(n) {
     setPedidosColabPendentes(n);
-  } }) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "leads" ? /* @__PURE__ */ React.createElement(Leads, null) : null, view === "recrutamento" ? /* @__PURE__ */ React.createElement(Recrutamento, null) : null, view === "avaliacoes" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "formacao" ? /* @__PURE__ */ React.createElement(Formacao, null) : null, view === "relatorio" ? /* @__PURE__ */ React.createElement(RelatorioMensal, null) : null, view === "gestores" ? /* @__PURE__ */ React.createElement(GestoresAdmin, null) : null, view === "armazem_qr" ? /* @__PURE__ */ React.createElement(QRArmazem, null) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, null) : null));
+  } }) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "leads" ? /* @__PURE__ */ React.createElement(Leads, null) : null, view === "recrutamento" ? /* @__PURE__ */ React.createElement(Recrutamento, null) : null, view === "avaliacoes" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "formacao" ? /* @__PURE__ */ React.createElement(Formacao, null) : null, view === "relatorio" ? /* @__PURE__ */ React.createElement(RelatorioMensal, null) : null, view === "gestores" ? /* @__PURE__ */ React.createElement(GestoresAdmin, null) : null, view === "armazem_qr" ? /* @__PURE__ */ React.createElement(QRArmazem, null) : null, view === "stock" ? /* @__PURE__ */ React.createElement(Stock, null) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, null) : null));
 }
 function EmpPedidos(props) {
   const empId = props.empId;
