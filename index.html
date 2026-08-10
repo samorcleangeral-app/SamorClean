@@ -5057,6 +5057,97 @@ function PedidosColab(props) {
     )
   );
 }
+function StockAnalise(props) {
+  const consumos = props.consumos, empsList = props.empsList, produtos = props.produtos;
+  const analiseTipo = props.analiseTipo, setAnaliseTipo = props.setAnaliseTipo;
+  const filtroColabs = props.filtroColabs, setFiltroColabs = props.setFiltroColabs;
+  const filtroProdutos = props.filtroProdutos, setFiltroProdutos = props.setFiltroProdutos;
+  const dataInicio = props.dataInicio, setDataInicio = props.setDataInicio;
+  const dataFim = props.dataFim, setDataFim = props.setDataFim;
+  const nomesProdutos = produtos.map(function(p) { return p.nome; });
+  const consumosFiltrados = consumos.filter(function(c) {
+    if (c.data < dataInicio || c.data > dataFim) return false;
+    if (filtroColabs.length > 0 && filtroColabs.indexOf(c.funcionario_id) === -1) return false;
+    if (filtroProdutos.length > 0 && filtroProdutos.indexOf(c.item) === -1) return false;
+    return true;
+  });
+  function toggleSel(arr, setArr, val) {
+    setArr(arr.indexOf(val) !== -1 ? arr.filter(function(x) { return x !== val; }) : arr.concat([val]));
+  }
+  var dadosGrafico = {};
+  if (analiseTipo === "colaborador") {
+    consumosFiltrados.forEach(function(c) {
+      if (!dadosGrafico[c.item]) dadosGrafico[c.item] = 0;
+      dadosGrafico[c.item] += c.quantidade;
+    });
+  } else {
+    consumosFiltrados.forEach(function(c) {
+      var nome = c.funcionario_nome || c.funcionario_id;
+      if (!dadosGrafico[nome]) dadosGrafico[nome] = 0;
+      dadosGrafico[nome] += c.quantidade;
+    });
+  }
+  var maxVal = Math.max.apply(null, Object.values(dadosGrafico).concat([1]));
+  function exportarPDF() {
+    var monthLabel = dataInicio + " a " + dataFim;
+    var matriz = {};
+    var colabsSet = {}, prodsSet = {};
+    consumosFiltrados.forEach(function(c) {
+      var nome = c.funcionario_nome || c.funcionario_id;
+      colabsSet[nome] = true;
+      prodsSet[c.item] = true;
+      if (!matriz[nome]) matriz[nome] = {};
+      matriz[nome][c.item] = (matriz[nome][c.item] || 0) + c.quantidade;
+    });
+    var colabsArr = Object.keys(colabsSet).sort();
+    var prodsArr = Object.keys(prodsSet).sort();
+    var head = "<th>Colaborador</th>" + prodsArr.map(function(p) { return "<th style='text-align:right'>" + p + "</th>"; }).join("");
+    var linhas = colabsArr.map(function(nome) {
+      return "<tr><td style='font-weight:600;padding:6px 10px'>" + nome + "</td>" + prodsArr.map(function(p) {
+        return "<td style='text-align:right;padding:6px 10px'>" + (matriz[nome][p] || "\u2014") + "</td>";
+      }).join("") + "</tr>";
+    }).join("");
+    const win = window.open("", "_blank");
+    win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Consumo de Stock</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C}h1{margin-bottom:2px}h2{color:#64748B;font-weight:normal;margin-top:0;margin-bottom:24px}table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;padding:6px 10px;background:#1A3A5C;color:#fff;font-size:10px;text-transform:uppercase}tr{border-bottom:1px solid #E2EBF4}@media print{body{padding:15px}}</style></head><body><h1>SamorClean</h1><h2>Consumo de Stock por Colaborador \u2014 " + monthLabel + "</h2><table><thead><tr>" + head + "</tr></thead><tbody>" + linhas + "</tbody></table><script>window.onload=function(){window.print();}<\/script></body></html>");
+    win.document.close();
+  }
+  return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, padding: 18 }) },
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 } },
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, "\uD83D\uDCCA An\xE1lise de Consumo"),
+      /* @__PURE__ */ React.createElement("button", { onClick: exportarPDF, style: Object.assign({}, btnO, { fontSize: 11, padding: "6px 12px" }) }, "\uD83D\uDCC4 Exportar PDF (tabela mensal)")
+    ),
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16 } },
+      /* @__PURE__ */ React.createElement("button", { onClick: function() { setAnaliseTipo("colaborador"); }, style: { padding: "6px 14px", borderRadius: 8, border: "1.5px solid " + (analiseTipo === "colaborador" ? "#7C3AED" : "#E2EBF4"), background: analiseTipo === "colaborador" ? "#F5F3FF" : "#fff", color: analiseTipo === "colaborador" ? "#7C3AED" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "Por Colaborador"),
+      /* @__PURE__ */ React.createElement("button", { onClick: function() { setAnaliseTipo("produto"); }, style: { padding: "6px 14px", borderRadius: 8, border: "1.5px solid " + (analiseTipo === "produto" ? "#7C3AED" : "#E2EBF4"), background: analiseTipo === "produto" ? "#F5F3FF" : "#fff", color: analiseTipo === "produto" ? "#7C3AED" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "Por Produto")
+    ),
+    /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 } },
+      /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "De"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: dataInicio, onChange: function(e) { setDataInicio(e.target.value); } })),
+      /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "At\xE9"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: dataFim, onChange: function(e) { setDataFim(e.target.value); } }))
+    ),
+    analiseTipo === "colaborador" ? /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } },
+      /* @__PURE__ */ React.createElement("label", { style: lbl }, "Colaborador(es) \u2014 deixa vazio para todos"),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, empsList.map(function(e) {
+        var sel = filtroColabs.indexOf(e.id) !== -1;
+        return /* @__PURE__ */ React.createElement("button", { key: e.id, onClick: function() { toggleSel(filtroColabs, setFiltroColabs, e.id); }, style: { padding: "5px 10px", borderRadius: 7, border: "1.5px solid " + (sel ? "#7C3AED" : "#E2EBF4"), background: sel ? "#F5F3FF" : "#fff", color: sel ? "#7C3AED" : "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, e.name.split(" ")[0]);
+      }))
+    ) : /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } },
+      /* @__PURE__ */ React.createElement("label", { style: lbl }, "Produto(s) \u2014 deixa vazio para todos"),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, nomesProdutos.map(function(n) {
+        var sel = filtroProdutos.indexOf(n) !== -1;
+        return /* @__PURE__ */ React.createElement("button", { key: n, onClick: function() { toggleSel(filtroProdutos, setFiltroProdutos, n); }, style: { padding: "5px 10px", borderRadius: 7, border: "1.5px solid " + (sel ? "#7C3AED" : "#E2EBF4"), background: sel ? "#F5F3FF" : "#fff", color: sel ? "#7C3AED" : "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, n);
+      }))
+    ),
+    Object.keys(dadosGrafico).length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24, fontSize: 13 } }, "Sem consumo registado neste per\xEDodo/filtro.") :
+    Object.keys(dadosGrafico).sort(function(a, b) { return dadosGrafico[b] - dadosGrafico[a]; }).map(function(k) {
+      var pct = dadosGrafico[k] / maxVal * 100;
+      return /* @__PURE__ */ React.createElement("div", { key: k, style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 8 } },
+        /* @__PURE__ */ React.createElement("div", { style: { width: 110, fontSize: 12, fontWeight: 700, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, k),
+        /* @__PURE__ */ React.createElement("div", { style: { flex: 1, height: 16, background: "#F1F5F9", borderRadius: 4 } }, /* @__PURE__ */ React.createElement("div", { style: { width: pct + "%", height: "100%", background: "#7C3AED", borderRadius: 4 } })),
+        /* @__PURE__ */ React.createElement("div", { style: { width: 60, fontSize: 12, fontWeight: 700, color: "#7C3AED", textAlign: "right" } }, dadosGrafico[k])
+      );
+    })
+  );
+}
 function Stock() {
   const [produtos, setProdutos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -5064,6 +5155,28 @@ function Stock() {
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade" });
   const [q, setQ] = useState("");
+  const [showAnalise, setShowAnalise] = useState(false);
+  const [consumos, setConsumos] = useState([]);
+  const [empsList, setEmpsList] = useState([]);
+  const [analiseTipo, setAnaliseTipo] = useState("colaborador");
+  const [filtroColabs, setFiltroColabs] = useState([]);
+  const [filtroProdutos, setFiltroProdutos] = useState([]);
+  const hoje0 = /* @__PURE__ */ new Date();
+  const [dataInicio, setDataInicio] = useState(localDateStr(new Date(hoje0.getFullYear(), hoje0.getMonth(), 1)));
+  const [dataFim, setDataFim] = useState(localDateStr(hoje0));
+  useEffect(function() {
+    if (!showAnalise) return;
+    Promise.all([
+      db.list("pedidos_colaboradores", "?select=funcionario_id,funcionario_nome,detalhes,created_at&tipo=eq.material&estado=eq.aprovado&order=created_at.desc"),
+      db.list("funcionarios", "?select=id,name")
+    ]).then(function(res) {
+      var rows = (res[0] || []).filter(function(p) { return p.detalhes && p.detalhes.item; }).map(function(p) {
+        return { funcionario_id: p.funcionario_id, funcionario_nome: p.funcionario_nome, item: p.detalhes.item, quantidade: parseFloat(p.detalhes.quantidade) || 0, data: (p.created_at || "").slice(0, 10) };
+      });
+      setConsumos(rows);
+      setEmpsList(res[1] || []);
+    });
+  }, [showAnalise]);
   useEffect(function() {
     db.list("stock_produtos", "?select=*&order=nome").then(function(rows) {
       setProdutos(rows || []);
@@ -5117,12 +5230,16 @@ function Stock() {
   }
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...");
   var emBaixo = produtos.filter(function(p) { return p.quantidade <= p.quantidade_minima; });
-  var filtrados = produtos.filter(function(p) { return p.nome.toLowerCase().indexOf(q.toLowerCase()) !== -1; });
+  var filtrados = produtos.filter(function(p) { return p.nome.toLowerCase().indexOf(q.toLowerCase()) !== -1; }).slice().sort(function(a, b) { return a.quantidade - b.quantidade; });
   return /* @__PURE__ */ React.createElement("div", null,
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 } },
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 900, fontSize: 20, color: "#1A3A5C" } }, "\uD83D\uDCCB Stock"),
-      /* @__PURE__ */ React.createElement("button", { onClick: function() { setForm({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade" }); setEditId(null); setShowForm(true); }, style: btn }, "+ Novo Produto")
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } },
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowAnalise(function(s) { return !s; }); }, style: Object.assign({}, btnO, { background: showAnalise ? "#F5F3FF" : undefined, border: showAnalise ? "1.5px solid #7C3AED" : undefined }) }, "\uD83D\uDCCA An\xE1lise de Consumo"),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setForm({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade" }); setEditId(null); setShowForm(true); }, style: btn }, "+ Novo Produto")
+      )
     ),
+    showAnalise && /* @__PURE__ */ React.createElement(StockAnalise, { consumos, empsList, produtos, analiseTipo, setAnaliseTipo, filtroColabs, setFiltroColabs, filtroProdutos, setFiltroProdutos, dataInicio, setDataInicio, dataFim, setDataFim }),
     emBaixo.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#FEF2F2", border: "1.5px solid #EF4444" }) },
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#991B1B", marginBottom: 6 } }, "\u26A0 ", emBaixo.length, " produto", emBaixo.length !== 1 ? "s" : "", " em baixo de stock:"),
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#7F1D1D" } }, emBaixo.map(function(p) { return p.nome + " (" + p.quantidade + " " + (p.unidade || "unidade") + ")"; }).join(", "))
@@ -5140,7 +5257,26 @@ function Stock() {
         /* @__PURE__ */ React.createElement("button", { onClick: salvar, disabled: !form.nome.trim(), style: Object.assign({}, btnG, { flex: 1, textAlign: "center", opacity: !form.nome.trim() ? 0.5 : 1 }) }, "Guardar")
       )
     ),
-    /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 16 }), placeholder: "Pesquisar produto...", value: q, onChange: function(e) { setQ(e.target.value); } }),
+    produtos.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, padding: 16 }) },
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 14 } }, "\uD83D\uDCCA N\xEDvel de Stock (actual vs m\xEDnimo)"),
+      produtos.slice().sort(function(a, b) { return a.quantidade - b.quantidade; }).map(function(p) {
+        var teto = Math.max(p.quantidade, p.quantidade_minima * 2, 1);
+        var pctAtual = Math.min(100, p.quantidade / teto * 100);
+        var pctMinimo = Math.min(100, p.quantidade_minima / teto * 100);
+        var emBaixoP = p.quantidade <= p.quantidade_minima;
+        var cor = emBaixoP ? "#EF4444" : "#16A34A";
+        return /* @__PURE__ */ React.createElement("div", { key: p.id, style: { marginBottom: 12 } },
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 } },
+            /* @__PURE__ */ React.createElement("span", { style: { color: "#334155", fontWeight: 600 } }, p.nome),
+            /* @__PURE__ */ React.createElement("span", { style: { color: cor, fontWeight: 700 } }, p.quantidade, " ", p.unidade || "unidade", " (m\xEDn. ", p.quantidade_minima, ")")
+          ),
+          /* @__PURE__ */ React.createElement("div", { style: { position: "relative", height: 14, background: "#F1F5F9", borderRadius: 4 } },
+            /* @__PURE__ */ React.createElement("div", { style: { width: pctAtual + "%", height: "100%", background: cor, borderRadius: 4 } }),
+            /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", left: pctMinimo + "%", top: -2, bottom: -2, width: 2, background: "#1A3A5C" } })
+          )
+        );
+      })
+    ),
     filtrados.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Nenhum produto encontrado.") :
     filtrados.map(function(p) {
       var emBaixoP = p.quantidade <= p.quantidade_minima;
