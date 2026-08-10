@@ -4928,6 +4928,24 @@ function PedidosColab(props) {
         if (nRem > 0) alert(selPedido.funcionario_nome + " foi removido de " + nRem + " servi\xE7o" + (nRem > 1 ? "s" : "") + " j\xE1 agendado" + (nRem > 1 ? "s" : "") + " nesse per\xEDodo. Pode ser necess\xE1rio reatribuir equipa.");
       }
     }
+    if (estado === "aprovado" && selPedido && selPedido.tipo === "material" && selPedido.detalhes && selPedido.detalhes.item) {
+      var detM = selPedido.detalhes;
+      var stockRows = await db.list("stock_produtos", "?select=*&nome=eq." + encodeURIComponent(detM.item));
+      if (stockRows && stockRows.length > 0) {
+        var prod = stockRows[0];
+        var novaQtd = Math.max(0, (parseFloat(prod.quantidade) || 0) - (parseFloat(detM.quantidade) || 0));
+        await fetch(SUPABASE_URL + "/rest/v1/stock_produtos?id=eq." + prod.id, {
+          method: "PATCH",
+          headers: dbHeaders(),
+          body: JSON.stringify({ quantidade: novaQtd })
+        });
+        if (novaQtd <= (parseFloat(prod.quantidade_minima) || 0)) {
+          alert("\u26A0 Stock de \"" + detM.item + "\" ficou em " + novaQtd + " \u2014 j\xE1 est\xE1 no ou abaixo do m\xEDnimo definido.");
+        }
+      } else {
+        alert("\u26A0 O pedido foi aprovado, mas n\xE3o encontrei \"" + detM.item + "\" no Stock para descontar automaticamente. Ajusta manualmente se necess\xE1rio.");
+      }
+    }
     var pedidosAtualizados = pedidos.map(function(x) {
       return x.id === id ? Object.assign({}, x, { estado, resposta }) : x;
     });
@@ -7027,6 +7045,10 @@ function EmpPedidos(props) {
   const [fardForm, setFardForm] = useState({ item: "", tamanho: "", quantidade: 1, motivo: "" });
   const [matForm, setMatForm] = useState({ item: "", quantidade: 1, motivo: "" });
   const [saving, setSaving] = useState(false);
+  const [stockProdutos, setStockProdutos] = useState([]);
+  useEffect(function() {
+    db.list("stock_produtos", "?select=id,nome&order=nome").then(function(rows) { setStockProdutos(rows || []); });
+  }, []);
   useEffect(function() {
     fetch(SUPABASE_URL + "/rest/v1/pedidos_colaboradores?funcionario_id=eq." + encodeURIComponent(empId) + "&estado=neq.pendente&visto=is.false", { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ visto: true }), keepalive: true }).catch(function() {});
   }, [empId]);
@@ -7109,9 +7131,11 @@ function EmpPedidos(props) {
     setFardForm(Object.assign({}, fardForm, { quantidade: parseInt(e.target.value) || 1 }));
   } }))), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Motivo"), /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 60, resize: "vertical" }), value: fardForm.motivo, onChange: function(e) {
     setFardForm(Object.assign({}, fardForm, { motivo: e.target.value }));
-  }, placeholder: "Ex: Desgastado, perdido, etc." })), /* @__PURE__ */ React.createElement("button", { onClick: submitFardamento, disabled: saving || !fardForm.item.trim(), style: Object.assign({}, btnG, { width: "100%", textAlign: "center", opacity: !fardForm.item.trim() ? 0.5 : 1 }) }, saving ? "A enviar..." : "Enviar pedido")), tab === "material" && /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Pedido de Material"), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Material necess\xE1rio"), /* @__PURE__ */ React.createElement("input", { style: inp, value: matForm.item, onChange: function(e) {
+  }, placeholder: "Ex: Desgastado, perdido, etc." })), /* @__PURE__ */ React.createElement("button", { onClick: submitFardamento, disabled: saving || !fardForm.item.trim(), style: Object.assign({}, btnG, { width: "100%", textAlign: "center", opacity: !fardForm.item.trim() ? 0.5 : 1 }) }, saving ? "A enviar..." : "Enviar pedido")), tab === "material" && /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Pedido de Material"), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Material necess\xE1rio"), /* @__PURE__ */ React.createElement("select", { style: inp, value: matForm.item, onChange: function(e) {
     setMatForm(Object.assign({}, matForm, { item: e.target.value }));
-  }, placeholder: "Ex: Detergente, panos, luvas, etc." })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Quantidade"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", min: "1", value: matForm.quantidade, onFocus: function(e) { e.target.select(); }, onChange: function(e) {
+  } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014 Escolhe um produto \u2014"), stockProdutos.map(function(sp) {
+    return /* @__PURE__ */ React.createElement("option", { key: sp.id, value: sp.nome }, sp.nome);
+  }))), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Quantidade"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", min: "1", value: matForm.quantidade, onFocus: function(e) { e.target.select(); }, onChange: function(e) {
     setMatForm(Object.assign({}, matForm, { quantidade: parseInt(e.target.value) || 1 }));
   } })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Motivo"), /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 60, resize: "vertical" }), value: matForm.motivo, onChange: function(e) {
     setMatForm(Object.assign({}, matForm, { motivo: e.target.value }));
