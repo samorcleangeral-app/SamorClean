@@ -2635,7 +2635,7 @@ function Routes() {
       var teamSize = voltaRef ? (voltaRef.equipa || []).length || 1 : (j.team || []).length || 1;
       return s + horasReais(j.t1, j.t2) * teamSize;
     }, 0);
-    var pessoasNecessarias = Math.ceil(horasSemanaisNecessarias / 40);
+    var pessoasNecessarias = (horasSemanaisNecessarias / 40).toFixed(1);
     return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginTop: 10, padding: 14, background: "#F5F3FF", border: "1.5px solid #7C3AED" }) },
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#5B21B6", textTransform: "uppercase", marginBottom: 8 } }, "\uD83D\uDC65 Necessidade de Equipa (com base nos servi\xE7os desta semana)"),
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 20 } },
@@ -2645,7 +2645,7 @@ function Routes() {
         ),
         /* @__PURE__ */ React.createElement("div", null,
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#5B21B6" } }, pessoasNecessarias),
-          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, "pessoas a 40h/semana para cobrir isto"),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, "pessoas equivalentes a full-time (ex: 2.2 = 2 a full-time + 1 a ~20%)"),
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B" } }, "(tens ", emps.length, " na equipa hoje)")
         )
       )
