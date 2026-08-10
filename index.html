@@ -5170,7 +5170,7 @@ function StockAnalise(props) {
       var totais = seriesArr.map(function(s) { return { nome: s.nome, cor: s.cor, total: s.pontos.reduce(function(a, b) { return a + b; }, 0) }; });
       var maxTotal = Math.max.apply(null, totais.map(function(t) { return t.total; }).concat([1]));
       var n = totais.length;
-      var largColuna = Math.min(70, 560 / n - 10);
+      var largColuna = Math.min(28, 560 / n - 20);
       return /* @__PURE__ */ React.createElement("div", null,
         /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 600 220", style: { width: "100%", height: "auto" } },
           [0, 0.5, 1].map(function(f, i) {
