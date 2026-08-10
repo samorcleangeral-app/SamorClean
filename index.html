@@ -4877,6 +4877,11 @@ function PedidosColab(props) {
   const [loading, setLoading] = useState(true);
   const [selFunc, setSelFunc] = useState(null);
   const [filtroTipo, setFiltroTipo] = useState("todos");
+  const [filtroEstado, setFiltroEstado] = useState("pendente");
+  const [produtosStock, setProdutosStock] = useState([]);
+  useEffect(function() {
+    db.list("stock_produtos", "?select=nome,quantidade,quantidade_minima").then(function(rows) { setProdutosStock(rows || []); });
+  }, []);
   const [selPedido, setSelPedido] = useState(null);
   const [resposta, setResposta] = useState("");
   const [classificacaoFalta, setClassificacaoFalta] = useState(null);
@@ -4972,7 +4977,7 @@ function PedidosColab(props) {
     var todosPedidosFunc = (byFunc[selFunc.id] ? byFunc[selFunc.id].pedidos : []).slice().sort(function(a, b) { return new Date(b.created_at) - new Date(a.created_at); });
     var contagemTipo = { ausencia: 0, fardamento: 0, material: 0 };
     todosPedidosFunc.forEach(function(p) { if (contagemTipo[p.tipo] !== undefined) contagemTipo[p.tipo]++; });
-    var funcPedidos = filtroTipo === "todos" ? todosPedidosFunc : todosPedidosFunc.filter(function(p) { return p.tipo === filtroTipo; });
+    var funcPedidos = (filtroTipo === "todos" ? todosPedidosFunc : todosPedidosFunc.filter(function(p) { return p.tipo === filtroTipo; })).filter(function(p) { return filtroEstado === "todos" || p.estado === filtroEstado; });
     return /* @__PURE__ */ React.createElement("div", null,
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 20 } },
         /* @__PURE__ */ React.createElement("button", { onClick: function() { setSelFunc(null); setFiltroTipo("todos"); }, style: Object.assign({}, btnO, { padding: "8px 14px", fontSize: 13 }) }, "\u2190 Voltar"),
@@ -4986,6 +4991,13 @@ function PedidosColab(props) {
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 900, color: isActive ? "#fff" : t[3] } }, count),
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: isActive ? "rgba(255,255,255,0.85)" : "#64748B", marginTop: 2 } }, t[2], " ", t[1])
           );
+        })
+      ),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 18 } },
+        [["pendente", "Pendentes"], ["aprovado", "Aprovados"], ["recusado", "Recusados"], ["todos", "Todos"]].map(function(es) {
+          var isActive = filtroEstado === es[0];
+          var cor = ESTADO_COR[es[0]] || "#1A3A5C";
+          return /* @__PURE__ */ React.createElement("button", { key: es[0], onClick: function() { setFiltroEstado(es[0]); }, style: { padding: "5px 12px", borderRadius: 7, border: "1.5px solid " + (isActive ? cor : "#E2EBF4"), background: isActive ? cor : "#fff", color: isActive ? "#fff" : "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, es[1]);
         })
       ),
       funcPedidos.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 32, color: "#94A3B8" }) }, "Sem pedidos deste tipo.") :
@@ -5034,6 +5046,36 @@ function PedidosColab(props) {
         /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, color: "#92400E", fontSize: 13 } }, totalPendentes, " pendente", totalPendentes !== 1 ? "s" : "")
       )
     ),
+    (function() {
+      var porProduto = {};
+      pedidos.filter(function(p) { return p.tipo === "material" && p.detalhes && p.detalhes.item; }).forEach(function(p) {
+        var item = p.detalhes.item;
+        if (!porProduto[item]) porProduto[item] = { total: 0, pendentes: 0, colabs: {} };
+        porProduto[item].total++;
+        if (p.estado === "pendente") porProduto[item].pendentes++;
+        porProduto[item].colabs[p.funcionario_nome] = (porProduto[item].colabs[p.funcionario_nome] || 0) + 1;
+      });
+      var itens = Object.keys(porProduto);
+      if (itens.length === 0) return null;
+      return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20 }) },
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 12 } }, "\uD83D\uDCE6 Pedidos de Material \u2014 agrupados por produto"),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 10 } },
+          itens.sort(function(a, b) { return porProduto[b].pendentes - porProduto[a].pendentes || porProduto[b].total - porProduto[a].total; }).map(function(item) {
+            var info = porProduto[item];
+            var stockInfo = produtosStock.find(function(sp) { return sp.nome === item; });
+            var emBaixo = stockInfo && stockInfo.quantidade <= stockInfo.quantidade_minima;
+            return /* @__PURE__ */ React.createElement("div", { key: item, style: { border: "1.5px solid " + (emBaixo ? "#EF4444" : "#E2EBF4"), background: emBaixo ? "#FEF2F2" : "#F8FAFC", borderRadius: 10, padding: 12 } },
+              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 } },
+                /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C" } }, item),
+                info.pendentes > 0 && /* @__PURE__ */ React.createElement("span", { style: { background: "#F59E0B", color: "#fff", borderRadius: 6, padding: "1px 7px", fontSize: 10, fontWeight: 800 } }, info.pendentes)
+              ),
+              emBaixo && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#EF4444", fontWeight: 700, marginBottom: 4 } }, "\u26A0 Stock em baixo (", stockInfo.quantidade, ")"),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, info.total, " pedido", info.total !== 1 ? "s" : "", " \u2014 ", Object.keys(info.colabs).join(", "))
+            );
+          })
+        )
+      );
+    })(),
     funcList.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) },
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, marginBottom: 12 } }, "\u{1F4E5}"),
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16, marginBottom: 8 } }, "Sem pedidos"),
