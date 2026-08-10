@@ -747,7 +747,10 @@ function Finance() {
     for (var i = 0; i < jobIds.length; i++) {
       await fetch(SUPABASE_URL + "/rest/v1/servicos?id=eq." + jobIds[i], { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ paid: true }) });
     }
-    setMonthJobsAll(function(p) { return p.map(function(j) { return jobIds.indexOf(j.id) !== -1 ? Object.assign({}, j, { paid: true }) : j; }); });
+    var marcarPagoFn = function(j) { return jobIds.indexOf(j.id) !== -1 ? Object.assign({}, j, { paid: true }) : j; };
+    setMonthJobsAll(function(p) { return p.map(marcarPagoFn); });
+    setMonthJobs(function(p) { return p.map(marcarPagoFn); });
+    setAllPendingJobs(function(p) { return p.map(marcarPagoFn); });
   }
   const METit = { cash_flow: "\uD83D\uDCB0 Cash Flow", margem_lucro: "\uD83D\uDCC8 Margem de Lucro", faturacao: "\uD83E\uDDFE Factura\xE7\xE3o", outro: "\uD83C\uDFAF Outro" };
 
@@ -1631,17 +1634,35 @@ function Finance() {
       });
       if (selCobrar && byClientCobrar[selCobrar]) {
         var d = byClientCobrar[selCobrar];
+        var porMesCobrar = {};
+        d.jobs.forEach(function(j) {
+          var mesChave = j.date.slice(0, 7);
+          if (!porMesCobrar[mesChave]) porMesCobrar[mesChave] = { jobs: [], total: 0 };
+          porMesCobrar[mesChave].jobs.push(j);
+          porMesCobrar[mesChave].total += withIva(j.val || 0, j);
+        });
+        var mesesOrdenados = Object.keys(porMesCobrar).sort();
         return /* @__PURE__ */ React.createElement("div", null,
           /* @__PURE__ */ React.createElement("button", { onClick: function() { setSelCobrar(null); }, style: Object.assign({}, btnO, { fontSize: 12, padding: "6px 12px", marginBottom: 14 }) }, "\u2190 Voltar"),
           /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 12 } }, d.cn),
-          d.jobs.sort(function(a, b) { return a.date < b.date ? -1 : 1; }).map(function(j) {
-            var cor = j.diffDays >= 30 ? "#DC2626" : j.diffDays >= 15 ? "#F97316" : j.diffDays >= 9 ? "#F59E0B" : "#64748B";
-            return /* @__PURE__ */ React.createElement("div", { key: j.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #F1F5F9" } },
-              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, new Date(j.date + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "short" }), " \u2022 ", j.t1, "\u2013", j.t2),
-              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 14, alignItems: "center" } },
-                /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, fontSize: 13 } }, fmt(withIva(j.val || 0, j)), "\u20AC"),
-                /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 12, color: cor } }, j.diffDays, "d")
-              )
+          mesesOrdenados.map(function(mesChave) {
+            var grupo = porMesCobrar[mesChave];
+            var mesLabel = new Date(mesChave + "-15T12:00:00").toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
+            return /* @__PURE__ */ React.createElement("div", { key: mesChave, style: Object.assign({}, card, { marginBottom: 14, padding: 14 }) },
+              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 } },
+                /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", textTransform: "capitalize" } }, mesLabel, " \u2014 ", fmt(grupo.total), "\u20AC"),
+                /* @__PURE__ */ React.createElement("button", { onClick: function() { marcarPagoCliente(selCobrar, grupo.jobs.map(function(j) { return j.id; })); }, style: Object.assign({}, btnG, { fontSize: 11, padding: "5px 12px" }) }, "Marcar m\xEAs como pago")
+              ),
+              grupo.jobs.sort(function(a, b) { return a.date < b.date ? -1 : 1; }).map(function(j) {
+                var cor = j.diffDays >= 30 ? "#DC2626" : j.diffDays >= 15 ? "#F97316" : j.diffDays >= 9 ? "#F59E0B" : "#64748B";
+                return /* @__PURE__ */ React.createElement("div", { key: j.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F1F5F9" } },
+                  /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, new Date(j.date + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "short" }), " \u2022 ", j.t1, "\u2013", j.t2),
+                  /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 14, alignItems: "center" } },
+                    /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, fontSize: 13 } }, fmt(withIva(j.val || 0, j)), "\u20AC"),
+                    /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 12, color: cor } }, j.diffDays, "d")
+                  )
+                );
+              })
             );
           })
         );
