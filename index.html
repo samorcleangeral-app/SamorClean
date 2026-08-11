@@ -1695,10 +1695,11 @@ function Finance() {
           byClientCobrar[gid] = { cn: gnome, count: 0, semIva: 0, comIva: 0, ultimaData: j.date, maxDias: 0, jobs: [], tipoFat: cRefTipo ? cRefTipo.tipo_faturacao : "hora" };
         }
         var diffDays = Math.floor((now - new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3));
+        var valRestante = Math.max(0, (j.val || 0) - (j.valor_pago_parcial || 0));
         byClientCobrar[gid].count++;
-        byClientCobrar[gid].semIva += (j.val || 0);
-        byClientCobrar[gid].comIva += withIva(j.val || 0, j);
-        byClientCobrar[gid].jobs.push(Object.assign({}, j, { diffDays: diffDays }));
+        byClientCobrar[gid].semIva += valRestante;
+        byClientCobrar[gid].comIva += withIva(valRestante, j);
+        byClientCobrar[gid].jobs.push(Object.assign({}, j, { diffDays: diffDays, val: valRestante }));
         if (j.date > byClientCobrar[gid].ultimaData) byClientCobrar[gid].ultimaData = j.date;
         if (diffDays > byClientCobrar[gid].maxDias) byClientCobrar[gid].maxDias = diffDays;
       });
