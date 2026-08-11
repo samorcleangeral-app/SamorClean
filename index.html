@@ -443,6 +443,7 @@ function Finance() {
   const [selCobrar, setSelCobrar] = useState(null);
   const [contaCorrenteAberta, setContaCorrenteAberta] = useState(false);
   const [contaCorrenteJobs, setContaCorrenteJobs] = useState([]);
+  const [contaCorrenteEdits, setContaCorrenteEdits] = useState({});
   const [carregandoConta, setCarregandoConta] = useState(false);
   async function abrirContaCorrente(clientId) {
     setCarregandoConta(true);
@@ -455,13 +456,40 @@ function Finance() {
     setContaCorrenteJobs(flat.sort(function(a, b) { return a.date < b.date ? 1 : -1; }));
     setCarregandoConta(false);
   }
+  async function salvarPagamentoParcial(job) {
+    var novoValorComIva = parseFloat(contaCorrenteEdits[job.id]);
+    if (isNaN(novoValorComIva) || novoValorComIva < 0) return;
+    var isAutoliq = job.iva_override === "autoliquida\xE7\xE3o";
+    var novoValorSemIva = isAutoliq ? novoValorComIva : novoValorComIva / 1.23;
+    var totalSemIva = parseFloat(job.val) || 0;
+    var patch = { valor_pago_parcial: Math.min(novoValorSemIva, totalSemIva) };
+    if (Math.min(novoValorSemIva, totalSemIva) >= totalSemIva - 0.01) patch.paid = true;
+    var d = await db.update("servicos", job.id, patch);
+    if (d) {
+      setContaCorrenteJobs(function(p) { return p.map(function(j) { return j.id === job.id ? d : j; }); });
+      var edits = Object.assign({}, contaCorrenteEdits);
+      delete edits[job.id];
+      setContaCorrenteEdits(edits);
+      if (d.paid) {
+        setMonthJobsAll(function(p) { return p.map(function(j) { return j.id === job.id ? Object.assign({}, j, { paid: true }) : j; }); });
+        setMonthJobs(function(p) { return p.map(function(j) { return j.id === job.id ? Object.assign({}, j, { paid: true }) : j; }); });
+        setAllPendingJobs(function(p) { return p.filter(function(j) { return j.id !== job.id; }); });
+      }
+    } else {
+      alert("\u26A0 Erro ao guardar o pagamento parcial.");
+    }
+  }
   function exportarContaCorrentePDF(nomeCliente, jobs) {
     var linhas = jobs.slice().sort(function(a, b) { return a.date < b.date ? -1 : 1; }).map(function(j) {
       var v = withIva(j.val || 0, j);
-      return "<tr><td style='padding:8px 10px'>" + new Date(j.date + "T12:00:00").toLocaleDateString("pt-PT") + "</td><td style='padding:8px 10px'>" + j.svc + "</td><td style='padding:8px 10px;text-align:right'>" + fmt(v) + "\u20AC</td><td style='padding:8px 10px;text-align:center;font-weight:700;color:" + (j.paid ? "#16A34A" : "#DC2626") + "'>" + (j.paid ? "Pago" : "Pendente") + "</td></tr>";
+      var vPago = j.paid ? v : Math.min(v, withIva(j.valor_pago_parcial || 0, j));
+      var estado = j.paid ? "Pago" : vPago > 0 ? "Parcial (" + fmt(vPago) + "\u20AC)" : "Pendente";
+      var cor = j.paid ? "#16A34A" : vPago > 0 ? "#F59E0B" : "#DC2626";
+      return "<tr><td style='padding:8px 10px'>" + new Date(j.date + "T12:00:00").toLocaleDateString("pt-PT") + "</td><td style='padding:8px 10px'>" + j.svc + "</td><td style='padding:8px 10px;text-align:right'>" + fmt(v) + "\u20AC</td><td style='padding:8px 10px;text-align:center;font-weight:700;color:" + cor + "'>" + estado + "</td></tr>";
     }).join("");
-    var totalPago = jobs.filter(function(j) { return j.paid; }).reduce(function(s, j) { return s + withIva(j.val || 0, j); }, 0);
-    var totalPendente = jobs.filter(function(j) { return !j.paid; }).reduce(function(s, j) { return s + withIva(j.val || 0, j); }, 0);
+    var totalPago = jobs.reduce(function(s, j) { var v = withIva(j.val || 0, j); return s + (j.paid ? v : Math.min(v, withIva(j.valor_pago_parcial || 0, j))); }, 0);
+    var totalGeral = jobs.reduce(function(s, j) { return s + withIva(j.val || 0, j); }, 0);
+    var totalPendente = totalGeral - totalPago;
     const win = window.open("", "_blank");
     win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Conta Corrente \u2014 " + nomeCliente + "</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C}h1{margin-bottom:2px}h2{color:#64748B;font-weight:normal;margin-top:0;margin-bottom:16px}table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;padding:8px 10px;background:#1A3A5C;color:#fff;font-size:10px;text-transform:uppercase}tr{border-bottom:1px solid #E2EBF4}.resumo{display:flex;gap:24px;margin-bottom:20px}.resumo div{background:#F8FAFC;border-radius:8px;padding:10px 16px}@media print{body{padding:15px}}</style></head><body><h1>SamorClean</h1><h2>Conta Corrente \u2014 " + nomeCliente + "</h2><div class='resumo'><div><b>Total pago:</b> " + fmt(totalPago) + "\u20AC</div><div><b>Total pendente:</b> " + fmt(totalPendente) + "\u20AC</div></div><table><thead><tr><th>Data</th><th>Servi\xE7o</th><th style='text-align:right'>Valor</th><th style='text-align:center'>Estado</th></tr></thead><tbody>" + linhas + "</tbody></table><script>window.onload=function(){window.print();}<\/script></body></html>");
     win.document.close();
@@ -1699,8 +1727,9 @@ function Finance() {
               ),
               carregandoConta ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 30, color: "#94A3B8" } }, "A carregar...") : /* @__PURE__ */ React.createElement("div", null,
                 (function() {
-                  var totalPago = contaCorrenteJobs.filter(function(j) { return j.paid; }).reduce(function(s, j) { return s + withIva(j.val || 0, j); }, 0);
-                  var totalPendente = contaCorrenteJobs.filter(function(j) { return !j.paid; }).reduce(function(s, j) { return s + withIva(j.val || 0, j); }, 0);
+                  var totalPago = contaCorrenteJobs.reduce(function(s, j) { var v = withIva(j.val || 0, j); return s + (j.paid ? v : Math.min(v, withIva(j.valor_pago_parcial || 0, j))); }, 0);
+                  var totalGeral = contaCorrenteJobs.reduce(function(s, j) { return s + withIva(j.val || 0, j); }, 0);
+                  var totalPendente = totalGeral - totalPago;
                   return /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 12, marginBottom: 16 } },
                     /* @__PURE__ */ React.createElement("div", { style: { background: "#F0FDF4", borderRadius: 8, padding: "8px 14px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B" } }, "Total pago"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 800, color: "#16A34A" } }, fmt(totalPago), "\u20AC")),
                     /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF2F2", borderRadius: 8, padding: "8px 14px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B" } }, "Total pendente"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 800, color: "#DC2626" } }, fmt(totalPendente), "\u20AC"))
@@ -1709,11 +1738,24 @@ function Finance() {
                 /* @__PURE__ */ React.createElement("button", { onClick: function() { exportarContaCorrentePDF(d.cn, contaCorrenteJobs); }, style: Object.assign({}, btnO, { fontSize: 11, padding: "6px 12px", marginBottom: 14 }) }, "\uD83D\uDCC4 Exportar PDF"),
                 contaCorrenteJobs.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 20, color: "#94A3B8", fontSize: 13 } }, "Sem servi\xE7os concluídos ainda.") :
                 contaCorrenteJobs.map(function(j) {
-                  return /* @__PURE__ */ React.createElement("div", { key: j.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F1F5F9" } },
-                    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#334155" } }, new Date(j.date + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "short", year: "numeric" }), /* @__PURE__ */ React.createElement("span", { style: { color: "#94A3B8", marginLeft: 8 } }, j.svc)),
-                    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center" } },
-                      /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, fontSize: 13 } }, fmt(withIva(j.val || 0, j)), "\u20AC"),
-                      /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 800, color: j.paid ? "#16A34A" : "#DC2626", background: j.paid ? "#F0FDF4" : "#FEF2F2", borderRadius: 6, padding: "2px 8px" } }, j.paid ? "Pago" : "Pendente")
+                  var vTotal = withIva(j.val || 0, j);
+                  var vPagoParcial = j.paid ? vTotal : Math.min(vTotal, withIva(j.valor_pago_parcial || 0, j));
+                  var vPendente = vTotal - vPagoParcial;
+                  var inputVal = contaCorrenteEdits[j.id] !== undefined ? contaCorrenteEdits[j.id] : (j.valor_pago_parcial || "");
+                  return /* @__PURE__ */ React.createElement("div", { key: j.id, style: { padding: "10px 0", borderBottom: "1px solid #F1F5F9" } },
+                    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: vPendente > 0.005 && !j.paid ? 6 : 0 } },
+                      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#334155" } }, new Date(j.date + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "short", year: "numeric" }), /* @__PURE__ */ React.createElement("span", { style: { color: "#94A3B8", marginLeft: 8 } }, j.svc)),
+                      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center" } },
+                        /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, fontSize: 13 } }, fmt(vTotal), "\u20AC"),
+                        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 800, color: j.paid ? "#16A34A" : vPagoParcial > 0 ? "#F59E0B" : "#DC2626", background: j.paid ? "#F0FDF4" : vPagoParcial > 0 ? "#FFFBEB" : "#FEF2F2", borderRadius: 6, padding: "2px 8px" } }, j.paid ? "Pago" : vPagoParcial > 0 ? "Parcial (" + fmt(vPagoParcial) + "\u20AC)" : "Pendente")
+                      )
+                    ),
+                    vPendente > 0.005 && !j.paid && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
+                      /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: "#94A3B8" } }, "Registar pagamento parcial (\u20AC, com IVA):"),
+                      /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { width: 90, padding: "4px 8px", fontSize: 11 }), type: "number", step: "0.01", value: inputVal, placeholder: "0", onFocus: function(e) { e.target.select(); }, onChange: function(e) {
+                        setContaCorrenteEdits(Object.assign({}, contaCorrenteEdits, { [j.id]: e.target.value }));
+                      } }),
+                      /* @__PURE__ */ React.createElement("button", { onClick: function() { salvarPagamentoParcial(j); }, style: Object.assign({}, btnO, { fontSize: 10, padding: "3px 10px" }) }, "Guardar")
                     )
                   );
                 })
