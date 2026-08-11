@@ -744,13 +744,22 @@ function Finance() {
     return null;
   }
   async function marcarPagoCliente(clientId, jobIds) {
+    var falhas = [];
     for (var i = 0; i < jobIds.length; i++) {
-      await fetch(SUPABASE_URL + "/rest/v1/servicos?id=eq." + jobIds[i], { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ paid: true }) });
+      try {
+        var res = await fetch(SUPABASE_URL + "/rest/v1/servicos?id=eq." + jobIds[i], { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ paid: true }) });
+        if (!res.ok) falhas.push(jobIds[i]);
+      } catch (err) {
+        falhas.push(jobIds[i]);
+      }
     }
-    var marcarPagoFn = function(j) { return jobIds.indexOf(j.id) !== -1 ? Object.assign({}, j, { paid: true }) : j; };
+    var marcarPagoFn = function(j) { return jobIds.indexOf(j.id) !== -1 && falhas.indexOf(j.id) === -1 ? Object.assign({}, j, { paid: true }) : j; };
     setMonthJobsAll(function(p) { return p.map(marcarPagoFn); });
     setMonthJobs(function(p) { return p.map(marcarPagoFn); });
     setAllPendingJobs(function(p) { return p.map(marcarPagoFn); });
+    if (falhas.length > 0) {
+      alert("\u26A0 " + falhas.length + " de " + jobIds.length + " servi\xE7o(s) n\xE3o foram marcados como pagos (erro de liga\xE7\xE3o ou permiss\xE3o). Tenta outra vez.");
+    }
   }
   const METit = { cash_flow: "\uD83D\uDCB0 Cash Flow", margem_lucro: "\uD83D\uDCC8 Margem de Lucro", faturacao: "\uD83E\uDDFE Factura\xE7\xE3o", outro: "\uD83C\uDFAF Outro" };
 
