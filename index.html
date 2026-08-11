@@ -3289,7 +3289,8 @@ function Clients() {
         return t.trim() !== "";
       }),
       schedule: editForm.schedule || [],
-      equipa_habitual: editForm.equipa_habitual || []
+      equipa_habitual: editForm.equipa_habitual || [],
+      tipo_faturacao: (editForm.service === "Limpeza P\xF3s-Obra" || editForm.service === "Limpeza Profunda") ? "orcamento" : (editForm.tipo_faturacao || "hora")
     });
     const updated = await db.update("clientes", sel.id, patch);
     if (updated) {
@@ -3421,6 +3422,7 @@ function Clients() {
       id: newId,
       since: today,
       rating: null,
+      tipo_faturacao: (form.service === "Limpeza P\xF3s-Obra" || form.service === "Limpeza Profunda") ? "orcamento" : (form.tipo_faturacao || "hora"),
       checklist: form.checklist.filter(function(t) {
         return t.trim() !== "";
       })
