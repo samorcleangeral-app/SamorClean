@@ -1633,7 +1633,10 @@ function Finance() {
         var gidCliente = clientes.find(function(cc) { return cc.id === j.client_id; });
         var gid = (gidCliente && gidCliente.cliente_principal_id) || j.client_id;
         var gnome = principalNome[j.client_id] || j.cn;
-        if (!byClientCobrar[gid]) byClientCobrar[gid] = { cn: gnome, count: 0, semIva: 0, comIva: 0, ultimaData: j.date, maxDias: 0, jobs: [] };
+        if (!byClientCobrar[gid]) {
+          var cRefTipo = clientes.find(function(cc) { return cc.id === gid; });
+          byClientCobrar[gid] = { cn: gnome, count: 0, semIva: 0, comIva: 0, ultimaData: j.date, maxDias: 0, jobs: [], tipoFat: cRefTipo ? cRefTipo.tipo_faturacao : "hora" };
+        }
         var diffDays = Math.floor((now - new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3));
         byClientCobrar[gid].count++;
         byClientCobrar[gid].semIva += (j.val || 0);
@@ -1654,14 +1657,16 @@ function Finance() {
         var mesesOrdenados = Object.keys(porMesCobrar).sort();
         return /* @__PURE__ */ React.createElement("div", null,
           /* @__PURE__ */ React.createElement("button", { onClick: function() { setSelCobrar(null); }, style: Object.assign({}, btnO, { fontSize: 12, padding: "6px 12px", marginBottom: 14 }) }, "\u2190 Voltar"),
-          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 12 } }, d.cn),
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 2 } }, d.cn),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#7C3AED", fontWeight: 700, marginBottom: 14 } }, d.tipoFat === "mensal" ? "\uD83D\uDCC5 Aven\xE7a mensal" : d.tipoFat === "visita" ? "\u2713 Por visita" : d.tipoFat === "orcamento" ? "\uD83D\uDCC4 Por or\xE7amento" : "\uD83D\uDD52 Por hora"),
           mesesOrdenados.map(function(mesChave) {
             var grupo = porMesCobrar[mesChave];
             var mesLabel = new Date(mesChave + "-15T12:00:00").toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
+            var isAvenca = d.tipoFat === "mensal";
             return /* @__PURE__ */ React.createElement("div", { key: mesChave, style: Object.assign({}, card, { marginBottom: 14, padding: 14 }) },
               /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 } },
-                /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", textTransform: "capitalize" } }, mesLabel, " \u2014 ", fmt(grupo.total), "\u20AC"),
-                /* @__PURE__ */ React.createElement("button", { onClick: function() { marcarPagoCliente(selCobrar, grupo.jobs.map(function(j) { return j.id; })); }, style: Object.assign({}, btnG, { fontSize: 11, padding: "5px 12px" }) }, "Marcar m\xEAs como pago")
+                /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", textTransform: "capitalize" } }, isAvenca ? "Aven\xE7a de " + mesLabel + " (" + grupo.jobs.length + " visita" + (grupo.jobs.length !== 1 ? "s" : "") + " inclu\xEDda" + (grupo.jobs.length !== 1 ? "s" : "") + ")" : mesLabel, " \u2014 ", fmt(grupo.total), "\u20AC"),
+                /* @__PURE__ */ React.createElement("button", { onClick: function() { marcarPagoCliente(selCobrar, grupo.jobs.map(function(j) { return j.id; })); }, style: Object.assign({}, btnG, { fontSize: 11, padding: "5px 12px" }) }, isAvenca ? "Marcar aven\xE7a como paga" : "Marcar m\xEAs como pago")
               ),
               grupo.jobs.sort(function(a, b) { return a.date < b.date ? -1 : 1; }).map(function(j) {
                 var cor = j.diffDays >= 30 ? "#DC2626" : j.diffDays >= 15 ? "#F97316" : j.diffDays >= 9 ? "#F59E0B" : "#64748B";
@@ -1680,9 +1685,11 @@ function Finance() {
       return /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 12 } },
         Object.keys(byClientCobrar).map(function(cid) { return Object.assign({ cid: cid }, byClientCobrar[cid]); }).sort(function(a, b) { return b.maxDias - a.maxDias; }).map(function(c) {
           const cor = c.maxDias >= 30 ? "#DC2626" : c.maxDias >= 15 ? "#F97316" : c.maxDias >= 9 ? "#F59E0B" : "#64748B";
+          const tipoLabel = c.tipoFat === "mensal" ? "\uD83D\uDCC5 Aven\xE7a mensal" : c.tipoFat === "visita" ? "\u2713 Por visita" : c.tipoFat === "orcamento" ? "\uD83D\uDCC4 Por or\xE7amento" : "\uD83D\uDD52 Por hora";
           return /* @__PURE__ */ React.createElement("div", { key: c.cid, onClick: function() { setSelCobrar(c.cid); }, style: { border: "1px solid #E2EBF4", borderLeft: "4px solid " + cor, borderRadius: 10, padding: "12px 14px", cursor: "pointer" } },
-            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.cn),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 6 } }, c.count, " servi\xE7o", c.count !== 1 ? "s" : "", " \u2022 \xFAltimo ", new Date(c.ultimaData + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "short" })),
+            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.cn),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#7C3AED", fontWeight: 700, marginBottom: 6 } }, tipoLabel),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 6 } }, c.tipoFat === "mensal" ? c.count + " visita" + (c.count !== 1 ? "s" : "") + " inclu\xEDda" + (c.count !== 1 ? "s" : "") : c.count + " servi\xE7o" + (c.count !== 1 ? "s" : ""), " \u2022 \xFAltimo ", new Date(c.ultimaData + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "short" })),
             /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
               /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, fmt(c.comIva), "\u20AC"),
               /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 12, color: cor } }, c.maxDias, "d")
