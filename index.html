@@ -435,6 +435,7 @@ function Finance() {
   const [loading, setLoading] = useState(true);
   const [monthJobs, setMonthJobs] = useState([]);
   const [monthJobsAll, setMonthJobsAll] = useState([]);
+  const [marcandoPagoId, setMarcandoPagoId] = useState(null);
   const [last6Months, setLast6Months] = useState([]);
   const [despesas6Months, setDespesas6Months] = useState([]);
   const [absData6Months, setAbsData6Months] = useState([]);
@@ -744,21 +745,21 @@ function Finance() {
     return null;
   }
   async function marcarPagoCliente(clientId, jobIds) {
+    setMarcandoPagoId(clientId);
     var falhas = [];
     for (var i = 0; i < jobIds.length; i++) {
-      try {
-        var res = await fetch(SUPABASE_URL + "/rest/v1/servicos?id=eq." + jobIds[i], { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ paid: true }) });
-        if (!res.ok) falhas.push(jobIds[i]);
-      } catch (err) {
-        falhas.push(jobIds[i]);
-      }
+      var d = await db.update("servicos", jobIds[i], { paid: true });
+      if (!d) falhas.push(jobIds[i]);
     }
     var marcarPagoFn = function(j) { return jobIds.indexOf(j.id) !== -1 && falhas.indexOf(j.id) === -1 ? Object.assign({}, j, { paid: true }) : j; };
     setMonthJobsAll(function(p) { return p.map(marcarPagoFn); });
     setMonthJobs(function(p) { return p.map(marcarPagoFn); });
     setAllPendingJobs(function(p) { return p.map(marcarPagoFn); });
+    setMarcandoPagoId(null);
     if (falhas.length > 0) {
-      alert("\u26A0 " + falhas.length + " de " + jobIds.length + " servi\xE7o(s) n\xE3o foram marcados como pagos (erro de liga\xE7\xE3o ou permiss\xE3o). Tenta outra vez.");
+      alert("\u26A0 " + falhas.length + " de " + jobIds.length + " servi\xE7o(s) n\xE3o foram marcados como pagos. Abre a consola do browser (F12) para veres o erro exacto, ou tenta outra vez.");
+    } else {
+      alert("\u2713 Marcado como pago com sucesso.");
     }
   }
   const METit = { cash_flow: "\uD83D\uDCB0 Cash Flow", margem_lucro: "\uD83D\uDCC8 Margem de Lucro", faturacao: "\uD83E\uDDFE Factura\xE7\xE3o", outro: "\uD83C\uDFAF Outro" };
