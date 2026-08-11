@@ -5002,6 +5002,14 @@ function PedidosColab(props) {
       headers: dbHeaders(),
       body: JSON.stringify({ estado, resposta })
     });
+    if (estado !== "aprovado" && selPedido && selPedido.estado === "aprovado" && selPedido.tipo === "ausencia" && selPedido.detalhes) {
+      var detRev = selPedido.detalhes;
+      await fetch(SUPABASE_URL + "/rest/v1/ausencias?funcionario_id=eq." + encodeURIComponent(selPedido.funcionario_id) + "&data_inicio=eq." + detRev.data_inicio + "&data_fim=eq." + (detRev.data_fim || detRev.data_inicio), {
+        method: "DELETE",
+        headers: dbHeaders()
+      });
+      alert("\u2713 O registo de aus\xEAncia correspondente tamb\xE9m foi removido \u2014 " + selPedido.funcionario_nome + " j\xE1 volta a aparecer dispon\xEDvel nas Rotas para esse per\xEDodo.");
+    }
     if (estado === "aprovado" && selPedido && selPedido.tipo === "ausencia" && selPedido.detalhes) {
       var det = selPedido.detalhes;
       var horaIni = det.parcial ? horaInicioEdit || det.hora_inicio : null;
