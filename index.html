@@ -754,7 +754,7 @@ function Finance() {
     var marcarPagoFn = function(j) { return jobIds.indexOf(j.id) !== -1 && falhas.indexOf(j.id) === -1 ? Object.assign({}, j, { paid: true }) : j; };
     setMonthJobsAll(function(p) { return p.map(marcarPagoFn); });
     setMonthJobs(function(p) { return p.map(marcarPagoFn); });
-    setAllPendingJobs(function(p) { return p.map(marcarPagoFn); });
+    setAllPendingJobs(function(p) { return p.filter(function(j) { return jobIds.indexOf(j.id) === -1 || falhas.indexOf(j.id) !== -1; }); });
     setMarcandoPagoId(null);
     if (falhas.length > 0) {
       alert("\u26A0 " + falhas.length + " de " + jobIds.length + " servi\xE7o(s) n\xE3o foram marcados como pagos. Tenta outra vez.");
