@@ -482,14 +482,13 @@ function Finance() {
   function exportarContaCorrentePDF(nomeCliente, jobs) {
     var linhas = jobs.slice().sort(function(a, b) { return a.date < b.date ? -1 : 1; }).map(function(j) {
       var v = withIva(j.val || 0, j);
-      var vPago = j.paid ? v : Math.min(v, withIva(j.valor_pago_parcial || 0, j));
+      var vPago = valorPagoDoJob(j);
       var estado = j.paid ? "Pago" : vPago > 0 ? "Parcial (" + fmt(vPago) + "\u20AC)" : "Pendente";
       var cor = j.paid ? "#16A34A" : vPago > 0 ? "#F59E0B" : "#DC2626";
       return "<tr><td style='padding:8px 10px'>" + new Date(j.date + "T12:00:00").toLocaleDateString("pt-PT") + "</td><td style='padding:8px 10px'>" + j.svc + "</td><td style='padding:8px 10px;text-align:right'>" + fmt(v) + "\u20AC</td><td style='padding:8px 10px;text-align:center;font-weight:700;color:" + cor + "'>" + estado + "</td></tr>";
     }).join("");
-    var totalPago = jobs.reduce(function(s, j) { var v = withIva(j.val || 0, j); return s + (j.paid ? v : Math.min(v, withIva(j.valor_pago_parcial || 0, j))); }, 0);
-    var totalGeral = jobs.reduce(function(s, j) { return s + withIva(j.val || 0, j); }, 0);
-    var totalPendente = totalGeral - totalPago;
+    var totalPago = jobs.reduce(function(s, j) { return s + valorPagoDoJob(j); }, 0);
+    var totalPendente = jobs.reduce(function(s, j) { return s + valorPendenteDoJob(j); }, 0);
     const win = window.open("", "_blank");
     win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Conta Corrente \u2014 " + nomeCliente + "</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C}h1{margin-bottom:2px}h2{color:#64748B;font-weight:normal;margin-top:0;margin-bottom:16px}table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;padding:8px 10px;background:#1A3A5C;color:#fff;font-size:10px;text-transform:uppercase}tr{border-bottom:1px solid #E2EBF4}.resumo{display:flex;gap:24px;margin-bottom:20px}.resumo div{background:#F8FAFC;border-radius:8px;padding:10px 16px}@media print{body{padding:15px}}</style></head><body><h1>SamorClean</h1><h2>Conta Corrente \u2014 " + nomeCliente + "</h2><div class='resumo'><div><b>Total pago:</b> " + fmt(totalPago) + "\u20AC</div><div><b>Total pendente:</b> " + fmt(totalPendente) + "\u20AC</div></div><table><thead><tr><th>Data</th><th>Servi\xE7o</th><th style='text-align:right'>Valor</th><th style='text-align:center'>Estado</th></tr></thead><tbody>" + linhas + "</tbody></table><script>window.onload=function(){window.print();}<\/script></body></html>");
     win.document.close();
@@ -623,20 +622,26 @@ function Finance() {
   function withIva(val, job) {
     return ivaTypeFor(job) === "autoliquida\xE7\xE3o" ? val : val * 1.23;
   }
+  function valorPagoDoJob(j) {
+    var total = withIva(j.val || 0, j);
+    if (j.paid) return total;
+    return Math.min(total, withIva(j.valor_pago_parcial || 0, j));
+  }
+  function valorPendenteDoJob(j) {
+    return Math.max(0, withIva(j.val || 0, j) - valorPagoDoJob(j));
+  }
   const fatSemIva = monthJobs.reduce(function(s, j) {
     return s + (j.val || 0);
   }, 0);
   const fatComIva = monthJobs.reduce(function(s, j) {
     return s + withIva(j.val || 0, j);
   }, 0);
-  const recebido = monthJobs.filter(function(j) {
-    return j.paid;
-  }).reduce(function(s, j) {
-    return s + withIva(j.val || 0, j);
+  const recebido = monthJobs.reduce(function(s, j) {
+    return s + valorPagoDoJob(j);
   }, 0);
   const divida = fatComIva - recebido;
   const dividaTotalAcumulada = allPendingJobs.reduce(function(s, j) {
-    return s + withIva(j.val || 0, j);
+    return s + valorPendenteDoJob(j);
   }, 0);
   const totalCustos = despesas.reduce(function(s, d) {
     return s + d.valor;
@@ -680,7 +685,7 @@ function Finance() {
     return diffDays >= 0;
   }) : [];
   const pendingRows = monthJobs.filter(function(j) {
-    if (j.paid) return false;
+    if (valorPendenteDoJob(j) < 0.01) return false;
     var cRef2 = clientes.find(function(cc) { return cc.id === j.client_id; });
     return !(cRef2 && cRef2.ativo === false);
   }).sort(function(a, b) {
@@ -1547,7 +1552,7 @@ function Finance() {
           var valorComIva = isAutoliq ? valorSemIva : valorSemIva * 1.23;
           var pendentes = jobs.filter(function(j) { return j.status !== "completed"; }).length;
           var jobIds = jobs.map(function(j) { return j.id; });
-          var todosPagos = jobs.length > 0 && jobs.every(function(j) { return j.paid; });
+          var todosPagos = jobs.length > 0 && jobs.every(function(j) { return valorPendenteDoJob(j) < 0.01; });
           return /* @__PURE__ */ React.createElement("div", { key: c.id, style: Object.assign({}, card, { marginBottom: 10, padding: 16, borderLeft: "4px solid #2E6DA4" }) },
             /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 } },
               /* @__PURE__ */ React.createElement("div", null,
@@ -1565,9 +1570,14 @@ function Finance() {
                   win.document.close();
                 }, style: Object.assign({}, btnO, { fontSize: 10, padding: "4px 10px", marginTop: 6 }) }, "\uD83D\uDCC4 PDF"),
                 /* @__PURE__ */ React.createElement("div", { style: { marginTop: 6 } },
-                  todosPagos ?
-                    /* @__PURE__ */ React.createElement("span", { style: { background: "#DCFCE7", color: "#15803D", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 700 } }, "\u2713 Pago") :
-                    /* @__PURE__ */ React.createElement("button", { onClick: function() { marcarPagoCliente(c.id, jobIds); }, style: Object.assign({}, btnG, { fontSize: 10, padding: "4px 10px" }) }, "Marcar como pago")
+                  (function() {
+                    var totalPagoCliente = jobs.reduce(function(s, j) { return s + valorPagoDoJob(j); }, 0);
+                    if (todosPagos) return /* @__PURE__ */ React.createElement("span", { style: { background: "#DCFCE7", color: "#15803D", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 700 } }, "\u2713 Pago");
+                    return /* @__PURE__ */ React.createElement("div", null,
+                      totalPagoCliente > 0.01 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#F59E0B", fontWeight: 700, marginBottom: 4 } }, "Parcial: ", fmt(totalPagoCliente), "\u20AC recebidos"),
+                      /* @__PURE__ */ React.createElement("button", { onClick: function() { marcarPagoCliente(c.id, jobIds); }, style: Object.assign({}, btnG, { fontSize: 10, padding: "4px 10px" }) }, "Marcar resto como pago")
+                    );
+                  })()
                 )
               )
             ),
@@ -1728,9 +1738,8 @@ function Finance() {
               ),
               carregandoConta ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 30, color: "#94A3B8" } }, "A carregar...") : /* @__PURE__ */ React.createElement("div", null,
                 (function() {
-                  var totalPago = contaCorrenteJobs.reduce(function(s, j) { var v = withIva(j.val || 0, j); return s + (j.paid ? v : Math.min(v, withIva(j.valor_pago_parcial || 0, j))); }, 0);
-                  var totalGeral = contaCorrenteJobs.reduce(function(s, j) { return s + withIva(j.val || 0, j); }, 0);
-                  var totalPendente = totalGeral - totalPago;
+                  var totalPago = contaCorrenteJobs.reduce(function(s, j) { return s + valorPagoDoJob(j); }, 0);
+                  var totalPendente = contaCorrenteJobs.reduce(function(s, j) { return s + valorPendenteDoJob(j); }, 0);
                   return /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 12, marginBottom: 16 } },
                     /* @__PURE__ */ React.createElement("div", { style: { background: "#F0FDF4", borderRadius: 8, padding: "8px 14px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B" } }, "Total pago"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 800, color: "#16A34A" } }, fmt(totalPago), "\u20AC")),
                     /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF2F2", borderRadius: 8, padding: "8px 14px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B" } }, "Total pendente"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 800, color: "#DC2626" } }, fmt(totalPendente), "\u20AC"))
@@ -1740,8 +1749,8 @@ function Finance() {
                 contaCorrenteJobs.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 20, color: "#94A3B8", fontSize: 13 } }, "Sem servi\xE7os concluídos ainda.") :
                 contaCorrenteJobs.map(function(j) {
                   var vTotal = withIva(j.val || 0, j);
-                  var vPagoParcial = j.paid ? vTotal : Math.min(vTotal, withIva(j.valor_pago_parcial || 0, j));
-                  var vPendente = vTotal - vPagoParcial;
+                  var vPagoParcial = valorPagoDoJob(j);
+                  var vPendente = valorPendenteDoJob(j);
                   var inputVal = contaCorrenteEdits[j.id] !== undefined ? contaCorrenteEdits[j.id] : (j.valor_pago_parcial || "");
                   return /* @__PURE__ */ React.createElement("div", { key: j.id, style: { padding: "10px 0", borderBottom: "1px solid #F1F5F9" } },
                     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: vPendente > 0.005 && !j.paid ? 6 : 0 } },
