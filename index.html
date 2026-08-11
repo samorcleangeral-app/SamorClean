@@ -3870,6 +3870,9 @@ function FichaRH(props) {
       }
       setShowAddAus(false);
       setAusForm({ tipo: "Baixa M\xE9dica", data_inicio: "", data_fim: "", descricao: "", estado: "aprovado", subsidio_ferias_pago: false, subsidio_ferias_valor: "", parcial: false, hora_inicio: "", hora_fim: "" });
+    } else {
+      const errTxt = await res.text();
+      alert("\u26A0 Erro ao guardar aus\xEAncia: " + errTxt.slice(0, 300));
     }
   }
   async function addFardamento() {
