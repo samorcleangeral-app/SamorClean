@@ -1573,11 +1573,12 @@ function Finance() {
           var valorComIva = isAutoliq ? valorSemIva : valorSemIva * 1.23;
           var todosPagos = jobs.length > 0 && jobs.every(function(j) { return valorPendenteDoJob(j) < 0.01; });
           var totalPagoCliente = jobs.reduce(function(s, j) { return s + valorPagoDoJob(j); }, 0);
-          var corEstado = todosPagos ? "#16A34A" : totalPagoCliente > 0.01 ? "#F59E0B" : "#2E6DA4";
+          var totalEmFaltaCliente = jobs.reduce(function(s, j) { return s + valorPendenteDoJob(j); }, 0);
+          var corEstado = todosPagos ? "#16A34A" : totalPagoCliente > 0.01 ? "#F59E0B" : "#DC2626";
           return /* @__PURE__ */ React.createElement("div", { key: c.id, onClick: function() { setSelFaturacaoCliente(c.id); }, style: { border: "1px solid #E2EBF4", borderLeft: "4px solid " + corEstado, borderRadius: 10, padding: "12px 14px", cursor: "pointer" } },
             /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.name),
             /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C" } }, fmt(valorComIva), "\u20AC"),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: corEstado, marginTop: 4 } }, todosPagos ? "\u2713 Pago" : totalPagoCliente > 0.01 ? "Parcial: " + fmt(totalPagoCliente) + "\u20AC" : "Pendente")
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: corEstado, marginTop: 4 } }, todosPagos ? "\u2713 Pago" : "Em falta: " + fmt(totalEmFaltaCliente) + "\u20AC")
           );
         })
         ),
@@ -1671,9 +1672,7 @@ function Finance() {
         )
       ),
       /* @__PURE__ */ React.createElement("button", { onClick: function() { setFinTab("faturacao"); }, style: btnG }, "Ver Factura\xE7\xE3o")
-    )
     ),
-    (finTab === "geral" || finTab === "faturacao") && /* @__PURE__ */ React.createElement("div", null,
     emAtraso.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Clientes com pagamentos em atraso"),
     emAtraso.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, (function() {
     var byClientAtraso = {};
