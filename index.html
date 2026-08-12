@@ -647,6 +647,35 @@ function Finance() {
   const dividaTotalAcumulada = allPendingJobs.reduce(function(s, j) {
     return s + valorPendenteDoJob(j);
   }, 0);
+  const byClientCobrar = (function() {
+    var pendingRowsAtivo = verTudoCobrar ? allPendingJobs : pendingRows;
+    var byC = {};
+    var principalNome = {};
+    clientes.forEach(function(cc) {
+      if (cc.cliente_principal_id) {
+        var p = clientes.find(function(x) { return x.id === cc.cliente_principal_id; });
+        principalNome[cc.id] = p ? p.name : cc.name;
+      }
+    });
+    pendingRowsAtivo.forEach(function(j) {
+      var gidCliente = clientes.find(function(cc) { return cc.id === j.client_id; });
+      var gid = (gidCliente && gidCliente.cliente_principal_id) || j.client_id;
+      var gnome = principalNome[j.client_id] || j.cn;
+      if (!byC[gid]) {
+        var cRefTipo = clientes.find(function(cc) { return cc.id === gid; });
+        byC[gid] = { cn: gnome, count: 0, semIva: 0, comIva: 0, ultimaData: j.date, maxDias: 0, jobs: [], tipoFat: cRefTipo ? cRefTipo.tipo_faturacao : "hora" };
+      }
+      var diffDays = Math.floor((now - new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3));
+      var valRestante = Math.max(0, (j.val || 0) - (j.valor_pago_parcial || 0));
+      byC[gid].count++;
+      byC[gid].semIva += valRestante;
+      byC[gid].comIva += withIva(valRestante, j);
+      byC[gid].jobs.push(Object.assign({}, j, { diffDays: diffDays, val: valRestante }));
+      if (j.date > byC[gid].ultimaData) byC[gid].ultimaData = j.date;
+      if (diffDays > byC[gid].maxDias) byC[gid].maxDias = diffDays;
+    });
+    return byC;
+  })();
   const totalCustos = despesas.reduce(function(s, d) {
     return s + d.valor;
   }, 0);
@@ -1572,13 +1601,19 @@ function Finance() {
           var isAutoliq = c.iva_type === "autoliquida\xE7\xE3o";
           var valorComIva = isAutoliq ? valorSemIva : valorSemIva * 1.23;
           var todosPagos = jobs.length > 0 && jobs.every(function(j) { return valorPendenteDoJob(j) < 0.01; });
-          var totalPagoCliente = jobs.reduce(function(s, j) { return s + valorPagoDoJob(j); }, 0);
           var totalEmFaltaCliente = jobs.reduce(function(s, j) { return s + valorPendenteDoJob(j); }, 0);
-          var corEstado = todosPagos ? "#16A34A" : totalPagoCliente > 0.01 ? "#F59E0B" : "#DC2626";
+          var ultimaData = jobs.reduce(function(m, j) { return j.date > m ? j.date : m; }, jobs[0].date);
+          var diasDesde = Math.floor((now - new Date(ultimaData + "T12:00:00")) / (24 * 3600 * 1e3));
+          var corEstado = todosPagos ? "#16A34A" : diasDesde >= 30 ? "#DC2626" : diasDesde >= 15 ? "#F97316" : "#F59E0B";
+          var tipoLabel = calc.tipo === "mensal" ? "\uD83D\uDCC5 Aven\xE7a mensal" : calc.tipo === "visita" ? "\u2713 Por visita" : isOrcamento ? "\uD83D\uDCC4 Por or\xE7amento" : "\uD83D\uDD52 Por hora";
           return /* @__PURE__ */ React.createElement("div", { key: c.id, onClick: function() { setSelFaturacaoCliente(c.id); }, style: { border: "1px solid #E2EBF4", borderLeft: "4px solid " + corEstado, borderRadius: 10, padding: "12px 14px", cursor: "pointer" } },
-            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.name),
-            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C" } }, fmt(valorComIva), "\u20AC"),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: corEstado, marginTop: 4 } }, todosPagos ? "\u2713 Pago" : "Em falta: " + fmt(totalEmFaltaCliente) + "\u20AC")
+            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.name),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#7C3AED", fontWeight: 700, marginBottom: 6 } }, tipoLabel),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 6 } }, calc.tipo === "mensal" ? jobs.length + " visita" + (jobs.length !== 1 ? "s" : "") + " inclu\xEDda" + (jobs.length !== 1 ? "s" : "") : jobs.length + " servi\xE7o" + (jobs.length !== 1 ? "s" : ""), " \u2022 \xFAltimo ", new Date(ultimaData + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "short" })),
+            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+              /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, fmt(valorComIva), "\u20AC"),
+              todosPagos ? /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 11, color: corEstado } }, "\u2713 Pago") : /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 11, color: corEstado } }, fmt(totalEmFaltaCliente), "\u20AC")
+            )
           );
         })
         ),
@@ -1732,31 +1767,6 @@ function Finance() {
     (function() {
       var pendingRowsAtivo = verTudoCobrar ? allPendingJobs : pendingRows;
       if (pendingRowsAtivo.length === 0) return /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24 } }, "Tudo cobrado! \u{1F389}");
-      var byClientCobrar = {};
-      var principalNome = {};
-      clientes.forEach(function(cc) {
-        if (cc.cliente_principal_id) {
-          var p = clientes.find(function(x) { return x.id === cc.cliente_principal_id; });
-          principalNome[cc.id] = p ? p.name : cc.name;
-        }
-      });
-      pendingRowsAtivo.forEach(function(j) {
-        var gidCliente = clientes.find(function(cc) { return cc.id === j.client_id; });
-        var gid = (gidCliente && gidCliente.cliente_principal_id) || j.client_id;
-        var gnome = principalNome[j.client_id] || j.cn;
-        if (!byClientCobrar[gid]) {
-          var cRefTipo = clientes.find(function(cc) { return cc.id === gid; });
-          byClientCobrar[gid] = { cn: gnome, count: 0, semIva: 0, comIva: 0, ultimaData: j.date, maxDias: 0, jobs: [], tipoFat: cRefTipo ? cRefTipo.tipo_faturacao : "hora" };
-        }
-        var diffDays = Math.floor((now - new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3));
-        var valRestante = Math.max(0, (j.val || 0) - (j.valor_pago_parcial || 0));
-        byClientCobrar[gid].count++;
-        byClientCobrar[gid].semIva += valRestante;
-        byClientCobrar[gid].comIva += withIva(valRestante, j);
-        byClientCobrar[gid].jobs.push(Object.assign({}, j, { diffDays: diffDays, val: valRestante }));
-        if (j.date > byClientCobrar[gid].ultimaData) byClientCobrar[gid].ultimaData = j.date;
-        if (diffDays > byClientCobrar[gid].maxDias) byClientCobrar[gid].maxDias = diffDays;
-      });
       if (selCobrar && byClientCobrar[selCobrar]) {
         var d = byClientCobrar[selCobrar];
         var porMesCobrar = {};
