@@ -1671,7 +1671,9 @@ function Finance() {
         )
       ),
       /* @__PURE__ */ React.createElement("button", { onClick: function() { setFinTab("faturacao"); }, style: btnG }, "Ver Factura\xE7\xE3o")
+    )
     ),
+    (finTab === "geral" || finTab === "faturacao") && /* @__PURE__ */ React.createElement("div", null,
     emAtraso.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Clientes com pagamentos em atraso"),
     emAtraso.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, (function() {
     var byClientAtraso = {};
