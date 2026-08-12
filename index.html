@@ -647,35 +647,6 @@ function Finance() {
   const dividaTotalAcumulada = allPendingJobs.reduce(function(s, j) {
     return s + valorPendenteDoJob(j);
   }, 0);
-  const byClientCobrar = (function() {
-    var pendingRowsAtivo = verTudoCobrar ? allPendingJobs : pendingRows;
-    var byC = {};
-    var principalNome = {};
-    clientes.forEach(function(cc) {
-      if (cc.cliente_principal_id) {
-        var p = clientes.find(function(x) { return x.id === cc.cliente_principal_id; });
-        principalNome[cc.id] = p ? p.name : cc.name;
-      }
-    });
-    pendingRowsAtivo.forEach(function(j) {
-      var gidCliente = clientes.find(function(cc) { return cc.id === j.client_id; });
-      var gid = (gidCliente && gidCliente.cliente_principal_id) || j.client_id;
-      var gnome = principalNome[j.client_id] || j.cn;
-      if (!byC[gid]) {
-        var cRefTipo = clientes.find(function(cc) { return cc.id === gid; });
-        byC[gid] = { cn: gnome, count: 0, semIva: 0, comIva: 0, ultimaData: j.date, maxDias: 0, jobs: [], tipoFat: cRefTipo ? cRefTipo.tipo_faturacao : "hora" };
-      }
-      var diffDays = Math.floor((now - new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3));
-      var valRestante = Math.max(0, (j.val || 0) - (j.valor_pago_parcial || 0));
-      byC[gid].count++;
-      byC[gid].semIva += valRestante;
-      byC[gid].comIva += withIva(valRestante, j);
-      byC[gid].jobs.push(Object.assign({}, j, { diffDays: diffDays, val: valRestante }));
-      if (j.date > byC[gid].ultimaData) byC[gid].ultimaData = j.date;
-      if (diffDays > byC[gid].maxDias) byC[gid].maxDias = diffDays;
-    });
-    return byC;
-  })();
   const totalCustos = despesas.reduce(function(s, d) {
     return s + d.valor;
   }, 0);
@@ -724,6 +695,35 @@ function Finance() {
   }).sort(function(a, b) {
     return a.date < b.date ? -1 : 1;
   });
+  const byClientCobrar = (function() {
+    var pendingRowsAtivo = verTudoCobrar ? allPendingJobs : pendingRows;
+    var byC = {};
+    var principalNome = {};
+    clientes.forEach(function(cc) {
+      if (cc.cliente_principal_id) {
+        var p = clientes.find(function(x) { return x.id === cc.cliente_principal_id; });
+        principalNome[cc.id] = p ? p.name : cc.name;
+      }
+    });
+    pendingRowsAtivo.forEach(function(j) {
+      var gidCliente = clientes.find(function(cc) { return cc.id === j.client_id; });
+      var gid = (gidCliente && gidCliente.cliente_principal_id) || j.client_id;
+      var gnome = principalNome[j.client_id] || j.cn;
+      if (!byC[gid]) {
+        var cRefTipo = clientes.find(function(cc) { return cc.id === gid; });
+        byC[gid] = { cn: gnome, count: 0, semIva: 0, comIva: 0, ultimaData: j.date, maxDias: 0, jobs: [], tipoFat: cRefTipo ? cRefTipo.tipo_faturacao : "hora" };
+      }
+      var diffDays = Math.floor((now - new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3));
+      var valRestante = Math.max(0, (j.val || 0) - (j.valor_pago_parcial || 0));
+      byC[gid].count++;
+      byC[gid].semIva += valRestante;
+      byC[gid].comIva += withIva(valRestante, j);
+      byC[gid].jobs.push(Object.assign({}, j, { diffDays: diffDays, val: valRestante }));
+      if (j.date > byC[gid].ultimaData) byC[gid].ultimaData = j.date;
+      if (diffDays > byC[gid].maxDias) byC[gid].maxDias = diffDays;
+    });
+    return byC;
+  })();
   const monthsData = (function() {
     const buckets = {};
     for (let i = 5; i >= 0; i--) {
