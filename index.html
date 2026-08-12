@@ -494,6 +494,9 @@ function Finance() {
     win.document.close();
   }
   const [selMargemCliente, setSelMargemCliente] = useState(null);
+  const [margemSearch, setMargemSearch] = useState("");
+  const [selFaturacaoCliente, setSelFaturacaoCliente] = useState(null);
+  const [faturacaoSearch, setFaturacaoSearch] = useState("");
   const [ordenadoGerencia, setOrdenadoGerencia] = useState(null);
   const [ajustesRecibo, setAjustesRecibo] = useState({});
   const [premiosOpcionais, setPremiosOpcionais] = useState({});
@@ -1477,8 +1480,9 @@ function Finance() {
             })()
           );
         })() :
+        /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar cliente...", value: margemSearch, onChange: function(e) { setMargemSearch(e.target.value); } }),
         /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 12 } },
-          margensPorCliente.slice().sort(function(a, b) { return b.margemPct - a.margemPct; }).map(function(c) {
+          margensPorCliente.slice().filter(function(c) { return !margemSearch || c.name.toLowerCase().indexOf(margemSearch.toLowerCase()) !== -1; }).sort(function(a, b) { return b.margemPct - a.margemPct; }).map(function(c) {
             var corMargem = c.margemPct >= 30 ? "#16A34A" : c.margemPct >= 15 ? "#F59E0B" : "#EF4444";
             return /* @__PURE__ */ React.createElement("div", { key: c.name, onClick: function() { setSelMargemCliente(c.name); }, style: { border: "1px solid #E2EBF4", borderLeft: "4px solid " + corMargem, borderRadius: 10, padding: "12px 14px", cursor: "pointer" } },
               /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.name),
@@ -1555,7 +1559,32 @@ function Finance() {
       ),
       monthJobsAll.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Sem servi\xE7os este m\xEAs.") :
       /* @__PURE__ */ React.createElement("div", null,
-        clientes.filter(function(c) { return !c.cliente_principal_id && jobsDoGrupo(c, monthJobsAll).length > 0; }).map(function(c) {
+        /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar cliente...", value: faturacaoSearch, onChange: function(e) { setFaturacaoSearch(e.target.value); } }),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 12, marginBottom: 14 } },
+        clientes.filter(function(c) { return !c.cliente_principal_id && jobsDoGrupo(c, monthJobsAll).length > 0; }).filter(function(c) { return !faturacaoSearch || c.name.toLowerCase().indexOf(faturacaoSearch.toLowerCase()) !== -1; }).map(function(c) {
+          var jobs = jobsDoGrupo(c, monthJobsAll);
+          var horas = jobs.reduce(function(s, j) {
+            return s + horasReais(j.t1, j.t2) * ((j.team || []).length || 1);
+          }, 0);
+          var calc = calcValorFaturacao(c, jobs, horas);
+          var valorSemIva = calc.valor;
+          var isOrcamento = calc.tipo === "orcamento";
+          var isAutoliq = c.iva_type === "autoliquida\xE7\xE3o";
+          var valorComIva = isAutoliq ? valorSemIva : valorSemIva * 1.23;
+          var todosPagos = jobs.length > 0 && jobs.every(function(j) { return valorPendenteDoJob(j) < 0.01; });
+          var totalPagoCliente = jobs.reduce(function(s, j) { return s + valorPagoDoJob(j); }, 0);
+          var corEstado = todosPagos ? "#16A34A" : totalPagoCliente > 0.01 ? "#F59E0B" : "#2E6DA4";
+          return /* @__PURE__ */ React.createElement("div", { key: c.id, onClick: function() { setSelFaturacaoCliente(c.id); }, style: { border: "1px solid #E2EBF4", borderLeft: "4px solid " + corEstado, borderRadius: 10, padding: "12px 14px", cursor: "pointer" } },
+            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.name),
+            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C" } }, fmt(valorComIva), "\u20AC"),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: corEstado, marginTop: 4 } }, todosPagos ? "\u2713 Pago" : totalPagoCliente > 0.01 ? "Parcial: " + fmt(totalPagoCliente) + "\u20AC" : "Pendente")
+          );
+        })
+        ),
+        (function() {
+          if (!selFaturacaoCliente) return null;
+          var c = clientes.find(function(x) { return x.id === selFaturacaoCliente; });
+          if (!c) return null;
           var jobs = jobsDoGrupo(c, monthJobsAll);
           var horas = jobs.reduce(function(s, j) {
             return s + horasReais(j.t1, j.t2) * ((j.team || []).length || 1);
@@ -1568,56 +1597,55 @@ function Finance() {
           var pendentes = jobs.filter(function(j) { return j.status !== "completed"; }).length;
           var jobIds = jobs.map(function(j) { return j.id; });
           var todosPagos = jobs.length > 0 && jobs.every(function(j) { return valorPendenteDoJob(j) < 0.01; });
-          return /* @__PURE__ */ React.createElement("div", { key: c.id, style: Object.assign({}, card, { marginBottom: 10, padding: 16, borderLeft: "4px solid #2E6DA4" }) },
-            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 } },
-              /* @__PURE__ */ React.createElement("div", null,
-                /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, c.name),
-                /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 2 } }, c.service, " \u2014 IVA: ", isAutoliq ? "Autoliquida\xE7\xE3o" : "23%", pendentes > 0 && /* @__PURE__ */ React.createElement("span", { style: { color: "#F59E0B", fontWeight: 700 } }, " \u2022 ", pendentes, " por realizar"))
+          var totalPagoCliente = jobs.reduce(function(s, j) { return s + valorPagoDoJob(j); }, 0);
+          return /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }, onClick: function() { setSelFaturacaoCliente(null); } },
+            /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 24, maxWidth: 460, width: "100%", maxHeight: "85vh", overflowY: "auto" }, onClick: function(e) { e.stopPropagation(); } },
+              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 } },
+                /* @__PURE__ */ React.createElement("div", null,
+                  /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C" } }, c.name),
+                  /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 2 } }, c.service, " \u2014 IVA: ", isAutoliq ? "Autoliquida\xE7\xE3o" : "23%", pendentes > 0 && /* @__PURE__ */ React.createElement("span", { style: { color: "#F59E0B", fontWeight: 700 } }, " \u2022 ", pendentes, " por realizar"))
+                ),
+                /* @__PURE__ */ React.createElement("button", { onClick: function() { setSelFaturacaoCliente(null); }, style: { background: "none", border: "none", fontSize: 20, color: "#94A3B8", cursor: "pointer" } }, "\u2715")
               ),
-              /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right" } },
-                /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 900, color: "#2E6DA4" } }, fmt(valorSemIva), "\u20AC"),
-                /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, "c/IVA: ", fmt(valorComIva), "\u20AC"),
-                /* @__PURE__ */ React.createElement("button", { onClick: function() {
-                  var mesNome = now.toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
-                  var linhaDetalhe = isOrcamento ? "Por or\xE7amento" : calc.tipo === "mensal" ? "Avença mensal \u2014 " + jobs.length + " visitas realizadas" : calc.tipo === "visita" ? jobs.length + " visitas \u2014 " + fmt(parseFloat(c.valor_visita) || 0) + "\u20AC/visita" : jobs.length + " visitas \u2014 " + horas.toFixed(1) + "h totais \u2014 " + fmt(c.price_per_hour || 0) + "\u20AC/hora";
-                  var win = window.open("", "_blank");
-                  win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Fatura\xE7\xE3o \u2014 " + c.name + "</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C}h1{margin-bottom:2px}h2{color:#64748B;font-weight:normal;margin-top:0;margin-bottom:24px}.box{background:#F8FAFC;border-radius:10px;padding:20px;margin-bottom:16px}.row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #E2EBF4}.total{font-size:22px;font-weight:800;color:#1A3A5C;text-align:right;margin-top:16px}@media print{body{padding:15px}}</style></head><body><h1>SamorClean</h1><h2>Resumo de Fatura\xE7\xE3o \u2014 " + mesNome + "</h2><div class='box'><div class='row'><span>Cliente</span><strong>" + c.name + "</strong></div><div class='row'><span>Detalhe</span><strong>" + linhaDetalhe + "</strong></div><div class='row'><span>Regime de IVA</span><strong>" + (isAutoliq ? "Autoliquida\xE7\xE3o" : "23%") + "</strong></div><div class='row'><span>Valor sem IVA</span><strong>" + fmt(valorSemIva) + "\u20AC</strong></div><div class='row'><span>Valor com IVA</span><strong>" + fmt(valorComIva) + "\u20AC</strong></div></div><div class='total'>TOTAL: " + fmt(valorComIva) + "\u20AC</div><script>window.onload=function(){window.print();}<\/script></body></html>");
-                  win.document.close();
-                }, style: Object.assign({}, btnO, { fontSize: 10, padding: "4px 10px", marginTop: 6 }) }, "\uD83D\uDCC4 PDF"),
-                /* @__PURE__ */ React.createElement("div", { style: { marginTop: 6 } },
-                  (function() {
-                    var totalPagoCliente = jobs.reduce(function(s, j) { return s + valorPagoDoJob(j); }, 0);
-                    if (todosPagos) return /* @__PURE__ */ React.createElement("span", { style: { background: "#DCFCE7", color: "#15803D", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 700 } }, "\u2713 Pago");
-                    return /* @__PURE__ */ React.createElement("div", null,
-                      totalPagoCliente > 0.01 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#F59E0B", fontWeight: 700, marginBottom: 4 } }, "Parcial: ", fmt(totalPagoCliente), "\u20AC recebidos"),
-                      /* @__PURE__ */ React.createElement("button", { onClick: function() { marcarPagoCliente(c.id, jobIds); }, style: Object.assign({}, btnG, { fontSize: 10, padding: "4px 10px" }) }, "Marcar resto como pago")
-                    );
-                  })()
-                )
-              )
-            ),
-            isOrcamento ?
-              /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF3C7", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#92400E", fontWeight: 600 } }, "\uD83D\uDCCB Por or\xE7amento \u2014 50% na adjudica\xE7\xE3o + 50% a 30 dias") :
-              /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 } }, (calc.tipo === "mensal" ? [
-                { l: "Visitas", v: jobs.length },
-                { l: "Horas totais", v: horas.toFixed(1) + "h" },
-                { l: "Valor mensal fixo", v: fmt(parseFloat(c.valor_visita) || 0) + "€" }
-              ] : calc.tipo === "visita" ? [
-                { l: "Visitas", v: jobs.length },
-                { l: "Horas totais", v: horas.toFixed(1) + "h" },
-                { l: "Valor/visita", v: fmt(parseFloat(c.valor_visita) || 0) + "€" }
-              ] : [
-                { l: "Visitas", v: jobs.length },
-                { l: "Horas totais", v: horas.toFixed(1) + "h" },
-                { l: "Preço/hora", v: fmt(c.price_per_hour || 0) + "€" }
-              ]).map(function(k) {
-                return /* @__PURE__ */ React.createElement("div", { key: k.l, style: { background: "#F8FAFC", borderRadius: 6, padding: "6px 10px", textAlign: "center" } },
-                  /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase" } }, k.l),
-                  /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: "#1A3A5C" } }, k.v)
-                );
-              }))
+              /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right", marginBottom: 10 } },
+                /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#2E6DA4" } }, fmt(valorSemIva), "\u20AC"),
+                /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, "c/IVA: ", fmt(valorComIva), "\u20AC")
+              ),
+              isOrcamento ?
+                /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF3C7", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#92400E", fontWeight: 600, marginBottom: 12 } }, "\uD83D\uDCCB Por or\xE7amento \u2014 50% na adjudica\xE7\xE3o + 50% a 30 dias") :
+                /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 } }, (calc.tipo === "mensal" ? [
+                  { l: "Visitas", v: jobs.length },
+                  { l: "Horas totais", v: horas.toFixed(1) + "h" },
+                  { l: "Valor mensal fixo", v: fmt(parseFloat(c.valor_visita) || 0) + "€" }
+                ] : calc.tipo === "visita" ? [
+                  { l: "Visitas", v: jobs.length },
+                  { l: "Horas totais", v: horas.toFixed(1) + "h" },
+                  { l: "Valor/visita", v: fmt(parseFloat(c.valor_visita) || 0) + "€" }
+                ] : [
+                  { l: "Visitas", v: jobs.length },
+                  { l: "Horas totais", v: horas.toFixed(1) + "h" },
+                  { l: "Pre\xE7o/hora", v: fmt(c.price_per_hour || 0) + "€" }
+                ]).map(function(k) {
+                  return /* @__PURE__ */ React.createElement("div", { key: k.l, style: { background: "#F8FAFC", borderRadius: 6, padding: "6px 10px", textAlign: "center" } },
+                    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase" } }, k.l),
+                    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: "#1A3A5C" } }, k.v)
+                  );
+                })),
+              todosPagos ? /* @__PURE__ */ React.createElement("span", { style: { background: "#DCFCE7", color: "#15803D", borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 700 } }, "\u2713 Pago") :
+                /* @__PURE__ */ React.createElement("div", null,
+                  totalPagoCliente > 0.01 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#F59E0B", fontWeight: 700, marginBottom: 6 } }, "Parcial: ", fmt(totalPagoCliente), "\u20AC recebidos"),
+                  /* @__PURE__ */ React.createElement("button", { onClick: function() { marcarPagoCliente(c.id, jobIds); }, style: Object.assign({}, btnG, { fontSize: 11, padding: "6px 12px" }) }, "Marcar resto como pago")
+                ),
+              /* @__PURE__ */ React.createElement("button", { onClick: function() {
+                var mesNome = now.toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
+                var linhaDetalhe = isOrcamento ? "Por or\xE7amento" : calc.tipo === "mensal" ? "Aven\xE7a mensal \u2014 " + jobs.length + " visitas realizadas" : calc.tipo === "visita" ? jobs.length + " visitas \u2014 " + fmt(parseFloat(c.valor_visita) || 0) + "\u20AC/visita" : jobs.length + " visitas \u2014 " + horas.toFixed(1) + "h totais \u2014 " + fmt(c.price_per_hour || 0) + "\u20AC/hora";
+                var win = window.open("", "_blank");
+                win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Fatura\xE7\xE3o \u2014 " + c.name + "</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C}h1{margin-bottom:2px}h2{color:#64748B;font-weight:normal;margin-top:0;margin-bottom:24px}.box{background:#F8FAFC;border-radius:10px;padding:20px;margin-bottom:16px}.row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #E2EBF4}.total{font-size:22px;font-weight:800;color:#1A3A5C;text-align:right;margin-top:16px}@media print{body{padding:15px}}</style></head><body><h1>SamorClean</h1><h2>Resumo de Fatura\xE7\xE3o \u2014 " + mesNome + "</h2><div class='box'><div class='row'><span>Cliente</span><strong>" + c.name + "</strong></div><div class='row'><span>Detalhe</span><strong>" + linhaDetalhe + "</strong></div><div class='row'><span>Regime de IVA</span><strong>" + (isAutoliq ? "Autoliquida\xE7\xE3o" : "23%") + "</strong></div><div class='row'><span>Valor sem IVA</span><strong>" + fmt(valorSemIva) + "\u20AC</strong></div><div class='row'><span>Valor com IVA</span><strong>" + fmt(valorComIva) + "\u20AC</strong></div></div><div class='total'>TOTAL: " + fmt(valorComIva) + "\u20AC</div><script>window.onload=function(){window.print();}<\/script></body></html>");
+                win.document.close();
+              }, style: Object.assign({}, btnO, { fontSize: 11, padding: "6px 12px", marginTop: 10 }) }, "\uD83D\uDCC4 PDF")
+            )
           );
-        }),
+        })(),
         /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { background: "#1A3A5C", padding: 16, marginTop: 8 }) },
           /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
             /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: 700 } }, "TOTAL A FATURAR (s/IVA)"),
