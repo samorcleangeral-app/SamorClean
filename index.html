@@ -1831,6 +1831,7 @@ function Routes() {
   const [moveT2, setMoveT2] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [showVoltasFixas, setShowVoltasFixas] = useState(false);
+  const [voltasSearch, setVoltasSearch] = useState("");
   const [voltasFixas, setVoltasFixas] = useState([]);
   const [showNovaVolta, setShowNovaVolta] = useState(false);
   const [novaVolta, setNovaVolta] = useState({ client_id: "", frequencia: "semanal", dia_semana: 0, dia_mes: 1, semana_do_mes: 1, hora_inicio: "08:00", hora_fim: "10:00", equipa: [], data_inicio: localDateStr() });
@@ -2472,6 +2473,8 @@ function Routes() {
   if (showVoltasFixas) {
     const voltasPorCliente = {};
     voltasFixas.forEach(function(v) {
+      var cRef = clients.find(function(x) { return x.id === v.client_id; });
+      if (voltasSearch && (!cRef || cRef.name.toLowerCase().indexOf(voltasSearch.toLowerCase()) === -1)) return;
       if (!voltasPorCliente[v.client_id]) voltasPorCliente[v.client_id] = [];
       voltasPorCliente[v.client_id].push(v);
     });
@@ -2572,6 +2575,7 @@ function Routes() {
           /* @__PURE__ */ React.createElement("button", { onClick: salvarVoltaFixa, disabled: savingVolta || !novaVolta.client_id, style: Object.assign({}, btnG, { flex: 1, textAlign: "center", opacity: savingVolta || !novaVolta.client_id ? 0.5 : 1 }) }, savingVolta ? "A guardar..." : "Guardar")
         )
       ),
+      /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 16 }), placeholder: "Pesquisar cliente...", value: voltasSearch, onChange: function(e) { setVoltasSearch(e.target.value); } }),
       Object.keys(voltasPorCliente).length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Ainda n\xE3o h\xE1 voltas fixas criadas.") :
       Object.keys(voltasPorCliente).map(function(cid) {
         var c = clients.find(function(x) { return x.id === cid; });
@@ -4627,6 +4631,7 @@ function Formacao() {
   }, []);
   const [file, setFile] = useState(null);
   const [filtCat, setFiltCat] = useState("Todos");
+  const [docSearch, setDocSearch] = useState("");
   useEffect(function() {
     loadDocs();
   }, []);
@@ -4695,16 +4700,16 @@ function Formacao() {
     if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + "KB";
     return (bytes / (1024 * 1024)).toFixed(1) + "MB";
   }
-  const filtered = filtCat === "Todos" ? docs : docs.filter(function(d) {
+  const filtered = (filtCat === "Todos" ? docs : docs.filter(function(d) {
     return d.category === filtCat;
-  });
+  })).filter(function(d) { return !docSearch || (d.name || "").toLowerCase().indexOf(docSearch.toLowerCase()) !== -1; });
   return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Recursos"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, docs.length, " documento", docs.length !== 1 ? "s" : "", " dispon\xEDveis")), /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setShowAdd(true);
   }, style: btn }, "+ Novo documento")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" } }, ["Todos"].concat(FORM_CATS).map(function(c) {
     return /* @__PURE__ */ React.createElement("button", { key: c, onClick: function() {
       setFiltCat(c);
     }, style: { padding: "6px 14px", borderRadius: 8, border: "1.5px solid " + (filtCat === c ? "#2E6DA4" : "#E2EBF4"), background: filtCat === c ? "#EFF6FF" : "#fff", color: filtCat === c ? "#2E6DA4" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, c);
-  })), showAdd && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 20 }, onClick: function() {
+  })), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 16 }), placeholder: "Pesquisar documento...", value: docSearch, onChange: function(e) { setDocSearch(e.target.value); } }), showAdd && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 20 }, onClick: function() {
     setShowAdd(false);
   } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 28, maxWidth: 480, width: "100%" }, onClick: function(e) {
     e.stopPropagation();
@@ -5039,6 +5044,7 @@ function PedidosColab(props) {
     db.list("stock_produtos", "?select=nome,quantidade,quantidade_minima").then(function(rows) { setProdutosStock(rows || []); });
   }, []);
   const [selPedido, setSelPedido] = useState(null);
+  const [pcSearch, setPcSearch] = useState("");
   const [resposta, setResposta] = useState("");
   const [classificacaoFalta, setClassificacaoFalta] = useState(null);
   const [horaInicioEdit, setHoraInicioEdit] = useState("");
@@ -5134,7 +5140,7 @@ function PedidosColab(props) {
   var funcList = Object.keys(byFunc).map(function(fid) {
     var pends = byFunc[fid].pedidos.filter(function(p) { return p.estado === "pendente"; }).length;
     return { id: fid, nome: byFunc[fid].nome, pedidos: byFunc[fid].pedidos, pendentes: pends };
-  }).sort(function(a, b) { return b.pendentes - a.pendentes || b.pedidos.length - a.pedidos.length; });
+  }).sort(function(a, b) { return b.pendentes - a.pendentes || b.pedidos.length - a.pedidos.length; }).filter(function(f) { return !pcSearch || f.nome.toLowerCase().indexOf(pcSearch.toLowerCase()) !== -1; });
   var totalPendentes = pedidos.filter(function(p) { return p.estado === "pendente"; }).length;
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...");
   if (selFunc) {
@@ -5241,6 +5247,7 @@ function PedidosColab(props) {
         )
       );
     })(),
+    /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar colaborador...", value: pcSearch, onChange: function(e) { setPcSearch(e.target.value); } }),
     funcList.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) },
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, marginBottom: 12 } }, "\u{1F4E5}"),
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16, marginBottom: 8 } }, "Sem pedidos"),
@@ -5584,6 +5591,8 @@ function Stock() {
         );
       })
     ),
+    /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar produto...", value: q, onChange: function(e) { setQ(e.target.value); } }),
+    /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar produto...", value: q, onChange: function(e) { setQ(e.target.value); } }),
     filtrados.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Nenhum produto encontrado.") :
     filtrados.map(function(p) {
       var emBaixoP = p.quantidade <= p.quantidade_minima;
@@ -5962,6 +5971,7 @@ function Recrutamento() {
   const [filtro, setFiltro] = useState("novo");
   const [sel, setSel] = useState(null);
   const [notas, setNotas] = useState("");
+  const [candSearch, setCandSearch] = useState("");
   useEffect(function() {
     db.list("leads_recrutamento", "?select=*&order=created_at.desc").then(function(rows) {
       setCandidatos(rows || []);
@@ -5975,7 +5985,7 @@ function Recrutamento() {
   }
   const ESTADOS = ["novo", "contactado", "entrevista", "aprovado", "recusado"];
   const ESTADO_COR = { novo: "#2E6DA4", contactado: "#F59E0B", entrevista: "#7C3AED", aprovado: "#16A34A", recusado: "#EF4444" };
-  const filtered = filtro === "todos" ? candidatos : candidatos.filter(function(c) { return c.estado === filtro; });
+  const filtered = (filtro === "todos" ? candidatos : candidatos.filter(function(c) { return c.estado === filtro; })).filter(function(c) { return !candSearch || (c.nome || "").toLowerCase().indexOf(candSearch.toLowerCase()) !== -1; });
   const novos = candidatos.filter(function(c) { return c.estado === "novo"; }).length;
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...");
   return /* @__PURE__ */ React.createElement("div", null,
@@ -5992,6 +6002,7 @@ function Recrutamento() {
         return /* @__PURE__ */ React.createElement("button", { key: e, onClick: function() { setFiltro(e); }, style: { padding: "6px 14px", borderRadius: 8, border: "1.5px solid " + (filtro === e ? cor : "#E2EBF4"), background: filtro === e ? cor + "22" : "#fff", color: filtro === e ? cor : "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, e.charAt(0).toUpperCase() + e.slice(1), " (", count, ")");
       })
     ),
+    /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar candidato...", value: candSearch, onChange: function(e) { setCandSearch(e.target.value); } }),
     filtered.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) },
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, marginBottom: 12 } }, "\uD83D\uDC65"),
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16, marginBottom: 8 } }, "Sem candidatos"),
@@ -6048,6 +6059,7 @@ function Leads() {
   const [loading, setLoading] = useState(true);
   const [filtEstado, setFiltEstado] = useState("todos");
   const [selLead, setSelLead] = useState(null);
+  const [leadSearch, setLeadSearch] = useState("");
   const ESTADOS = ["novo", "contactado", "visita agendada", "proposta enviada", "cliente", "perdido"];
   const ESTADO_CORES = {
     "novo": "#2E6DA4",
@@ -6078,8 +6090,10 @@ function Leads() {
     alert("Vai \xE0 sec\xE7\xE3o Clientes e cria uma nova ficha para " + lead.nome + ". Os dados est\xE3o aqui no lead para copiar.");
     await updateEstado(lead.id, "cliente");
   }
-  const filtered = filtEstado === "todos" ? leads : leads.filter(function(l) {
+  const filtered = (filtEstado === "todos" ? leads : leads.filter(function(l) {
     return l.estado === filtEstado;
+  })).filter(function(l) {
+    return !leadSearch || (l.nome || "").toLowerCase().indexOf(leadSearch.toLowerCase()) !== -1;
   });
   const novos = leads.filter(function(l) {
     return l.estado === "novo";
@@ -6092,7 +6106,7 @@ function Leads() {
     return /* @__PURE__ */ React.createElement("button", { key: e, onClick: function() {
       setFiltEstado(e);
     }, style: { padding: "6px 12px", borderRadius: 8, border: "1.5px solid " + (filtEstado === e ? ESTADO_CORES[e] || "#2E6DA4" : "#E2EBF4"), background: filtEstado === e ? (ESTADO_CORES[e] || "#EFF6FF") + "22" : "#fff", color: filtEstado === e ? ESTADO_CORES[e] || "#2E6DA4" : "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, e.charAt(0).toUpperCase() + e.slice(1), " (", count, ")");
-  })), filtered.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16, marginBottom: 8 } }, "Sem leads"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13 } }, "Quando algu\xE9m pedir para ser cliente aparece aqui.")) : filtered.map(function(lead) {
+  })), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar lead...", value: leadSearch, onChange: function(e) { setLeadSearch(e.target.value); } }), filtered.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16, marginBottom: 8 } }, "Sem leads"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13 } }, "Quando algu\xE9m pedir para ser cliente aparece aqui.")) : filtered.map(function(lead) {
     const cor = ESTADO_CORES[lead.estado] || "#64748B";
     return /* @__PURE__ */ React.createElement("div", { key: lead.id, onClick: function() {
       setSelLead(lead);
@@ -6314,6 +6328,7 @@ const ALL_MENUS = [
 ];
 function GestoresAdmin() {
   const [gestores, setGestores] = useState([]);
+  const [gestSearch, setGestSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ nome: "", email: "", password: "", nivel: "custom", menus: [], activo: true });
@@ -6403,7 +6418,7 @@ function GestoresAdmin() {
   }))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setShowAdd(false);
     setEditId(null);
-  }, style: Object.assign({}, btnX, { flex: 1, textAlign: "center" }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: saveGestor, disabled: saving || !form.nome.trim() || !form.email.trim() || (!editId && !form.password.trim()), style: Object.assign({}, btnG, { flex: 2, textAlign: "center", opacity: saving ? 0.6 : 1 }) }, saving ? "A guardar..." : "Guardar"))), gestores.map(function(g) {
+  }, style: Object.assign({}, btnX, { flex: 1, textAlign: "center" }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: saveGestor, disabled: saving || !form.nome.trim() || !form.email.trim() || (!editId && !form.password.trim()), style: Object.assign({}, btnG, { flex: 2, textAlign: "center", opacity: saving ? 0.6 : 1 }) }, saving ? "A guardar..." : "Guardar"))), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar utilizador...", value: gestSearch, onChange: function(e) { setGestSearch(e.target.value); } }), gestores.filter(function(g) { return !gestSearch || (g.nome || "").toLowerCase().indexOf(gestSearch.toLowerCase()) !== -1 || (g.email || "").toLowerCase().indexOf(gestSearch.toLowerCase()) !== -1; }).map(function(g) {
     const isDir = g.nivel === "director";
     return /* @__PURE__ */ React.createElement("div", { key: g.id, style: Object.assign({}, card, { marginBottom: 10, display: "flex", alignItems: "center", gap: 14, padding: 16, opacity: g.activo === false ? 0.6 : 1 }) }, /* @__PURE__ */ React.createElement("div", { style: { width: 44, height: 44, borderRadius: "50%", background: isDir ? "#1A3A5C" : "#2E6DA4", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 16, fontWeight: 800, flexShrink: 0 } }, (g.name || "?").slice(0, 1).toUpperCase()), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C" } }, g.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, g.email), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("span", { style: { background: isDir ? "#1A3A5C" : "#EFF6FF", color: isDir ? "#fff" : "#2E6DA4", borderRadius: 5, padding: "1px 7px", fontSize: 10, fontWeight: 700 } }, isDir ? "Director" : "Personalizado"), !isDir && (g.menus || []).map(function(m) {
       const menu = ALL_MENUS.find(function(x) {
@@ -6780,6 +6795,7 @@ function Avaliacoes() {
   const [contactsMap, setContactsMap] = useState({});
   const [emailModal, setEmailModal] = useState(null);
   const [showPendentes, setShowPendentes] = useState(true);
+  const [avSearch, setAvSearch] = useState("");
   useEffect(function() {
     Promise.all([
       db.list("avaliacoes", "?select=*&order=created_at.desc"),
@@ -6835,7 +6851,7 @@ function Avaliacoes() {
     var avg = clientAvs.reduce(function(s, a) { return s + (a.stars || 0); }, 0) / clientAvs.length;
     var novas = clientAvs.filter(function(a) { return !a.vista; }).length;
     return { id: cid, name: clientsMap[cid] ? clientsMap[cid].name : cid, avs: clientAvs, avg: avg, novas: novas };
-  }).sort(function(a, b) { return b.novas - a.novas || b.avs.length - a.avs.length; });
+  }).sort(function(a, b) { return b.novas - a.novas || b.avs.length - a.avs.length; }).filter(function(c) { return !avSearch || c.name.toLowerCase().indexOf(avSearch.toLowerCase()) !== -1; });
   var totalNovas = avs.filter(function(a) { return !a.vista; }).length;
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar avalia\xE7\xF5es...");
   if (selCliente) {
@@ -6947,6 +6963,7 @@ function Avaliacoes() {
         })()
       )
     ),
+    /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar cliente...", value: avSearch, onChange: function(e) { setAvSearch(e.target.value); } }),
     clientList.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, "Sem avalia\xE7\xF5es ainda.") :
     /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 14 } },
       clientList.map(function(c) {
@@ -6976,6 +6993,7 @@ function PedidosExtra() {
   const [selJob, setSelJob] = useState(null);
   const [taskOut, setTaskOut] = useState("");
   const [taskIn, setTaskIn] = useState("");
+  const [peSearch, setPeSearch] = useState("");
   useEffect(function() {
     Promise.all([
       db.list("pedidos_extra", "?select=*&order=created_at.desc"),
@@ -7018,7 +7036,7 @@ function PedidosExtra() {
     var cps = byClient[cid];
     var pendentes = cps.filter(function(p) { return !p.status || p.status === "pendente"; }).length;
     return { id: cid, name: clientsMap[cid] ? clientsMap[cid].name : cid, pedidos: cps, pendentes: pendentes };
-  }).sort(function(a, b) { return b.pendentes - a.pendentes; });
+  }).sort(function(a, b) { return b.pendentes - a.pendentes; }).filter(function(c) { return !peSearch || c.name.toLowerCase().indexOf(peSearch.toLowerCase()) !== -1; });
   var totalPendentes = pedidos.filter(function(p) { return !p.status || p.status === "pendente"; }).length;
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar pedidos...");
   if (selCliente) {
@@ -7109,6 +7127,7 @@ function PedidosExtra() {
         /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, color: "#92400E", fontSize: 13 } }, totalPendentes, " pedido", totalPendentes !== 1 ? "s" : "", " por resolver")
       )
     ),
+    /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar cliente...", value: peSearch, onChange: function(e) { setPeSearch(e.target.value); } }),
     clientList.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) },
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16, marginBottom: 8 } }, "Sem pedidos extra"),
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13 } }, "Quando um cliente fizer um pedido pelo portal, aparece aqui.")
