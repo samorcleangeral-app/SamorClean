@@ -3224,7 +3224,7 @@ function HistoricoVisitas(props) {
     return /* @__PURE__ */ React.createElement("button", { key: p, onClick: function() {
       setPeriodo(p);
     }, style: { padding: "6px 12px", borderRadius: 7, border: "1.5px solid " + (periodo === p ? "#2E6DA4" : "#E2EBF4"), background: periodo === p ? "#EFF6FF" : "#fff", color: periodo === p ? "#2E6DA4" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, p, " dias");
-  })), /* @__PURE__ */ React.createElement("button", { onClick: exportPDF, style: Object.assign({}, btn, { fontSize: 12, padding: "7px 14px" }) }, "Exportar PDF")), atrasados > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", border: "1px solid #FECACA", borderRadius: 8, padding: "10px 14px", marginBottom: 12, fontSize: 12, color: "#991B1B", fontWeight: 600 } }, "\u26A0 ", atrasados, " visita", atrasados !== 1 ? "s" : "", " com atraso superior a 10 minutos nos \xFAltimos ", periodo, " dias"), visitas.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: "24px 0", fontSize: 13 } }, "Sem visitas nos \xFAltimos ", periodo, " dias.") : /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { borderBottom: "2px solid #E2EBF4" } }, ["Data", "Previsto", "Entrada", "Sa\xEDda", "Pontualidade", "Equipa", "Checklist", "Estado", "Fotos"].map(function(h) {
+  })), /* @__PURE__ */ React.createElement("button", { onClick: exportPDF, style: Object.assign({}, btn, { fontSize: 12, padding: "7px 14px" }) }, "Exportar PDF")), atrasados > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", border: "1px solid #FECACA", borderRadius: 8, padding: "10px 14px", marginBottom: 12, fontSize: 12, color: "#991B1B", fontWeight: 600 } }, "\u26A0 ", atrasados, " visita", atrasados !== 1 ? "s" : "", " com atraso superior a 10 minutos nos \xFAltimos ", periodo, " dias"), visitas.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: "24px 0", fontSize: 13 } }, "Sem visitas nos \xFAltimos ", periodo, " dias.") : /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { borderBottom: "2px solid #E2EBF4" } }, ["Data", "Previsto", "Entrada", "Sa\xEDda", "Pontualidade", "Equipa", "Checklist", "Estado", "Fotos", "Nota"].map(function(h) {
     return /* @__PURE__ */ React.createElement("th", { key: h, style: { textAlign: "left", padding: "8px 10px", fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", whiteSpace: "nowrap" } }, h);
   }))), /* @__PURE__ */ React.createElement("tbody", null, visitas.map(function(v) {
     const diff = diffMin(v.t1, v.check_in);
@@ -3234,7 +3234,7 @@ function HistoricoVisitas(props) {
       return /* @__PURE__ */ React.createElement("img", { key: i, src: url, onClick: function() {
         window.open(url, "_blank");
       }, style: { width: 32, height: 32, objectFit: "cover", borderRadius: 4, cursor: "pointer", border: "1px solid #E2EBF4" } });
-    }), (v.fotos || []).length > 3 && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: "#94A3B8", alignSelf: "center" } }, "+", (v.fotos || []).length - 3)) : /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#CBD5E1" } }, "\u2014")));
+    }), (v.fotos || []).length > 3 && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: "#94A3B8", alignSelf: "center" } }, "+", (v.fotos || []).length - 3)) : /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#CBD5E1" } }, "\u2014")), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px", maxWidth: 200 } }, v.nota_colaborador ? /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#334155", background: "#FEF9C3", borderRadius: 6, padding: "3px 8px", display: "inline-block" } }, "\uD83D\uDCDD ", v.nota_colaborador) : /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#CBD5E1" } }, "\u2014")));
   })))));
 }
 function NotasInternasSel(props) {
@@ -8631,6 +8631,19 @@ function ClientPortal(props) {
     data_visita_preferida: ""
   });
   const [teamJobs, setTeamJobs] = useState([]);
+  const [notaColabEdits, setNotaColabEdits] = useState({});
+  const [notaColabSaving, setNotaColabSaving] = useState(null);
+  async function salvarNotaColab(job) {
+    setNotaColabSaving(job.id);
+    var texto = notaColabEdits[job.id] !== undefined ? notaColabEdits[job.id] : (job.nota_colaborador || "");
+    var d = await db.update("servicos", job.id, { nota_colaborador: texto });
+    if (d) {
+      setTeamJobs(function(p) {
+        return { current: p.current.map(function(j) { return j.id === job.id ? Object.assign({}, j, { nota_colaborador: texto }) : j; }), next: p.next, completed: p.completed };
+      });
+    }
+    setNotaColabSaving(null);
+  }
   const [teamPhase, setTeamPhase] = useState("list");
   const [loadingTeam, setLoadingTeam] = useState(false);
   const [popupJob, setPopupJob] = useState(null);
@@ -9132,7 +9145,7 @@ function ClientPortal(props) {
             }), next: p.next, completed: p.completed };
           });
         }
-      } })))));
+      } })), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 6 } }, "\uD83D\uDCDD Nota do servi\xE7o (para a gest\xE3o)"), /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 60, resize: "vertical" }), placeholder: "Ex: faltava material, cliente reclamou de X, port\xE3o estava fechado...", value: notaColabEdits[job.id] !== undefined ? notaColabEdits[job.id] : (job.nota_colaborador || ""), onChange: function(e) { setNotaColabEdits(Object.assign({}, notaColabEdits, { [job.id]: e.target.value })); } }), /* @__PURE__ */ React.createElement("button", { onClick: function() { salvarNotaColab(job); }, disabled: notaColabSaving === job.id, style: Object.assign({}, btnO, { marginTop: 6, fontSize: 12, padding: "6px 14px" }) }, notaColabSaving === job.id ? "A guardar..." : "Guardar nota")))));
     };
     const jobs = teamJobs || { current: [], next: [], completed: [] };
     const currentJobs = Array.isArray(jobs) ? [] : jobs.current || [];
