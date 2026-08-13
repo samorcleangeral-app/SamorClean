@@ -7791,7 +7791,9 @@ function Employee(props) {
     function resetTimer() { setLastActivity(Date.now()); }
     window.addEventListener("click", resetTimer);
     window.addEventListener("touchstart", resetTimer);
-    return function() { window.removeEventListener("click", resetTimer); window.removeEventListener("touchstart", resetTimer); };
+    window.addEventListener("keydown", resetTimer);
+    window.addEventListener("input", resetTimer);
+    return function() { window.removeEventListener("click", resetTimer); window.removeEventListener("touchstart", resetTimer); window.removeEventListener("keydown", resetTimer); window.removeEventListener("input", resetTimer); };
   }, [phase]);
   const [emp, setEmp] = useState(null);
   const [ratingMesEmp, setRatingMesEmp] = useState(null);
@@ -8528,7 +8530,7 @@ function ClientPortal(props) {
   useEffect(function() {
     if (phase !== "client-portal") return;
     var timer = setInterval(function() {
-      if (Date.now() - clientLastActivity > 60000) {
+      if (Date.now() - clientLastActivity > 5 * 60 * 1000) {
         window.location.href = "https://samorcleangeral-app.github.io/SamorClean/sessao-terminada.html";
       }
     }, 10000);
@@ -8539,7 +8541,10 @@ function ClientPortal(props) {
     function resetTimer() { setClientLastActivity(Date.now()); }
     window.addEventListener("click", resetTimer);
     window.addEventListener("touchstart", resetTimer);
-    return function() { window.removeEventListener("click", resetTimer); window.removeEventListener("touchstart", resetTimer); };
+    window.addEventListener("keydown", resetTimer);
+    window.addEventListener("input", resetTimer);
+    window.addEventListener("mousemove", resetTimer);
+    return function() { window.removeEventListener("click", resetTimer); window.removeEventListener("touchstart", resetTimer); window.removeEventListener("keydown", resetTimer); window.removeEventListener("input", resetTimer); window.removeEventListener("mousemove", resetTimer); };
   }, [phase]);
   const [client, setClient] = useState(null);
   const [contacts, setContacts] = useState([]);
