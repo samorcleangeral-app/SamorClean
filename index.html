@@ -4509,6 +4509,7 @@ function Employees() {
   const [newForm, setNewForm] = useState({ id: "", name: "", role: "T\xE9cnico", pin: "", av: "" });
   const [errMsg, setErrMsg] = useState("");
   const [empSearch, setEmpSearch] = useState("");
+  const [abaAtivos, setAbaAtivos] = useState("activos");
   const [pinRecemGerado, setPinRecemGerado] = useState(null);
   const [faltasLevantamento, setFaltasLevantamento] = useState([]);
   useEffect(function() {
@@ -4685,7 +4686,16 @@ function Employees() {
         )
       );
     })
-  ), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar funcionário...", value: empSearch, onChange: function(e) { setEmpSearch(e.target.value); } }), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 } }, emps.filter(function(e) { return !empSearch || e.name.toLowerCase().indexOf(empSearch.toLowerCase()) !== -1 || (e.role || "").toLowerCase().indexOf(empSearch.toLowerCase()) !== -1; }).map(function(e) {
+  ), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 14 } },
+    (function() {
+      var nAtivos = emps.filter(function(e) { return e.ativo !== false; }).length;
+      var nInativos = emps.filter(function(e) { return e.ativo === false; }).length;
+      return [["activos", "Activos (" + nAtivos + ")"], ["inativos", "Inactivos (" + nInativos + ")"]].map(function(t) {
+        var isActive = abaAtivos === t[0];
+        return /* @__PURE__ */ React.createElement("button", { key: t[0], onClick: function() { setAbaAtivos(t[0]); }, style: { padding: "8px 16px", borderRadius: 8, border: "1.5px solid " + (isActive ? "#2E6DA4" : "#E2EBF4"), background: isActive ? "#EFF6FF" : "#fff", color: isActive ? "#2E6DA4" : "#64748B", fontSize: 13, fontWeight: 700, cursor: "pointer" } }, t[1]);
+      });
+    })()
+  ), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar funcionário...", value: empSearch, onChange: function(e) { setEmpSearch(e.target.value); } }), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 } }, emps.filter(function(e) { return abaAtivos === "inativos" ? e.ativo === false : e.ativo !== false; }).filter(function(e) { return !empSearch || e.name.toLowerCase().indexOf(empSearch.toLowerCase()) !== -1 || (e.role || "").toLowerCase().indexOf(empSearch.toLowerCase()) !== -1; }).map(function(e) {
       return /* @__PURE__ */ React.createElement("div", { key: e.id, onClick: function() {
         openEdit(e);
       }, style: Object.assign({}, card, { cursor: "pointer", padding: 18, borderLeft: "4px solid " + (e.ativo === false ? "#CBD5E1" : "#2E6DA4"), marginBottom: 0, display: "flex", alignItems: "center", gap: 14, opacity: e.ativo === false ? 0.6 : 1 }) }, /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 48, color: e.ativo === false ? "#94A3B8" : (EC[e.id] || "#2E6DA4") }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, e.name), e.ativo === false && /* @__PURE__ */ React.createElement("span", { style: { background: "#F1F5F9", color: "#94A3B8", borderRadius: 6, padding: "1px 7px", fontSize: 10, fontWeight: 700 } }, "Inactivo")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, e.role)), e.rating ? /* @__PURE__ */ React.createElement(Stars, { r: e.rating }) : null);
