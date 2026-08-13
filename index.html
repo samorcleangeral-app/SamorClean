@@ -3981,8 +3981,16 @@ function FichaRH(props) {
     }
   }
   async function addAusencia() {
+    function limparAus(obj) {
+      var o = Object.assign({}, obj);
+      if (o.subsidio_ferias_valor === "" || o.subsidio_ferias_valor === null || o.subsidio_ferias_valor === undefined) o.subsidio_ferias_valor = null;
+      if (o.hora_inicio === "") o.hora_inicio = null;
+      if (o.hora_fim === "") o.hora_fim = null;
+      if (o.data_fim === "") o.data_fim = null;
+      return o;
+    }
     if (editAusId) {
-      const patch = Object.assign({}, ausForm);
+      const patch = limparAus(ausForm);
       delete patch.id;
       delete patch.funcionario_id;
       delete patch.created_at;
@@ -4000,7 +4008,7 @@ function FichaRH(props) {
       }
       return;
     }
-    const res = await fetch(SUPABASE_URL + "/rest/v1/ausencias", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }), body: JSON.stringify(Object.assign({}, ausForm, { funcionario_id: sel.id })) });
+    const res = await fetch(SUPABASE_URL + "/rest/v1/ausencias", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }), body: JSON.stringify(limparAus(Object.assign({}, ausForm, { funcionario_id: sel.id }))) });
     if (res.ok) {
       const d = await res.json();
       setAusencias(function(p) {
