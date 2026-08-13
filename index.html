@@ -5560,6 +5560,7 @@ function AuditoriaQR() {
   const [picagens, setPicagens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dia, setDia] = useState(localDateStr(/* @__PURE__ */ new Date()));
+  const [filtroCliente, setFiltroCliente] = useState("");
   useEffect(function() {
     Promise.all([
       db.list("qr_aberturas", "?select=*&order=aberto_em.desc&limit=500"),
@@ -5571,20 +5572,39 @@ function AuditoriaQR() {
     });
   }, []);
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...");
-  var aberturasDia = aberturas.filter(function(a) { return (a.aberto_em || "").slice(0, 10) === dia; });
+  var clientesUnicos = [];
+  aberturas.forEach(function(a) { if (a.client_nome && clientesUnicos.indexOf(a.client_nome) === -1) clientesUnicos.push(a.client_nome); });
+  clientesUnicos.sort();
+  var aberturasDia = aberturas.filter(function(a) { return (a.aberto_em || "").slice(0, 10) === dia && (!filtroCliente || a.client_nome === filtroCliente); });
   var picagensDia = picagens.filter(function(p) { return (p.created_at || "").slice(0, 10) === dia; });
-  var eventos = aberturasDia.map(function(a) { return { hora: a.aberto_em, tipo: "abertura", label: "\uD83D\uDD17 QR aberto", nome: a.client_nome || "Cliente", detalhe: "" }; }).concat(picagensDia.map(function(p) { return { hora: p.created_at, tipo: "picagem", label: p.tipo === "saida" ? "\uD83D\uDD34 Sa\xEDda" : "\uD83D\uDFE2 Entrada", nome: p.funcionario_nome || "Colaborador", detalhe: "" }; })).sort(function(a, b) { return a.hora < b.hora ? 1 : -1; });
+  // Agrupar aberturas do mesmo cliente em menos de 5 minutos
+  var aberturasOrdenadas = aberturasDia.slice().sort(function(a, b) { return a.aberto_em < b.aberto_em ? -1 : 1; });
+  var aberturasAgrupadas = [];
+  aberturasOrdenadas.forEach(function(a) {
+    var ultima = aberturasAgrupadas[aberturasAgrupadas.length - 1];
+    if (ultima && ultima.client_nome === a.client_nome && (new Date(a.aberto_em) - new Date(ultima.aberto_em_fim)) < 5 * 60 * 1000) {
+      ultima.count++;
+      ultima.aberto_em_fim = a.aberto_em;
+    } else {
+      aberturasAgrupadas.push({ client_nome: a.client_nome, aberto_em: a.aberto_em, aberto_em_fim: a.aberto_em, count: 1 });
+    }
+  });
+  var eventos = aberturasAgrupadas.map(function(a) { return { hora: a.aberto_em, tipo: "abertura", label: "\uD83D\uDD17 QR aberto", nome: a.client_nome || "Cliente", detalhe: a.count > 1 ? "\xD7" + a.count : "" }; }).concat(picagensDia.map(function(p) { return { hora: p.created_at, tipo: "picagem", label: p.tipo === "saida" ? "\uD83D\uDD34 Sa\xEDda" : "\uD83D\uDFE2 Entrada", nome: p.funcionario_nome || "Colaborador", detalhe: "" }; })).sort(function(a, b) { return a.hora < b.hora ? 1 : -1; });
   return /* @__PURE__ */ React.createElement("div", null,
     /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 900, fontSize: 20, color: "#1A3A5C", marginBottom: 6 } }, "\uD83D\uDD0D Auditoria QR"),
-    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 18 } }, "Aberturas do QR de cliente cruzadas com as picagens de entrada/sa\xEDda, para detectares casos estranhos (ex: abriram e s\xF3 muito depois picaram)."),
-    /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 200, marginBottom: 18 }), type: "date", value: dia, onChange: function(e) { setDia(e.target.value); } }),
+    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 18 } }, "Aberturas do QR de cliente cruzadas com as picagens de entrada/sa\xEDda, para detectares casos estranhos (ex: abriram e s\xF3 muito depois picaram). Aberturas do mesmo cliente em menos de 5 min aparecem agrupadas."),
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" } },
+      /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 180 }), type: "date", value: dia, onChange: function(e) { setDia(e.target.value); } }),
+      /* @__PURE__ */ React.createElement("select", { style: Object.assign({}, inp, { maxWidth: 240 }), value: filtroCliente, onChange: function(e) { setFiltroCliente(e.target.value); } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "Todos os clientes"), clientesUnicos.map(function(cn) { return /* @__PURE__ */ React.createElement("option", { key: cn, value: cn }, cn); }))
+    ),
     eventos.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Sem registos neste dia.") :
     /* @__PURE__ */ React.createElement("div", { style: card },
       eventos.map(function(ev, i) {
-        return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 14, padding: "10px 0", borderBottom: i < eventos.length - 1 ? "1px solid #F1F5F9" : "none" } },
+        return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 14, padding: "10px 0", borderBottom: i < eventos.length - 1 ? "1px solid #F1F5F9" : "none", background: ev.tipo === "abertura" ? "#FEFCE8" : "transparent" } },
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 800, color: "#1A3A5C", minWidth: 52 } }, new Date(ev.hora).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })),
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, minWidth: 90 } }, ev.label),
-          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#334155" } }, ev.nome)
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#334155", flex: 1 } }, ev.nome),
+          ev.detalhe && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#B45309", background: "#FEF3C7", borderRadius: 6, padding: "2px 8px" } }, ev.detalhe)
         );
       })
     )
