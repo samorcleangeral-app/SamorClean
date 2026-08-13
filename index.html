@@ -383,6 +383,9 @@ function ChartCanvas(props) {
   }, [JSON.stringify(props.data), props.type]);
   return /* @__PURE__ */ React.createElement("div", { style: { height: props.height || 240 } }, /* @__PURE__ */ React.createElement("canvas", { ref: canvasRef }));
 }
+function aplicaIva(val, ivaType) {
+  return ivaType === "autoliquida\xE7\xE3o" ? (val || 0) : (val || 0) * 1.23;
+}
 function calcValorFaturacao(c, jobs, horas) {
   var isOrcamento = c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda";
   if (isOrcamento) return { valor: jobs.reduce(function(s, j) { return s + (j.val || 0); }, 0), tipo: "orcamento" };
@@ -627,7 +630,7 @@ function Finance() {
     return c ? c.iva_type || "normal" : "normal";
   }
   function withIva(val, job) {
-    return ivaTypeFor(job) === "autoliquida\xE7\xE3o" ? val : val * 1.23;
+    return aplicaIva(val, ivaTypeFor(job));
   }
   function valorPagoDoJob(j) {
     var total = withIva(j.val || 0, j);
@@ -732,13 +735,14 @@ function Finance() {
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const key = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
-      buckets[key] = { m: d.toLocaleDateString("pt-PT", { month: "short" }), fat: 0, rec: 0, custo: 0, mo: 0, refDate: new Date(d.getFullYear(), d.getMonth(), 15) };
+      buckets[key] = { m: d.toLocaleDateString("pt-PT", { month: "short" }), fat: 0, fatSemIva: 0, rec: 0, custo: 0, mo: 0, refDate: new Date(d.getFullYear(), d.getMonth(), 15) };
     }
     last6Months.forEach(function(j) {
       const key = j.date.slice(0, 7);
       if (buckets[key]) {
         const v = withIva(j.val || 0, j);
         buckets[key].fat += v;
+        buckets[key].fatSemIva += (j.val || 0);
         if (j.paid) buckets[key].rec += v;
       }
     });
@@ -755,7 +759,7 @@ function Finance() {
     });
     return Object.keys(buckets).sort().map(function(k) {
       var b = buckets[k];
-      return Object.assign({}, b, { margem: b.fat / 1.23 - b.custo - b.mo });
+      return Object.assign({}, b, { margem: b.fatSemIva - b.custo - b.mo });
     });
   })();
   const maxB = Math.max.apply(null, monthsData.map(function(m) {
@@ -949,7 +953,7 @@ function Finance() {
       (jobsAno || []).forEach(function(j) {
         var c = cMap[j.client_id];
         var ivaT = j.iva_override || (c ? c.iva_type : "normal") || "normal";
-        var v = ivaT === "autoliquida\xE7\xE3o" ? (j.val || 0) : (j.val || 0) * 1.23;
+        var v = aplicaIva(j.val || 0, ivaT);
         var mes = parseInt(j.date.slice(5, 7), 10) - 1;
         buckets[mes] += v;
       });
@@ -3684,45 +3688,7 @@ function Clients() {
       setEditForm(Object.assign({}, editForm, { iva_type: e.target.value }));
     } }, /* @__PURE__ */ React.createElement("option", { value: "normal" }, "Normal (23%)"), /* @__PURE__ */ React.createElement("option", { value: "autoliquida\xE7\xE3o" }, "Autoliquida\xE7\xE3o"))), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Notas internas"), /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 60, resize: "vertical" }), value: editForm.notes, onChange: function(e) {
       setEditForm(Object.assign({}, editForm, { notes: e.target.value }));
-    } })), (editForm.service === "Limpeza P\xF3s-Obra" || editForm.service === "Limpeza Profunda") ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1", background: "#FFFBEB", border: "1.5px solid #F59E0B" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#92400E", marginBottom: 6 } }, "\u2139 Cliente de Pós-Obra/Profunda"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#78350F" } }, "Este tipo de servi\xE7o n\xE3o segue uma agenda semanal fixa \u2014 cada obra \xE9 criada individualmente, quando surgir, em Rotas \u2192 \"+ Servi\xE7o\".")) : /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Dias de visita"), (editForm.schedule || []).map(function(d, i) {
-      return /* @__PURE__ */ React.createElement("div", { key: i, style: { background: "#F8FAFC", borderRadius: 10, padding: "12px 14px", marginBottom: 10, border: "1px solid #E2EBF4" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 10, marginBottom: 10, alignItems: "flex-end" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Dia"), /* @__PURE__ */ React.createElement("select", { style: inp, value: d.day, onChange: function(e) {
-        const s = editForm.schedule.slice();
-        s[i] = Object.assign({}, s[i], { day: parseInt(e.target.value) });
-        setEditForm(Object.assign({}, editForm, { schedule: s }));
-      } }, DAYS.map(function(n, di) {
-        return /* @__PURE__ */ React.createElement("option", { key: di, value: di }, n);
-      }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Entrada"), /* @__PURE__ */ React.createElement("select", { style: inp, value: d.time_start || "09:00", onChange: function(e) {
-        const s = editForm.schedule.slice();
-        s[i] = Object.assign({}, s[i], { time_start: e.target.value });
-        setEditForm(Object.assign({}, editForm, { schedule: s }));
-      } }, TIME_SLOTS.map(function(t) {
-        return /* @__PURE__ */ React.createElement("option", { key: t, value: t }, t);
-      }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Sa\xEDda"), /* @__PURE__ */ React.createElement("select", { style: inp, value: d.time_end || "12:00", onChange: function(e) {
-        const s = editForm.schedule.slice();
-        s[i] = Object.assign({}, s[i], { time_end: e.target.value });
-        setEditForm(Object.assign({}, editForm, { schedule: s }));
-      } }, TIME_SLOTS.map(function(t) {
-        return /* @__PURE__ */ React.createElement("option", { key: t, value: t }, t);
-      }))), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-        const s = editForm.schedule.filter(function(_, j) {
-          return j !== i;
-        });
-        setEditForm(Object.assign({}, editForm, { schedule: s }));
-      }, style: Object.assign({}, btnR, { padding: "9px 12px" }) }, "X")), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Equipa"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 } }, emps.map(function(e) {
-        const selected = (d.team_ids || []).indexOf(e.id) !== -1;
-        return /* @__PURE__ */ React.createElement("div", { key: e.id, onClick: function() {
-          const s = editForm.schedule.slice();
-          const ids = s[i].team_ids || [];
-          const has = ids.indexOf(e.id) !== -1;
-          s[i] = Object.assign({}, s[i], { team_ids: has ? ids.filter(function(x) {
-            return x !== e.id;
-          }) : ids.concat([e.id]) });
-          setEditForm(Object.assign({}, editForm, { schedule: s }));
-        }, style: { display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 7, border: "1.5px solid " + (selected ? "#2E6DA4" : "#E2EBF4"), background: selected ? "#EFF6FF" : "#fff", cursor: "pointer" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 20, height: 20, borderRadius: "50%", background: selected ? EC[e.id] || "#2E6DA4" : "#CBD5E1", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 9, fontWeight: 700 } }, e.av || e.name.slice(0, 2).toUpperCase()), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: selected ? "#2E6DA4" : "#64748B" } }, e.name.split(" ")[0]));
-      }))));
-    }), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-      setEditForm(Object.assign({}, editForm, { schedule: (editForm.schedule || []).concat([{ day: 0, team_ids: [], time_start: "09:00", time_end: "12:00" }]) }));
-    }, style: Object.assign({}, btnO, { fontSize: 13, padding: "8px 16px" }) }, "+ Adicionar dia de visita")))) : null, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 } }, /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Contacto"), [["Respons\xE1vel", sel.contact], ["Telefone", sel.phone], ["Email", sel.email], ["Morada", sel.address]].map(function(pair) {
+    } })), (editForm.service === "Limpeza P\xF3s-Obra" || editForm.service === "Limpeza Profunda") ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1", background: "#FFFBEB", border: "1.5px solid #F59E0B" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#92400E", marginBottom: 6 } }, "\u2139 Cliente de Pós-Obra/Profunda"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#78350F" } }, "Este tipo de servi\xE7o n\xE3o segue uma agenda semanal fixa \u2014 cada obra \xE9 criada individualmente, quando surgir, em Rotas \u2192 \"+ Servi\xE7o\".")) : null)) : null, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 } }, /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Contacto"), [["Respons\xE1vel", sel.contact], ["Telefone", sel.phone], ["Email", sel.email], ["Morada", sel.address]].map(function(pair) {
       return /* @__PURE__ */ React.createElement("div", { key: pair[0], style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: lbl }, pair[0]), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "#334155" } }, pair[1]));
     })), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Servico"), [["Tipo", sel.service], ["Frequ\xEAncia", sel.freq]].map(function(pair) {
       return /* @__PURE__ */ React.createElement("div", { key: pair[0], style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: lbl }, pair[0]), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "#334155" } }, pair[1]));
@@ -3826,45 +3792,7 @@ function Clients() {
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#78350F" } }, "Este tipo de servi\xE7o n\xE3o segue uma agenda semanal fixa \u2014 cada obra \xE9 criada individualmente, quando surgir. N\xE3o precisas de definir dias de visita aqui. Depois de criares o cliente, cria cada servi\xE7o em Rotas \u2192 \"+ Servi\xE7o\", com a data, equipa e or\xE7amento pr\xF3prios dessa obra espec\xEDfica.")
         );
       }
-      return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 12 } }, "Dias de visita"), (form.schedule || []).map(function(d, i) {
-      return /* @__PURE__ */ React.createElement("div", { key: i, style: { background: "#F8FAFC", borderRadius: 10, padding: "14px 16px", marginBottom: 12, border: "1px solid #E2EBF4" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 10, marginBottom: 12, alignItems: "flex-end" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Dia"), /* @__PURE__ */ React.createElement("select", { style: inp, value: d.day, onChange: function(e) {
-        const s = form.schedule.slice();
-        s[i] = Object.assign({}, s[i], { day: parseInt(e.target.value) });
-        setForm(Object.assign({}, form, { schedule: s }));
-      } }, DAYS.map(function(n, di) {
-        return /* @__PURE__ */ React.createElement("option", { key: di, value: di }, n);
-      }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Entrada"), /* @__PURE__ */ React.createElement("select", { style: inp, value: d.time_start || "09:00", onChange: function(e) {
-        const s = form.schedule.slice();
-        s[i] = Object.assign({}, s[i], { time_start: e.target.value });
-        setForm(Object.assign({}, form, { schedule: s }));
-      } }, TIME_SLOTS.map(function(t) {
-        return /* @__PURE__ */ React.createElement("option", { key: t, value: t }, t);
-      }))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Sa\xEDda"), /* @__PURE__ */ React.createElement("select", { style: inp, value: d.time_end || "12:00", onChange: function(e) {
-        const s = form.schedule.slice();
-        s[i] = Object.assign({}, s[i], { time_end: e.target.value });
-        setForm(Object.assign({}, form, { schedule: s }));
-      } }, TIME_SLOTS.map(function(t) {
-        return /* @__PURE__ */ React.createElement("option", { key: t, value: t }, t);
-      }))), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-        const s = form.schedule.filter(function(_, j) {
-          return j !== i;
-        });
-        setForm(Object.assign({}, form, { schedule: s }));
-      }, style: Object.assign({}, btnR, { padding: "9px 12px" }) }, "X")), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Equipa para este dia"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } }, emps.map(function(e) {
-        const selected = (d.team_ids || []).indexOf(e.id) !== -1;
-        return /* @__PURE__ */ React.createElement("div", { key: e.id, onClick: function() {
-          const s = form.schedule.slice();
-          const ids = s[i].team_ids || [];
-          const has = ids.indexOf(e.id) !== -1;
-          s[i] = Object.assign({}, s[i], { team_ids: has ? ids.filter(function(x) {
-            return x !== e.id;
-          }) : ids.concat([e.id]) });
-          setForm(Object.assign({}, form, { schedule: s }));
-        }, style: { display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 8, border: "1.5px solid " + (selected ? "#2E6DA4" : "#E2EBF4"), background: selected ? "#EFF6FF" : "#fff", cursor: "pointer" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 24, height: 24, borderRadius: "50%", background: selected ? EC[e.id] || "#2E6DA4" : "#CBD5E1", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 10, fontWeight: 700 } }, e.av || e.name.slice(0, 2).toUpperCase()), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: selected ? "#2E6DA4" : "#64748B" } }, e.name.split(" ")[0]));
-      }))));
-    }), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-      setForm(Object.assign({}, form, { schedule: (form.schedule || []).concat([{ day: 0, team_ids: [], time_start: "09:00", time_end: "12:00" }]) }));
-    }, style: Object.assign({}, btnO, { fontSize: 13, padding: "8px 16px" }) }, "+ Adicionar dia de visita"));
+      return null;
     })(), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 12 } }, "Contactos"), newContacts.map(function(nc, i) { return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr 1fr 90px 28px", gap: 8, marginBottom: 8, alignItems: "flex-end" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Nome"), /* @__PURE__ */ React.createElement("input", { style: inp, value: nc.name, onChange: function(e) { var a = newContacts.slice(); a[i] = Object.assign({}, a[i], { name: e.target.value }); setNewContacts(a); }, placeholder: "Maria Santos" })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Cargo"), /* @__PURE__ */ React.createElement("input", { style: inp, value: nc.cargo, onChange: function(e) { var a = newContacts.slice(); a[i] = Object.assign({}, a[i], { cargo: e.target.value }); setNewContacts(a); }, placeholder: "Directora" })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Telef."), /* @__PURE__ */ React.createElement("input", { style: inp, type: "tel", value: nc.phone, onChange: function(e) { var a = newContacts.slice(); a[i] = Object.assign({}, a[i], { phone: e.target.value }); setNewContacts(a); }, placeholder: "912 000 000" })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Email"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "email", value: nc.email, onChange: function(e) { var a = newContacts.slice(); a[i] = Object.assign({}, a[i], { email: e.target.value }); setNewContacts(a); }, placeholder: "email@emp.pt" })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "PIN"), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { fontFamily: "monospace" }), value: nc.pin, onChange: function(e) { var a = newContacts.slice(); a[i] = Object.assign({}, a[i], { pin: e.target.value.replace(/[^0-9]/g,"").slice(0,6) }); setNewContacts(a); }, placeholder: "000000", maxLength: 6 })), /* @__PURE__ */ React.createElement("button", { onClick: function() { setNewContacts(newContacts.filter(function(_,j){return j!==i;})); }, style: { background: "transparent", border: "1px solid #EF4444", color: "#EF4444", borderRadius: 6, padding: "4px 7px", cursor: "pointer", alignSelf: "flex-end" } }, "\u2715")); }), newContacts.length < 6 && /* @__PURE__ */ React.createElement("button", { onClick: function() { setNewContacts(newContacts.concat([{name:"",cargo:"",phone:"",email:"",pin:""}])); }, style: Object.assign({}, btnO, { fontSize: 11, padding: "5px 12px", marginTop: 8 }) }, "+ Contacto")), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end", gap: 12 } }, /* @__PURE__ */ React.createElement("button", { style: btnX, onClick: function() {
       setView("list");
     } }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { style: Object.assign({}, btn, { background: form.name && form.phone ? "#2E6DA4" : "#94A3B8", cursor: form.name && form.phone ? "pointer" : "not-allowed", padding: "11px 28px" }), onClick: saveC, disabled: !form.name || !form.phone }, "Criar + QR Code"))));
@@ -6692,13 +6620,16 @@ function RelatorioMensal() {
     function withIva(j) {
       const c = cm[j.client_id];
       const ivaT = j.iva_override || (c ? c.iva_type : "normal") || "normal";
-      return ivaT === "autoliquida\xE7\xE3o" ? j.val || 0 : (j.val || 0) * 1.23;
+      return aplicaIva(j.val || 0, ivaT);
     }
     const completed = (servicos || []).filter(function(j) {
       return j.status === "completed" && cm[j.client_id];
     });
     const fatTotal = completed.reduce(function(s, j) {
       return s + withIva(j);
+    }, 0);
+    const fatTotalSemIva = completed.reduce(function(s, j) {
+      return s + (j.val || 0);
     }, 0);
     const recTotal = completed.filter(function(j) {
       return j.paid;
@@ -6729,9 +6660,10 @@ function RelatorioMensal() {
     }
     completed.forEach(function(j) {
       var cid = idEfetivo(j.client_id);
-      if (!byClient[cid]) byClient[cid] = { servicos: 0, fat: 0, km: 0, checkIncomplete: 0, horas: 0, custoMO: 0 };
+      if (!byClient[cid]) byClient[cid] = { servicos: 0, fat: 0, fatSemIva: 0, km: 0, checkIncomplete: 0, horas: 0, custoMO: 0 };
       byClient[cid].servicos++;
       byClient[cid].fat += withIva(j);
+      byClient[cid].fatSemIva += (j.val || 0);
       const c = cm[j.client_id];
       if (c && c.km_armazem) byClient[cid].km += c.km_armazem * 2;
       if (j.checklist_incomplete) byClient[cid].checkIncomplete++;
@@ -6748,13 +6680,14 @@ function RelatorioMensal() {
       if (cPrincipal && cPrincipal.tipo_faturacao === "mensal") {
         var ivaT = cPrincipal.iva_type || "normal";
         var valorFixo = parseFloat(cPrincipal.valor_visita) || 0;
-        byClient[cid].fat = ivaT === "autoliquida\xE7\xE3o" ? valorFixo : valorFixo * 1.23;
+        byClient[cid].fat = aplicaIva(valorFixo, ivaT);
+        byClient[cid].fatSemIva = valorFixo;
       }
     });
     Object.keys(byClient).forEach(function(cid) {
       var proporcao = (!clientesOrcamento[cid] && totalHorasMesRateio > 0) ? byClient[cid].horas / totalHorasMesRateio : 0;
       byClient[cid].custosOp = clientesOrcamento[cid] ? 0 : totalDespesasComKm * proporcao;
-      byClient[cid].margemReal = byClient[cid].fat / 1.23 - byClient[cid].custoMO - byClient[cid].custosOp;
+      byClient[cid].margemReal = byClient[cid].fatSemIva - byClient[cid].custoMO - byClient[cid].custosOp;
     });
     const byEmp = {};
     (funcs || []).forEach(function(f) {
@@ -6791,15 +6724,15 @@ function RelatorioMensal() {
     });
     const cashCfg = cashConfigArr && cashConfigArr[0] ? cashConfigArr[0] : null;
     const saldoAtual = cashCfg ? cashCfg.saldo_inicial + (cashMovs || []).reduce(function(s, m) { return s + (m.tipo === "entrada" ? m.valor : -m.valor); }, 0) : null;
-    const margemBrutaMes = fatTotal / 1.23 - totalCustos;
-    const margemPctMes = fatTotal > 0 ? Math.round(margemBrutaMes / (fatTotal / 1.23) * 100) : 0;
+    const margemBrutaMes = fatTotalSemIva - totalCustos;
+    const margemPctMes = fatTotalSemIva > 0 ? Math.round(margemBrutaMes / fatTotalSemIva * 100) : 0;
     const metasComProgresso = (metasArr || []).map(function(meta) {
-      var actual = meta.tipo === "cash_flow" ? saldoAtual : meta.tipo === "margem_lucro" ? margemPctMes : meta.tipo === "faturacao" ? fatTotal / 1.23 : null;
+      var actual = meta.tipo === "cash_flow" ? saldoAtual : meta.tipo === "margem_lucro" ? margemPctMes : meta.tipo === "faturacao" ? fatTotalSemIva : null;
       var pct = actual !== null && meta.valor_alvo > 0 ? Math.min(100, Math.max(0, Math.round(actual / meta.valor_alvo * 100))) : null;
       return Object.assign({}, meta, { actual: actual, pct: pct });
     });
     const recrutStats = { total: (recrutamento || []).length, novos: (recrutamento || []).filter(function(r) { return r.estado === "novo"; }).length };
-    setData({ fatTotal, recTotal, custoKm, kmTotal, byClient, byEmp, cm, completed, monthAvs, monthPedidos, servicos: servicos || [], totalCustos, totalIVADedutivel, custosCat, despesas: despesas || [], cashCfg, saldoAtual, metasComProgresso, recrutStats });
+    setData({ fatTotal, fatTotalSemIva, recTotal, custoKm, kmTotal, byClient, byEmp, cm, completed, monthAvs, monthPedidos, servicos: servicos || [], totalCustos, totalIVADedutivel, custosCat, despesas: despesas || [], cashCfg, saldoAtual, metasComProgresso, recrutStats });
     } catch (err) {
       alert("Erro ao gerar o relat\xF3rio: " + (err && err.message ? err.message : String(err)));
     } finally {
@@ -6808,11 +6741,11 @@ function RelatorioMensal() {
   }
   function exportPDF() {
     if (!data) return;
-    const { fatTotal, recTotal, custoKm, kmTotal, byClient, byEmp, cm, completed, monthAvs, monthPedidos, totalCustos, totalIVADedutivel, custosCat, despesas, cashCfg, saldoAtual, metasComProgresso, recrutStats } = data;
+    const { fatTotal, fatTotalSemIva, recTotal, custoKm, kmTotal, byClient, byEmp, cm, completed, monthAvs, monthPedidos, totalCustos, totalIVADedutivel, custosCat, despesas, cashCfg, saldoAtual, metasComProgresso, recrutStats } = data;
     const mesLabel = MESES[mes] + " " + ano;
     const totalCustosReal = (totalCustos || 0);
-    const margemBruta = fatTotal / 1.23 - totalCustosReal;
-    const margemPct = fatTotal > 0 ? Math.round(margemBruta / (fatTotal / 1.23) * 100) : 0;
+    const margemBruta = fatTotalSemIva - totalCustosReal;
+    const margemPct = fatTotalSemIva > 0 ? Math.round(margemBruta / fatTotalSemIva * 100) : 0;
     const clientRows = Object.entries(byClient).map(function(e) {
       const cid = e[0], cs = e[1];
       const c = cm[cid];
@@ -6821,7 +6754,7 @@ function RelatorioMensal() {
       return `<tr>
         <td style="padding:8px 10px;font-weight:600">${nome}</td>
         <td style="padding:8px 10px;text-align:center">${cs.servicos}</td>
-        <td style="padding:8px 10px;text-align:right">${(cs.fat / 1.23).toFixed(2)}\u20AC</td>
+        <td style="padding:8px 10px;text-align:right">${cs.fatSemIva.toFixed(2)}\u20AC</td>
         <td style="padding:8px 10px;text-align:right">${cs.fat.toFixed(2)}\u20AC</td>
         <td style="padding:8px 10px;text-align:right;font-weight:700;color:${margemC > 0 ? "#15803D" : "#DC2626"}">${margemC.toFixed(2)}\u20AC</td>
         <td style="padding:8px 10px;text-align:center">${cs.checkIncomplete > 0 ? "\u26A0 " + cs.checkIncomplete : "\u2713"}</td>
@@ -6878,7 +6811,7 @@ function RelatorioMensal() {
 
     <h2>Receitas</h2>
     <div class="kpi">
-      <div class="kpi-card"><div class="kpi-label">Faturado s/ IVA</div><div class="kpi-value" style="color:#2E6DA4">${(fatTotal / 1.23).toFixed(2)}\u20AC</div></div>
+      <div class="kpi-card"><div class="kpi-label">Faturado s/ IVA</div><div class="kpi-value" style="color:#2E6DA4">${fatTotalSemIva.toFixed(2)}\u20AC</div></div>
       <div class="kpi-card"><div class="kpi-label">Faturado c/ IVA</div><div class="kpi-value" style="color:#0F766E">${fatTotal.toFixed(2)}\u20AC</div></div>
       <div class="kpi-card"><div class="kpi-label">Recebido</div><div class="kpi-value" style="color:#16A34A">${recTotal.toFixed(2)}\u20AC</div></div>
       <div class="kpi-card"><div class="kpi-label">Por cobrar</div><div class="kpi-value" style="color:#EF4444">${(fatTotal - recTotal).toFixed(2)}\u20AC</div></div>
@@ -6895,7 +6828,7 @@ function RelatorioMensal() {
     <h2>Margem Real do M\xEAs</h2>
     <div class="margem-box">
       <div>
-        <div style="font-size:13px;color:#64748B;margin-bottom:4px">Receitas s/IVA (${(fatTotal / 1.23).toFixed(2)}\u20AC) \u2212 Custos (${totalCustosReal.toFixed(2)}\u20AC)</div>
+        <div style="font-size:13px;color:#64748B;margin-bottom:4px">Receitas s/IVA (${fatTotalSemIva.toFixed(2)}\u20AC) \u2212 Custos (${totalCustosReal.toFixed(2)}\u20AC)</div>
         <div style="font-size:28px;font-weight:900;color:${margemBruta >= 0 ? "#16A34A" : "#EF4444"}">${margemBruta.toFixed(2)}\u20AC</div>
       </div>
       <div style="text-align:center">
@@ -7424,7 +7357,7 @@ function Manager(props) {
       const monthJobs = results[6] || [];
       function withIva(j) {
         const ivaT = j.iva_override || (cm[j.client_id] ? cm[j.client_id].iva_type : "normal") || "normal";
-        return ivaT === "autoliquida\xE7\xE3o" ? j.val || 0 : (j.val || 0) * 1.23;
+        return aplicaIva(j.val || 0, ivaT);
       }
       const fat = monthJobs.reduce(function(s, j) { return s + withIva(j); }, 0);
       const rec = monthJobs.filter(function(j) { return j.paid; }).reduce(function(s, j) { return s + withIva(j); }, 0);
