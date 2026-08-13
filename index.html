@@ -7831,20 +7831,20 @@ function Employee(props) {
   const clientContext = props.clientContext || null;
   const [phase, setPhase] = useState("login");
   const [emps, setEmps] = useState(EMPS);
-  const [lastActivity, setLastActivity] = useState(Date.now());
+  const lastActivityRef = React.useRef(Date.now());
   const EMP_TIMEOUT = 5 * 60 * 1000; // 5 min
   useEffect(function() {
     if (phase !== "dash") return;
     var timer = setInterval(function() {
-      if (Date.now() - lastActivity > EMP_TIMEOUT) {
+      if (Date.now() - lastActivityRef.current > EMP_TIMEOUT) {
         window.location.href = "https://samorcleangeral-app.github.io/SamorClean/sessao-terminada.html";
       }
     }, 30000);
     return function() { clearInterval(timer); };
-  }, [phase, lastActivity]);
+  }, [phase]);
   useEffect(function() {
     if (phase !== "dash") return;
-    function resetTimer() { setLastActivity(Date.now()); }
+    function resetTimer() { lastActivityRef.current = Date.now(); }
     window.addEventListener("click", resetTimer);
     window.addEventListener("touchstart", resetTimer);
     window.addEventListener("keydown", resetTimer);
@@ -8223,13 +8223,6 @@ function Employee(props) {
       registerEarlyLeave(earlyLeaveEmp.id);
     }, style: Object.assign({}, btnR, { flex: 1 }) }, "Confirmar sa\xEDda")))));
   }
-  if (phase === "dash" && Date.now() - lastActivity > EMP_TIMEOUT) {
-    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32 } },
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 64, marginBottom: 20 } }, "\uD83D\uDD12"),
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 8, textAlign: "center" } }, "Sess\xE3o expirada"),
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "rgba(255,255,255,0.6)", textAlign: "center", lineHeight: 1.6 } }, "Por seguran\xE7a, a sess\xE3o terminou.", /* @__PURE__ */ React.createElement("br", null), "Para aceder novamente, utiliza o QR code do portal.")
-    );
-  }
   if (phase === "login") {
     return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 32, textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, fontWeight: 900, color: "#fff", letterSpacing: -1 } }, "SamorClean"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#38B6D8", fontWeight: 700, letterSpacing: 2, marginTop: 4 } }, "\xC1REA DOS COLABORADORES")), !sEmp ? /* @__PURE__ */ React.createElement("div", { style: { width: "100%", maxWidth: 360 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.5)", textAlign: "center", marginBottom: 18, fontWeight: 600 } }, "Quem \xE9s tu?"), emps.map(function(e) {
       return /* @__PURE__ */ React.createElement("div", { key: e.id, onClick: function() {
@@ -8580,21 +8573,21 @@ function ClientPortal(props) {
   const clientId = props.clientId || null;
   const isOcasional = props.isOcasional || false;
   const [phase, setPhase] = useState("welcome");
-  const [clientLastActivity, setClientLastActivity] = useState(Date.now());
+  const clientLastActivityRef = React.useRef(Date.now());
   const [clientTimedOut, setClientTimedOut] = useState(false);
   const [recrutForm, setRecrutForm] = useState({ nome: "", telefone: "", disponibilidade: "", carta_conducao: null, experiencia: "" });
   useEffect(function() {
     if (phase !== "client-portal") return;
     var timer = setInterval(function() {
-      if (Date.now() - clientLastActivity > 5 * 60 * 1000) {
+      if (Date.now() - clientLastActivityRef.current > 5 * 60 * 1000) {
         window.location.href = "https://samorcleangeral-app.github.io/SamorClean/sessao-terminada.html";
       }
     }, 10000);
     return function() { clearInterval(timer); };
-  }, [phase, clientLastActivity]);
+  }, [phase]);
   useEffect(function() {
     if (phase !== "client-portal") return;
-    function resetTimer() { setClientLastActivity(Date.now()); }
+    function resetTimer() { clientLastActivityRef.current = Date.now(); }
     window.addEventListener("click", resetTimer);
     window.addEventListener("touchstart", resetTimer);
     window.addEventListener("keydown", resetTimer);
