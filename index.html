@@ -1687,7 +1687,7 @@ function Finance() {
                 return /* @__PURE__ */ React.createElement("div", { style: { borderTop: "1px solid #F1F5F9", marginTop: 16, paddingTop: 14 } },
                   /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 } },
                     /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 12, color: "#64748B", textTransform: "uppercase" } }, "\uD83D\uDCB0 Por Cobrar (todos os meses)"),
-                    /* @__PURE__ */ React.createElement("button", { onClick: function() { alert("Cliquei em Conta Corrente \u2014 a abrir..."); abrirContaCorrente(selFaturacaoCliente); }, style: Object.assign({}, btnO, { background: "#F5F3FF", border: "1.5px solid #7C3AED", color: "#7C3AED", fontSize: 10, padding: "5px 10px" }) }, "\uD83D\uDCCB Conta Corrente")
+                    /* @__PURE__ */ React.createElement("button", { onClick: function() { var cid = selFaturacaoCliente; setSelFaturacaoCliente(null); abrirContaCorrente(cid); }, style: Object.assign({}, btnO, { background: "#F5F3FF", border: "1.5px solid #7C3AED", color: "#7C3AED", fontSize: 10, padding: "5px 10px" }) }, "\uD83D\uDCCB Conta Corrente")
                   ),
                   !dCobrar || dCobrar.jobs.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#16A34A", fontWeight: 700 } }, "\u2713 Nada em falta de meses anteriores.") :
                   (function() {
@@ -1853,7 +1853,7 @@ function Finance() {
         })
       );
     })()
-  ), contaCorrenteAberta && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 400, padding: 20 }, onClick: function() { setContaCorrenteAberta(false); } },
+  ), contaCorrenteAberta && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 600, padding: 20 }, onClick: function() { setContaCorrenteAberta(false); } },
             /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 24, maxWidth: 620, width: "100%", maxHeight: "85vh", overflowY: "auto" }, onClick: function(e) { e.stopPropagation(); } },
               /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } },
                 /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C" } }, "\uD83D\uDCCB Conta Corrente \u2014 ", contaCorrenteNome),
