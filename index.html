@@ -1726,68 +1726,8 @@ function Finance() {
             )
           )
         )
-      )
-    ),
-    finTab === "geral" && /* @__PURE__ */ React.createElement("div", null,
-    mostrarAvisoFaturacao && /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", border: "1.5px solid #2E6DA4", borderRadius: 10, padding: "14px 16px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 } },
-      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } },
-        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 26 } }, "\uD83E\uDDFE"),
-        /* @__PURE__ */ React.createElement("div", null,
-          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "Chegou a semana de facturar!"),
-          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, "\xDAltima semana completa de ", now.toLocaleDateString("pt-PT", { month: "long" }), " \u2014 vai ao separador Factura\xE7\xE3o para veres o resumo de todos os clientes.")
-        )
       ),
-      /* @__PURE__ */ React.createElement("button", { onClick: function() { setFinTab("faturacao"); }, style: btnG }, "Ver Factura\xE7\xE3o")
-    ),
-    emAtraso.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Clientes com pagamentos em atraso"),
-    emAtraso.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, (function() {
-    var byClientAtraso = {};
-    emAtraso.forEach(function(j) {
-      if (!byClientAtraso[j.client_id]) byClientAtraso[j.client_id] = { cn: j.cn, valor: 0, maxDias: 0, count: 0 };
-      var diffDays = Math.floor((now - ultimaSemanaCompleta.inicio) / (24 * 3600 * 1e3));
-      byClientAtraso[j.client_id].valor += withIva(j.val || 0, j);
-      byClientAtraso[j.client_id].count++;
-      if (diffDays > byClientAtraso[j.client_id].maxDias) byClientAtraso[j.client_id].maxDias = diffDays;
-    });
-    return /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 10 } }, Object.values(byClientAtraso).sort(function(a, b) { return b.maxDias - a.maxDias; }).map(function(c, i) {
-      const diffDays = c.maxDias;
-      const cor = diffDays >= 30 ? "#DC2626" : diffDays >= 15 ? "#F97316" : "#F59E0B";
-      const bg = diffDays >= 30 ? "#FEE2E2" : diffDays >= 15 ? "#FFF7ED" : "#FEF3C7";
-      const rotulo = diffDays >= 30 ? "considerar rescis\xE3o" : diffDays >= 15 ? "suspender servi\xE7o" : "enviar follow-up";
-      return /* @__PURE__ */ React.createElement("div", { key: i, style: { background: bg, border: "1.5px solid " + cor, borderRadius: 10, padding: "10px 12px" } },
-        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 } },
-          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: cor, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 } }, c.cn),
-          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 800, color: "#fff", background: cor, borderRadius: 5, padding: "1px 6px", flexShrink: 0, marginLeft: 6 } }, diffDays, "d")
-        ),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: "#1A3A5C" } }, fmt(c.valor), "\u20AC"),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", marginTop: 2 } }, c.count, " servi\xE7o", c.count !== 1 ? "s" : "", " \u2014 \u26A0 ", rotulo)
-      );
-    }));
-  })()), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Receitas"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12, marginBottom: 20 } }, [
-    { l: "Faturado s/IVA", v: fmt(fatSemIva) + "\u20AC", c: "#2E6DA4" },
-    { l: "Faturado c/IVA", v: fmt(fatComIva) + "\u20AC", c: "#0F766E" },
-    { l: "Recebido", v: fmt(recebido) + "\u20AC", s: fatComIva > 0 ? Math.round(recebido / fatComIva * 100) + "%" : "0%", c: "#16A34A" },
-    { l: "Em d\xEDvida (este m\xEAs)", v: fmt(divida) + "\u20AC", c: "#DC2626" },
-    { l: "D\xEDvida total (todos os meses)", v: fmt(dividaTotalAcumulada) + "\u20AC", c: "#991B1B" }
-  ].map(function(k) {
-    return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 14, borderTop: "3px solid " + k.c }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 8 } }, k.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 900, color: k.c } }, k.v), k.s && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 4 } }, k.s));
-  })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Custos"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 } }, [
-    { l: "Total custos", v: fmt(totalCustos) + "\u20AC", c: "#EF4444" },
-    { l: "Combust\xEDvel", v: fmt(custosCat["Combust\xEDvel"] || 0) + "\u20AC", c: "#F97316" },
-    { l: "IVA dedut\xEDvel", v: fmt(totalIVADedutivel) + "\u20AC", c: "#16A34A" },
-    { l: "Por pagar", v: fmt(custosPorPagar) + "\u20AC", c: "#F59E0B" }
-  ].map(function(k) {
-    return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 14, borderTop: "3px solid " + k.c }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 8 } }, k.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 900, color: k.c } }, k.v));
-  })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, padding: 20, background: margemBruta >= 0 ? "#F0FDF4" : "#FEF2F2", border: "2px solid " + (margemBruta >= 0 ? "#16A34A" : "#EF4444") }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 4 } }, "Margem Bruta do M\xEAs"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, fontWeight: 900, color: margemBruta >= 0 ? "#16A34A" : "#EF4444" } }, fmt(margemBruta), "\u20AC"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 2 } }, "Receitas (", fmt(fatSemIva), "\u20AC) \u2212 Despesas (", fmt(totalCustos), "\u20AC) \u2212 M\xE3o de Obra (", fmt(totalCustoMaoObraGeral), "\u20AC)")), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 48, fontWeight: 900, color: margemBruta >= 0 ? "#16A34A" : "#EF4444" } }, margemPct, "%"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, "margem")))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, marginBottom: 20 } }, /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 16 } }, "Fatura\xE7\xE3o vs Recebido \u2014 6 meses"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", height: 140 } }, monthsData.map(function(m, i) {
-    const fH = Math.round(m.fat / maxB * 120);
-    const rH = Math.round(m.rec / maxB * 120);
-    return /* @__PURE__ */ React.createElement("div", { key: i, style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 2, alignItems: "flex-end", height: 120 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 14, height: Math.max(2, fH), background: "#2E6DA4", borderRadius: "3px 3px 0 0" } }), /* @__PURE__ */ React.createElement("div", { style: { width: 14, height: Math.max(2, rH), background: "#38B6D8", borderRadius: "3px 3px 0 0" } })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", fontWeight: 600 } }, m.m));
-  })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 16, marginTop: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 10, height: 10, background: "#2E6DA4", borderRadius: 2 } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#64748B" } }, "Faturado")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 10, height: 10, background: "#38B6D8", borderRadius: 2 } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#64748B" } }, "Recebido")))), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Custos por categoria"), Object.keys(custosCat).length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 20, fontSize: 12 } }, "Sem custos registados este m\xEAs.") : Object.keys(custosCat).sort(function(a, b) {
-    return custosCat[b] - custosCat[a];
-  }).map(function(cat) {
-    const pct = totalCustos > 0 ? Math.round(custosCat[cat] / totalCustos * 100) : 0;
-    return /* @__PURE__ */ React.createElement("div", { key: cat, style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#334155", fontWeight: 600 } }, cat), /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B" } }, fmt(custosCat[cat]), "\u20AC (", pct, "%)")), /* @__PURE__ */ React.createElement("div", { style: { height: 6, background: "#F1F5F9", borderRadius: 3 } }, /* @__PURE__ */ React.createElement("div", { style: { height: 6, width: pct + "%", background: "#EF4444", borderRadius: 3 } })));
-  }))), /* @__PURE__ */ React.createElement("div", { style: card },
+    (finTab === "faturacao") && /* @__PURE__ */ React.createElement("div", { style: card },
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 14 } },
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "Clientes por Cobrar (", (function() { var s = new Set((verTudoCobrar ? allPendingJobs : pendingRows).map(function(j) { return j.client_id; })); return s.size; })(), ")"),
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } },
@@ -1853,7 +1793,68 @@ function Finance() {
         })
       );
     })()
-  ), contaCorrenteAberta && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 600, padding: 20 }, onClick: function() { setContaCorrenteAberta(false); } },
+  )
+    ),
+    finTab === "geral" && /* @__PURE__ */ React.createElement("div", null,
+    mostrarAvisoFaturacao && /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", border: "1.5px solid #2E6DA4", borderRadius: 10, padding: "14px 16px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 } },
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } },
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 26 } }, "\uD83E\uDDFE"),
+        /* @__PURE__ */ React.createElement("div", null,
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "Chegou a semana de facturar!"),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, "\xDAltima semana completa de ", now.toLocaleDateString("pt-PT", { month: "long" }), " \u2014 vai ao separador Factura\xE7\xE3o para veres o resumo de todos os clientes.")
+        )
+      ),
+      /* @__PURE__ */ React.createElement("button", { onClick: function() { setFinTab("faturacao"); }, style: btnG }, "Ver Factura\xE7\xE3o")
+    ),
+    emAtraso.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Clientes com pagamentos em atraso"),
+    emAtraso.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } }, (function() {
+    var byClientAtraso = {};
+    emAtraso.forEach(function(j) {
+      if (!byClientAtraso[j.client_id]) byClientAtraso[j.client_id] = { cn: j.cn, valor: 0, maxDias: 0, count: 0 };
+      var diffDays = Math.floor((now - ultimaSemanaCompleta.inicio) / (24 * 3600 * 1e3));
+      byClientAtraso[j.client_id].valor += withIva(j.val || 0, j);
+      byClientAtraso[j.client_id].count++;
+      if (diffDays > byClientAtraso[j.client_id].maxDias) byClientAtraso[j.client_id].maxDias = diffDays;
+    });
+    return /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 10 } }, Object.values(byClientAtraso).sort(function(a, b) { return b.maxDias - a.maxDias; }).map(function(c, i) {
+      const diffDays = c.maxDias;
+      const cor = diffDays >= 30 ? "#DC2626" : diffDays >= 15 ? "#F97316" : "#F59E0B";
+      const bg = diffDays >= 30 ? "#FEE2E2" : diffDays >= 15 ? "#FFF7ED" : "#FEF3C7";
+      const rotulo = diffDays >= 30 ? "considerar rescis\xE3o" : diffDays >= 15 ? "suspender servi\xE7o" : "enviar follow-up";
+      return /* @__PURE__ */ React.createElement("div", { key: i, style: { background: bg, border: "1.5px solid " + cor, borderRadius: 10, padding: "10px 12px" } },
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: cor, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 } }, c.cn),
+          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 800, color: "#fff", background: cor, borderRadius: 5, padding: "1px 6px", flexShrink: 0, marginLeft: 6 } }, diffDays, "d")
+        ),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: "#1A3A5C" } }, fmt(c.valor), "\u20AC"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", marginTop: 2 } }, c.count, " servi\xE7o", c.count !== 1 ? "s" : "", " \u2014 \u26A0 ", rotulo)
+      );
+    }));
+  })()), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Receitas"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12, marginBottom: 20 } }, [
+    { l: "Faturado s/IVA", v: fmt(fatSemIva) + "\u20AC", c: "#2E6DA4" },
+    { l: "Faturado c/IVA", v: fmt(fatComIva) + "\u20AC", c: "#0F766E" },
+    { l: "Recebido", v: fmt(recebido) + "\u20AC", s: fatComIva > 0 ? Math.round(recebido / fatComIva * 100) + "%" : "0%", c: "#16A34A" },
+    { l: "Em d\xEDvida (este m\xEAs)", v: fmt(divida) + "\u20AC", c: "#DC2626" },
+    { l: "D\xEDvida total (todos os meses)", v: fmt(dividaTotalAcumulada) + "\u20AC", c: "#991B1B" }
+  ].map(function(k) {
+    return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 14, borderTop: "3px solid " + k.c }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 8 } }, k.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 900, color: k.c } }, k.v), k.s && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 4 } }, k.s));
+  })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Custos"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 } }, [
+    { l: "Total custos", v: fmt(totalCustos) + "\u20AC", c: "#EF4444" },
+    { l: "Combust\xEDvel", v: fmt(custosCat["Combust\xEDvel"] || 0) + "\u20AC", c: "#F97316" },
+    { l: "IVA dedut\xEDvel", v: fmt(totalIVADedutivel) + "\u20AC", c: "#16A34A" },
+    { l: "Por pagar", v: fmt(custosPorPagar) + "\u20AC", c: "#F59E0B" }
+  ].map(function(k) {
+    return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 14, borderTop: "3px solid " + k.c }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 8 } }, k.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 900, color: k.c } }, k.v));
+  })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, padding: 20, background: margemBruta >= 0 ? "#F0FDF4" : "#FEF2F2", border: "2px solid " + (margemBruta >= 0 ? "#16A34A" : "#EF4444") }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 4 } }, "Margem Bruta do M\xEAs"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, fontWeight: 900, color: margemBruta >= 0 ? "#16A34A" : "#EF4444" } }, fmt(margemBruta), "\u20AC"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 2 } }, "Receitas (", fmt(fatSemIva), "\u20AC) \u2212 Despesas (", fmt(totalCustos), "\u20AC) \u2212 M\xE3o de Obra (", fmt(totalCustoMaoObraGeral), "\u20AC)")), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 48, fontWeight: 900, color: margemBruta >= 0 ? "#16A34A" : "#EF4444" } }, margemPct, "%"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, "margem")))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, marginBottom: 20 } }, /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 16 } }, "Fatura\xE7\xE3o vs Recebido \u2014 6 meses"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", height: 140 } }, monthsData.map(function(m, i) {
+    const fH = Math.round(m.fat / maxB * 120);
+    const rH = Math.round(m.rec / maxB * 120);
+    return /* @__PURE__ */ React.createElement("div", { key: i, style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 2, alignItems: "flex-end", height: 120 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 14, height: Math.max(2, fH), background: "#2E6DA4", borderRadius: "3px 3px 0 0" } }), /* @__PURE__ */ React.createElement("div", { style: { width: 14, height: Math.max(2, rH), background: "#38B6D8", borderRadius: "3px 3px 0 0" } })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", fontWeight: 600 } }, m.m));
+  })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 16, marginTop: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 10, height: 10, background: "#2E6DA4", borderRadius: 2 } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#64748B" } }, "Faturado")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 10, height: 10, background: "#38B6D8", borderRadius: 2 } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#64748B" } }, "Recebido")))), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Custos por categoria"), Object.keys(custosCat).length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 20, fontSize: 12 } }, "Sem custos registados este m\xEAs.") : Object.keys(custosCat).sort(function(a, b) {
+    return custosCat[b] - custosCat[a];
+  }).map(function(cat) {
+    const pct = totalCustos > 0 ? Math.round(custosCat[cat] / totalCustos * 100) : 0;
+    return /* @__PURE__ */ React.createElement("div", { key: cat, style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#334155", fontWeight: 600 } }, cat), /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B" } }, fmt(custosCat[cat]), "\u20AC (", pct, "%)")), /* @__PURE__ */ React.createElement("div", { style: { height: 6, background: "#F1F5F9", borderRadius: 3 } }, /* @__PURE__ */ React.createElement("div", { style: { height: 6, width: pct + "%", background: "#EF4444", borderRadius: 3 } })));
+  }))), contaCorrenteAberta && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 600, padding: 20 }, onClick: function() { setContaCorrenteAberta(false); } },
             /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 24, maxWidth: 620, width: "100%", maxHeight: "85vh", overflowY: "auto" }, onClick: function(e) { e.stopPropagation(); } },
               /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } },
                 /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C" } }, "\uD83D\uDCCB Conta Corrente \u2014 ", contaCorrenteNome),
