@@ -5557,56 +5557,89 @@ function StockAnalise(props) {
 }
 function AuditoriaQR() {
   const [aberturas, setAberturas] = useState([]);
-  const [picagens, setPicagens] = useState([]);
+  const [servicosDia, setServicosDia] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dia, setDia] = useState(localDateStr(/* @__PURE__ */ new Date()));
   const [filtroCliente, setFiltroCliente] = useState("");
   useEffect(function() {
     Promise.all([
-      db.list("qr_aberturas", "?select=*&order=aberto_em.desc&limit=500"),
-      db.list("picagens_armazem", "?select=*&order=created_at.desc&limit=500")
+      db.list("qr_aberturas", "?select=*&order=aberto_em.desc&limit=1000"),
+      db.list("servicos", "?select=id,client_id,cn,date,check_in,check_out&order=date.desc&limit=1000")
     ]).then(function(res) {
       setAberturas(res[0] || []);
-      setPicagens(res[1] || []);
+      setServicosDia(res[1] || []);
       setLoading(false);
     });
   }, []);
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...");
   var clientesUnicos = [];
   aberturas.forEach(function(a) { if (a.client_nome && clientesUnicos.indexOf(a.client_nome) === -1) clientesUnicos.push(a.client_nome); });
+  servicosDia.forEach(function(s) { if (s.cn && clientesUnicos.indexOf(s.cn) === -1) clientesUnicos.push(s.cn); });
   clientesUnicos.sort();
+  // Aberturas do dia, agrupadas por cliente (juntar as que estão a menos de 5 min)
   var aberturasDia = aberturas.filter(function(a) { return (a.aberto_em || "").slice(0, 10) === dia && (!filtroCliente || a.client_nome === filtroCliente); });
-  var picagensDia = picagens.filter(function(p) { return (p.created_at || "").slice(0, 10) === dia; });
-  // Agrupar aberturas do mesmo cliente em menos de 5 minutos
-  var aberturasOrdenadas = aberturasDia.slice().sort(function(a, b) { return a.aberto_em < b.aberto_em ? -1 : 1; });
-  var aberturasAgrupadas = [];
-  aberturasOrdenadas.forEach(function(a) {
-    var ultima = aberturasAgrupadas[aberturasAgrupadas.length - 1];
-    if (ultima && ultima.client_nome === a.client_nome && (new Date(a.aberto_em) - new Date(ultima.aberto_em_fim)) < 5 * 60 * 1000) {
-      ultima.count++;
-      ultima.aberto_em_fim = a.aberto_em;
-    } else {
-      aberturasAgrupadas.push({ client_nome: a.client_nome, aberto_em: a.aberto_em, aberto_em_fim: a.aberto_em, count: 1 });
-    }
+  var servicosDoDia = servicosDia.filter(function(s) { return s.date === dia && (!filtroCliente || s.cn === filtroCliente); });
+  // Construir uma linha por cliente: aberturas (agrupadas) + check-in + check-out
+  var porCliente = {};
+  aberturasDia.forEach(function(a) {
+    var nome = a.client_nome || "Cliente";
+    if (!porCliente[nome]) porCliente[nome] = { nome: nome, aberturas: [], checkIn: null, checkOut: null };
+    porCliente[nome].aberturas.push(a.aberto_em);
   });
-  var eventos = aberturasAgrupadas.map(function(a) { return { hora: a.aberto_em, tipo: "abertura", label: "\uD83D\uDD17 QR aberto", nome: a.client_nome || "Cliente", detalhe: a.count > 1 ? "\xD7" + a.count : "" }; }).concat(picagensDia.map(function(p) { return { hora: p.created_at, tipo: "picagem", label: p.tipo === "saida" ? "\uD83D\uDD34 Sa\xEDda" : "\uD83D\uDFE2 Entrada", nome: p.funcionario_nome || "Colaborador", detalhe: "" }; })).sort(function(a, b) { return a.hora < b.hora ? 1 : -1; });
+  servicosDoDia.forEach(function(s) {
+    var nome = s.cn || "Cliente";
+    if (!porCliente[nome]) porCliente[nome] = { nome: nome, aberturas: [], checkIn: null, checkOut: null };
+    if (s.check_in) porCliente[nome].checkIn = s.check_in;
+    if (s.check_out) porCliente[nome].checkOut = s.check_out;
+  });
+  function agruparAberturas(lista) {
+    var ord = lista.slice().sort();
+    var grupos = [];
+    ord.forEach(function(h) {
+      var ult = grupos[grupos.length - 1];
+      if (ult && (new Date(h) - new Date(ult.fim)) < 5 * 60 * 1000) {
+        ult.count++;
+        ult.fim = h;
+      } else {
+        grupos.push({ inicio: h, fim: h, count: 1 });
+      }
+    });
+    return grupos;
+  }
+  function horaFmt(iso) {
+    if (!iso) return null;
+    return new Date(iso).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
+  }
+  var linhas = Object.keys(porCliente).map(function(nome) { return porCliente[nome]; }).sort(function(a, b) {
+    var ha = a.aberturas.length ? a.aberturas.slice().sort()[0] : (a.checkIn || "");
+    var hb = b.aberturas.length ? b.aberturas.slice().sort()[0] : (b.checkIn || "");
+    return ha < hb ? -1 : 1;
+  });
   return /* @__PURE__ */ React.createElement("div", null,
     /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 900, fontSize: 20, color: "#1A3A5C", marginBottom: 6 } }, "\uD83D\uDD0D Auditoria QR"),
-    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 18 } }, "Aberturas do QR de cliente cruzadas com as picagens de entrada/sa\xEDda, para detectares casos estranhos (ex: abriram e s\xF3 muito depois picaram). Aberturas do mesmo cliente em menos de 5 min aparecem agrupadas."),
+    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 18 } }, "Por cliente: a que horas o link foi aberto vs entrada e sa\xEDda reais no servi\xE7o. Serve para detectar quando abriram o link muito antes ou depois de estarem no local."),
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" } },
       /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 180 }), type: "date", value: dia, onChange: function(e) { setDia(e.target.value); } }),
       /* @__PURE__ */ React.createElement("select", { style: Object.assign({}, inp, { maxWidth: 240 }), value: filtroCliente, onChange: function(e) { setFiltroCliente(e.target.value); } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "Todos os clientes"), clientesUnicos.map(function(cn) { return /* @__PURE__ */ React.createElement("option", { key: cn, value: cn }, cn); }))
     ),
-    eventos.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Sem registos neste dia.") :
-    /* @__PURE__ */ React.createElement("div", { style: card },
-      eventos.map(function(ev, i) {
-        return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 14, padding: "10px 0", borderBottom: i < eventos.length - 1 ? "1px solid #F1F5F9" : "none", background: ev.tipo === "abertura" ? "#FEFCE8" : "transparent" } },
-          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 800, color: "#1A3A5C", minWidth: 52 } }, new Date(ev.hora).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })),
-          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, minWidth: 90 } }, ev.label),
-          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#334155", flex: 1 } }, ev.nome),
-          ev.detalhe && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#B45309", background: "#FEF3C7", borderRadius: 6, padding: "2px 8px" } }, ev.detalhe)
-        );
-      })
+    linhas.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Sem registos neste dia.") :
+    /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } },
+      /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } },
+        /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { borderBottom: "2px solid #E2EBF4" } }, ["Cliente", "\uD83D\uDD17 Link aberto", "\uD83D\uDFE2 Entrada", "\uD83D\uDD34 Sa\xEDda"].map(function(h) {
+          return /* @__PURE__ */ React.createElement("th", { key: h, style: { textAlign: "left", padding: "8px 10px", fontSize: 11, color: "#64748B", textTransform: "uppercase", fontWeight: 700 } }, h);
+        }))),
+        /* @__PURE__ */ React.createElement("tbody", null, linhas.map(function(l, i) {
+          var grupos = agruparAberturas(l.aberturas);
+          return /* @__PURE__ */ React.createElement("tr", { key: i, style: { borderBottom: "1px solid #F1F5F9" } },
+            /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px", fontWeight: 700, color: "#1A3A5C" } }, l.nome),
+            /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px", color: "#334155" } }, grupos.length === 0 ? /* @__PURE__ */ React.createElement("span", { style: { color: "#CBD5E1" } }, "\u2014") : grupos.map(function(g, gi) {
+              return /* @__PURE__ */ React.createElement("span", { key: gi, style: { display: "inline-block", background: "#FEF9C3", borderRadius: 6, padding: "2px 8px", marginRight: 4, marginBottom: 2, fontSize: 12 } }, horaFmt(g.inicio), g.count > 1 ? " \xD7" + g.count : "");
+            })),
+            /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px", fontWeight: 700, color: l.checkIn ? "#16A34A" : "#CBD5E1" } }, l.checkIn || "\u2014"),
+            /* @__PURE__ */ React.createElement("td", { style: { padding: "10px 10px", fontWeight: 700, color: l.checkOut ? "#DC2626" : "#CBD5E1" } }, l.checkOut || "\u2014")
+          );
+        }))
+      )
     )
   );
 }
