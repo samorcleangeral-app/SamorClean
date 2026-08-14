@@ -2319,6 +2319,29 @@ function Routes() {
     });
     return result;
   }
+  async function registarAlertaRota(servico, tipo, descricao, funcionariosAfectados) {
+    // Só alerta para serviços de hoje em diante
+    var hojeStr = localDateStr();
+    if (servico.date && servico.date < hojeStr) return;
+    var ids = (funcionariosAfectados || []).filter(function(x) { return !!x; });
+    // remover duplicados
+    ids = ids.filter(function(v, i) { return ids.indexOf(v) === i; });
+    if (ids.length === 0) return;
+    var registos = ids.map(function(fid) {
+      return {
+        funcionario_id: fid,
+        servico_id: servico.id,
+        cliente_nome: servico.cn || "",
+        data_servico: servico.date || null,
+        tipo: tipo,
+        descricao: descricao,
+        visto: false
+      };
+    });
+    try {
+      await fetch(SUPABASE_URL + "/rest/v1/alertas_rota", { method: "POST", headers: dbHeaders(), body: JSON.stringify(registos) });
+    } catch (e) { console.warn("Falha ao registar alerta de rota:", e); }
+  }
   async function updateJob(id, patch) {
     await db.update("servicos", id, patch);
     setJobs(function(p) {
@@ -2330,6 +2353,9 @@ function Routes() {
   }
   async function deleteJob(job) {
     if (!window.confirm("Apagar o servi\xE7o de " + job.cn + "?")) return;
+    if ((job.team || []).length > 0) {
+      await registarAlertaRota(job, "cancelado", "Servi\xE7o cancelado", job.team || []);
+    }
     await db.remove("servicos", job.id);
     setJobs(function(p) {
       return p.filter(function(j) {
@@ -2405,17 +2431,29 @@ function Routes() {
     if (selJob.paid) { alert("Servi\xE7o j\xE1 pago \u2014 n\xE3o pode ser alterado."); return; }
     const c = clients.find(function(x) { return x.id === selJob.client_id; });
     const novoVal = calcularValorJob(c, moveT1, moveT2, (selJob.team || []).length, moveDate, selJob.id);
+    var mudouData = moveDate !== selJob.date;
+    var mudouHora = moveT1 !== selJob.t1 || moveT2 !== selJob.t2;
     await updateJob(selJob.id, { date: moveDate, t1: moveT1, t2: moveT2, val: novoVal !== null ? novoVal : selJob.val });
+    if (mudouData || mudouHora) {
+      var desc = mudouData && mudouHora ? "Data e hor\xE1rio alterados para " + new Date(moveDate + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "short" }) + ", " + moveT1 + "\u2013" + moveT2 : mudouData ? "Data alterada para " + new Date(moveDate + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "short" }) : "Hor\xE1rio alterado para " + moveT1 + "\u2013" + moveT2;
+      registarAlertaRota(Object.assign({}, selJob, { date: moveDate }), mudouData ? "data" : "horario", desc, selJob.team || []);
+    }
     setPopupAction(null);
   }
   async function togJobTeam(eid) {
     if (selJob.paid) { alert("Servi\xE7o j\xE1 pago \u2014 n\xE3o pode ser alterado."); return; }
-    const t = (selJob.team || []).indexOf(eid) === -1 ? (selJob.team || []).concat([eid]) : (selJob.team || []).filter(function(x) {
+    var entrou = (selJob.team || []).indexOf(eid) === -1;
+    const t = entrou ? (selJob.team || []).concat([eid]) : (selJob.team || []).filter(function(x) {
       return x !== eid;
     });
     const c = clients.find(function(x) { return x.id === selJob.client_id; });
     const novoVal = calcularValorJob(c, selJob.t1, selJob.t2, t.length, selJob.date, selJob.id);
+    var empNome = (emps.find(function(e) { return e.id === eid; }) || {}).name || "colaborador";
     await updateJob(selJob.id, { team: t, val: novoVal !== null ? novoVal : selJob.val });
+    registarAlertaRota(selJob, "equipa", entrou ? "Foste adicionado a este servi\xE7o" : "Foste retirado deste servi\xE7o", [eid]);
+    // Avisar os restantes da equipa que a composição mudou
+    var restantes = (selJob.team || []).filter(function(x) { return x !== eid; });
+    if (restantes.length > 0) registarAlertaRota(selJob, "equipa", "A equipa deste servi\xE7o foi alterada (" + (entrou ? "entrou " : "saiu ") + empNome + ")", restantes);
   }
   function openJob(job) {
     setSelJob(job);
@@ -2461,7 +2499,12 @@ function Routes() {
       })();
       var base = { client_id: c ? c.id : "", cn: nj.cn, addr: nj.addr, svc: nj.svc || (c ? c.service : ""), t1: nj.t1, t2: nj.t2, team: teamDisponivel, status: "pending", cl: c ? c.checklist || [] : [], prods: [], val: valCalculado, iva_override: c ? c.iva_type || "normal" : "normal", paid: false, date: dataAtual, obra_ref: nj.obra_ref || null };
       var ins = await db.insert("servicos", base);
-      if (ins) newJobs.push(ins);
+      if (ins) {
+        newJobs.push(ins);
+        if ((teamDisponivel || []).length > 0) {
+          registarAlertaRota(ins, "novo", "Novo servi\xE7o atribu\xEDdo", teamDisponivel);
+        }
+      }
     }
     if (newJobs.length > 0) {
       setJobs(function(p) { return p.concat(newJobs); });
@@ -7827,6 +7870,15 @@ function Employee(props) {
   const [pedidosRespondidos, setPedidosRespondidos] = useState(0);
   const [picagensArmazem, setPicagensArmazem] = useState([]);
   const [alertaArmazem, setAlertaArmazem] = useState([]);
+  const [alertasRota, setAlertasRota] = useState([]);
+  async function marcarAlertasVistos(servicoId) {
+    var alvos = alertasRota.filter(function(a) { return a.servico_id === servicoId; });
+    if (alvos.length === 0) return;
+    setAlertasRota(function(p) { return p.filter(function(a) { return a.servico_id !== servicoId; }); });
+    try {
+      await fetch(SUPABASE_URL + "/rest/v1/alertas_rota?servico_id=eq." + encodeURIComponent(servicoId) + "&funcionario_id=eq." + encodeURIComponent(emp.id), { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ visto: true }) });
+    } catch (e) { console.warn("Falha ao marcar alertas vistos:", e); }
+  }
   useEffect(function() {
     if (phase === "dash" && emp) {
       setLoadingJobs(true);
@@ -7850,7 +7902,8 @@ function Employee(props) {
         db.list("servicos", "?select=date,dispensa_armazem,team&date=gte." + firstDayMonthStr + "&date=lte." + today),
         db.list("ausencias", "?select=*&funcionario_id=eq." + encodeURIComponent(emp.id)),
         db.list("notas_operacionais", "?select=*&order=created_at.desc"),
-        db.list("pedidos_colaboradores", "?select=id,estado,created_at&funcionario_id=eq." + encodeURIComponent(emp.id) + "&estado=neq.pendente&visto=is.false")
+        db.list("pedidos_colaboradores", "?select=id,estado,created_at&funcionario_id=eq." + encodeURIComponent(emp.id) + "&estado=neq.pendente&visto=is.false"),
+        db.list("alertas_rota", "?select=*&funcionario_id=eq." + encodeURIComponent(emp.id) + "&visto=is.false&order=created_at.desc")
       ]).then(function(results) {
         setJobs(results[0] || []);
         setHistJobs(results[1] || []);
@@ -7870,6 +7923,7 @@ function Employee(props) {
         });
         setNotasOp(minhasNotasOp);
         setPedidosRespondidos((results[8] || []).length);
+        setAlertasRota(results[9] || []);
         const allPast = results[1] || [];
         const myPast = allPast.filter(function(j) { return (j.team || []).indexOf(emp.id) !== -1; });
         const allMonthJobs = results[0].concat(results[1] || []).filter(function(j) { return (j.team || []).indexOf(emp.id) !== -1 && j.date >= firstDayMonthStr; });
@@ -8204,7 +8258,7 @@ function Employee(props) {
     return /* @__PURE__ */ React.createElement("div", { key: s.l, style: { background: "rgba(255,255,255,0.08)", borderRadius: 10, padding: "10px 8px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 18 } }, s.v), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.4)", fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginTop: 2 } }, s.l));
   }))), /* @__PURE__ */ React.createElement("div", { style: { padding: "16px 16px 32px" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" } }, ["hoje", "hist\xF3rico", "semana", "assiduidade", "picagens", "formacao", "pedidos"].map(function(t) {
     const labels = { hoje: "Hoje", "hist\xF3rico": "Hist\xF3rico", semana: "Semana", assiduidade: "Assiduidade", picagens: "Picagens", formacao: "Documentos RH", pedidos: "Pedidos" };
-    const badgeCount = t === "pedidos" && pedidosRespondidos > 0 ? pedidosRespondidos : 0;
+    const badgeCount = t === "pedidos" && pedidosRespondidos > 0 ? pedidosRespondidos : t === "hoje" && alertasRota.length > 0 ? alertasRota.length : 0;
     return /* @__PURE__ */ React.createElement("button", { key: t, onClick: function() {
       setDashTab(t);
       if (t === "pedidos" && pedidosRespondidos > 0 && emp) { setPedidosRespondidos(0); fetch(SUPABASE_URL + "/rest/v1/pedidos_colaboradores?funcionario_id=eq." + encodeURIComponent(emp.id) + "&estado=neq.pendente&visto=is.false", { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ visto: true }), keepalive: true }); }
@@ -8213,6 +8267,21 @@ function Employee(props) {
       badgeCount > 0 && /* @__PURE__ */ React.createElement("span", { style: { position: "absolute", top: -4, right: -4, background: "#EF4444", color: "#fff", borderRadius: "50%", width: 16, height: 16, fontSize: 9, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" } }, badgeCount)
     );
   })), dashTab === "hoje" && /* @__PURE__ */ React.createElement("div", null,
+    alertasRota.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF3C7", border: "2px solid #F59E0B", borderRadius: 10, padding: "14px 16px", marginBottom: 16 } },
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 8 } },
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 22 } }, "\uD83D\uDD14"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#92400E" } }, alertasRota.length, " altera\xE7\xE3o", alertasRota.length !== 1 ? "\xF5es" : "", " \xE0 tua rota")
+      ),
+      alertasRota.slice().sort(function(a, b) { return (a.data_servico || "") < (b.data_servico || "") ? -1 : 1; }).map(function(a) {
+        return /* @__PURE__ */ React.createElement("div", { key: a.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "6px 0", borderTop: "1px solid #FDE68A" } },
+          /* @__PURE__ */ React.createElement("div", null,
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#78350F" } }, a.cliente_nome, a.data_servico ? " \u2022 " + new Date(a.data_servico + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "short" }) : ""),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#92400E" } }, a.descricao)
+          ),
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { marcarAlertasVistos(a.servico_id); }, style: { background: "#F59E0B", border: "none", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 700, color: "#fff", cursor: "pointer", flexShrink: 0 } }, "Vi")
+        );
+      })
+    ),
     (function() { var temPicagemHoje = picagensArmazem.some(function(p) { return (p.hora || p.created_at || "").slice(0, 10) === today; }); var temSaida = picagensArmazem.some(function(p) { return (p.hora || p.created_at || "").slice(0, 10) === today && p.tipo === "saida"; }); var todosConc = myJ.length > 0 && myJ.every(function(j) { return j.status === "completed"; }); if (myJ.length > 0 && !temPicagemHoje) return /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", border: "2px solid #EF4444", borderRadius: 10, padding: "14px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 28 } }, "\u26A0\uFE0F"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#DC2626" } }, "N\xE3o picaste no armaz\xe9m hoje!"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#7F1D1D", marginTop: 2 } }, "Lembra-te de picar a entrada e sa\xEDda no QR do armaz\xe9m."))); if (myJ.length > 0 && temPicagemHoje && todosConc && !temSaida) return /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF3C7", border: "2px solid #F59E0B", borderRadius: 10, padding: "14px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 28 } }, "\uD83D\uDD14"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#92400E" } }, "N\xE3o te esqueças de picar a sa\xEDda!"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#78350F", marginTop: 2 } }, "Os servi\xE7os est\xE3o conclu\xEDdos. Pica a sa\xEDda no QR do armaz\xe9m."))); return null; })(),
     notasOp.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } },
       notasOp.map(function(n) {
@@ -8226,13 +8295,18 @@ function Employee(props) {
     /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 14 } }, (/* @__PURE__ */ new Date()).toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long" })), loadingJobs ? /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar servi\xE7os...") : myJ.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16 } }, "Sem servi\xE7os para hoje")) : /* @__PURE__ */ React.createElement("div", null,
     myJ.slice().sort(function(a, b) { return (a.t1 || "").localeCompare(b.t1 || ""); }).map(function(job, idx) {
       const colegas = (job.team || []).filter(function(eid) { return emp && eid !== emp.id; }).map(function(eid) { return emps.find(function(e) { return e.id === eid; }); }).filter(Boolean);
-      return /* @__PURE__ */ React.createElement("div", { key: job.id, onClick: function() { setPopupEmpJob(job); }, style: { cursor: "pointer", marginBottom: 12, display: "flex", gap: 12, alignItems: "stretch" } },
+      const alertasDoJob = alertasRota.filter(function(a) { return a.servico_id === job.id; });
+      const temAlerta = alertasDoJob.length > 0;
+      return /* @__PURE__ */ React.createElement("div", { key: job.id, onClick: function() { setPopupEmpJob(job); if (temAlerta) marcarAlertasVistos(job.id); }, style: { cursor: "pointer", marginBottom: 12, display: "flex", gap: 12, alignItems: "stretch" } },
         /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", width: 48, flexShrink: 0 } },
           /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 13, color: "#2E6DA4" } }, job.t1),
           /* @__PURE__ */ React.createElement("div", { style: { flex: 1, width: 2, background: job.status === "completed" ? "#16A34A" : "#2E6DA4", margin: "4px 0", borderRadius: 1 } }),
           /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 600, fontSize: 11, color: "#94A3B8" } }, job.t2)
         ),
-        /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { flex: 1, padding: "14px 16px", borderLeft: "4px solid " + (job.status === "completed" ? "#16A34A" : "#2E6DA4"), marginBottom: 0 }) },
+        /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { flex: 1, padding: "14px 16px", borderLeft: "4px solid " + (temAlerta ? "#F59E0B" : job.status === "completed" ? "#16A34A" : "#2E6DA4"), marginBottom: 0, boxShadow: temAlerta ? "0 0 0 2px #FEF3C7" : card.boxShadow }) },
+          temAlerta && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 3, marginBottom: 8 } }, alertasDoJob.map(function(a) {
+            return /* @__PURE__ */ React.createElement("div", { key: a.id, style: { background: "#FEF3C7", borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 700, color: "#92400E", display: "inline-block", alignSelf: "flex-start" } }, "\u26A0 ", a.descricao);
+          })),
           /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 } },
             /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, job.cn),
             /* @__PURE__ */ React.createElement(Bdg, { label: job.status === "completed" ? "Conclu\xEDdo" : job.check_in ? "Em curso" : "Agendado", bg: job.status === "completed" ? "#DCFCE7" : job.check_in ? "#FEF3C7" : "#EFF6FF", tx: job.status === "completed" ? "#15803D" : job.check_in ? "#92400E" : "#2E6DA4" })
