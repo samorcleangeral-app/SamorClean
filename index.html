@@ -184,13 +184,6 @@ function getWeek(offset) {
     return localDateStr(dt);
   });
 }
-const PRODS = [
-  { id: "P001", name: "Desengordurante", brand: "Faren", dosage: "50ml por 1L agua", instructions: "Aplicar com pano humido. Enxaguar ap\xF3s 3 minutos.", warning: "Usar luvas. Evitar contacto com olhos.", stock: 12 },
-  { id: "P002", name: "Lixivia Concentrada", brand: "Sonasol", dosage: "100ml por 5L agua", instructions: "Usar em superficies brancas. Actuar 5 minutos.", warning: "N\xE3o misturar com outros produtos.", stock: 8 },
-  { id: "P003", name: "Limpa Vidros", brand: "Cif", dosage: "Aplicar no pano", instructions: "Pulverizar no pano. Movimentos circulares.", warning: "N\xE3o usar sob sol direto.", stock: 15 },
-  { id: "P004", name: "Detergente Estofos", brand: "HG", dosage: "30ml por 500ml agua", instructions: "Diluir em agua morna. Aspirar ap\xF3s secar.", warning: "Testar em area escondida.", stock: 5 },
-  { id: "P005", name: "Removedor de Tinta", brand: "Rubson", dosage: "Aplicar puro com pincel", instructions: "Aguardar 10 min. Raspar com espatula.", warning: "Luvas e mascara obrigat\xF3rios.", stock: 3 }
-];
 function fmt(v) {
   return v.toLocaleString("pt-PT", { style: "currency", currency: "EUR", minimumFractionDigits: 0 });
 }
@@ -7817,7 +7810,6 @@ function Employee(props) {
   const [sJob, setSJob] = useState(null);
   const [cin, setCin] = useState(null);
   const [cout, setCout] = useState(null);
-  const [sProd, setSProd] = useState(null);
   const [dashTab, setDashTab] = useState("hoje");
   const [absStats, setAbsStats] = useState({ total: 0, faltas: 0, parciais: 0 });
   const [teamConfirm, setTeamConfirm] = useState(null);
@@ -8104,13 +8096,6 @@ function Employee(props) {
       confirmTeam(null);
     }, style: { background: "transparent", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 12, cursor: "pointer" } }, "Trabalho sozinho hoje"));
   }
-  if (phase === "prod" && sProd) {
-    const p = sProd;
-    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#F4F8FB" } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#1A3A5C", padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
-      setPhase("job");
-      setSProd(null);
-    }, style: { background: "transparent", border: "none", color: "#fff", fontSize: 22, cursor: "pointer" } }, "\u2190"), /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 16 } }, p.name)), /* @__PURE__ */ React.createElement("div", { style: { padding: 20 } }, /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 700, textTransform: "uppercase" } }, p.id, " - ", p.brand), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: "#1A3A5C", marginTop: 4 } }, p.name)), /* @__PURE__ */ React.createElement(Bdg, { label: "Stock: " + p.stock + "L", bg: p.stock <= 3 ? "#FEE2E2" : "#DCFCE7", tx: p.stock <= 3 ? "#991B1B" : "#15803D", sz: 12 })), /* @__PURE__ */ React.createElement("div", { style: divid }), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: lbl }, "Dosagem"), /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 8, padding: "12px 14px", fontSize: 15, color: "#1A3A5C", fontWeight: 800 } }, p.dosage)), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: lbl }, "Instru\xE7\xF5es"), /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 8, padding: "12px 14px", fontSize: 13, color: "#334155", lineHeight: 1.7 } }, p.instructions)), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: lbl }, "Avisos"), /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF3C7", borderRadius: 8, padding: "12px 14px", fontSize: 13, color: "#92400E", lineHeight: 1.7, fontWeight: 600 } }, p.warning)))));
-  }
   if (phase === "job" && sJob) {
     let job = sJob;
     for (let k = 0; k < jobs.length; k++) {
@@ -8125,9 +8110,6 @@ function Employee(props) {
     }).length;
     const t = cl.length;
     const pct = t ? Math.round(d / t * 100) : 0;
-    const jp = PRODS.filter(function(p) {
-      return (job.prods || []).indexOf(p.id) !== -1;
-    });
     const checkIn = job.check_in || cin;
     const checkOut = job.check_out || cout;
     const colega = getColega();
@@ -8153,12 +8135,7 @@ function Employee(props) {
       return /* @__PURE__ */ React.createElement("div", { key: i, onClick: function() {
         tog(job, task);
       }, style: { display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 8, marginBottom: 7, background: ok ? "#DCFCE7" : "#F8FAFC", cursor: "pointer", border: "1.5px solid " + (ok ? "#86EFAC" : "#E2EBF4") } }, /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: 6, border: "2px solid " + (ok ? "#16A34A" : "#CBD5E1"), background: ok ? "#16A34A" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, ok ? /* @__PURE__ */ React.createElement("span", { style: { color: "#fff", fontSize: 13, fontWeight: 900 } }, "\u2713") : null), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14, color: ok ? "#15803D" : "#334155", fontWeight: ok ? 700 : 500, textDecoration: ok ? "line-through" : "none" } }, task));
-    })), jp.length > 0 ? /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 13, color: "#1A3A5C", marginBottom: 12 } }, "Produtos a Utilizar"), jp.map(function(p) {
-      return /* @__PURE__ */ React.createElement("div", { key: p.id, onClick: function() {
-        setSProd(p);
-        setPhase("prod");
-      }, style: { display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 8, marginBottom: 8, background: "#F8FAFC", cursor: "pointer", border: "1.5px solid #E2EBF4" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 40, height: 40, borderRadius: 8, background: "#EFF6FF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "#2E6DA4" } }, "P"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C" } }, p.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 2 } }, p.brand, " \u2014 ", p.dosage)));
-    })) : null), showEarlyLeave && earlyLeaveEmp && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 20 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 28, width: "100%", maxWidth: 360, textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 18, color: "#1A3A5C", marginBottom: 8 } }, "Registar sa\xEDda antecipada"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 20 } }, earlyLeaveEmp.name, " vai sair agora. Isto ficar\xE1 registado como falta parcial."), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    })), null), showEarlyLeave && earlyLeaveEmp && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 20 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 28, width: "100%", maxWidth: 360, textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 18, color: "#1A3A5C", marginBottom: 8 } }, "Registar sa\xEDda antecipada"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 20 } }, earlyLeaveEmp.name, " vai sair agora. Isto ficar\xE1 registado como falta parcial."), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
       setShowEarlyLeave(false);
       setEarlyLeaveEmp(null);
     }, style: Object.assign({}, btnX, { flex: 1 }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
