@@ -5582,7 +5582,7 @@ function AuditoriaQR() {
     if (!l.origem_cliente_nome) return;
     garantir(l.origem_cliente_nome).leads++;
   });
-  var placaLista = Object.keys(placaStats).map(function(k) { return placaStats[k]; }).filter(function(p) { return p.curiosidade > 0 || p.intencaoCliente > 0 || p.intencaoCandidato > 0 || p.leads > 0; }).sort(function(a, b) { return b.curiosidade - a.curiosidade; });
+  var placaLista = Object.keys(placaStats).map(function(k) { return placaStats[k]; }).filter(function(p) { return p.intencaoCliente > 0 || p.intencaoCandidato > 0 || p.leads > 0; }).sort(function(a, b) { return (b.intencaoCliente + b.intencaoCandidato + b.leads) - (a.intencaoCliente + a.intencaoCandidato + a.leads); });
   return /* @__PURE__ */ React.createElement("div", null,
     /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 900, fontSize: 20, color: "#1A3A5C", marginBottom: 6 } }, "\uD83D\uDD0D Auditoria QR"),
     /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 18 } }, "Por cliente: a que horas o link foi aberto vs entrada e sa\xEDda reais no servi\xE7o. Serve para detectar quando abriram o link muito antes ou depois de estarem no local."),
@@ -5594,20 +5594,19 @@ function AuditoriaQR() {
           return /* @__PURE__ */ React.createElement("button", { key: op[0], onClick: function() { setPeriodoPlacas(op[0]); }, style: { padding: "4px 12px", borderRadius: 8, border: "1.5px solid " + (activo ? "#7C3AED" : "#DDD6FE"), background: activo ? "#7C3AED" : "#fff", color: activo ? "#fff" : "#7C3AED", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, op[1]);
         }))
       ),
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#7C3AED", marginBottom: 14 } }, "Curiosidade (abriram a placa) \u2192 Interesse (entraram no formul\xE1rio) \u2192 Convers\xE3o (lead criado)."),
-      placaLista.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8", padding: "10px 0" } }, "Ainda sem actividade neste per\xEDodo. Assim que algu\xE9m abrir uma placa, aparece aqui.") :
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#7C3AED", marginBottom: 14 } }, "Interesse (entraram no formul\xE1rio de cliente ou candidato) \u2192 Convers\xE3o (lead criado). N\xE3o conta aberturas de colaboradores nem do pr\xF3prio cliente."),
+      placaLista.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8", padding: "10px 0" } }, "Ainda sem interesse registado neste per\xEDodo. Assim que algu\xE9m entrar no formul\xE1rio de cliente ou candidato a partir de uma placa, aparece aqui.") :
       /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(230px,1fr))", gap: 12 } }, placaLista.map(function(p) {
         var intencaoTotal = p.intencaoCliente + p.intencaoCandidato;
-        var taxaInteresse = p.curiosidade > 0 ? Math.round(intencaoTotal / p.curiosidade * 100) : 0;
+        var taxaConversao = intencaoTotal > 0 ? Math.round(p.leads / intencaoTotal * 100) : 0;
         return /* @__PURE__ */ React.createElement("div", { key: p.nome, style: { background: "#fff", borderRadius: 10, padding: "14px 16px", border: "1px solid #E2EBF4" } },
           /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, p.nome),
-          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 14, marginBottom: 10 } },
-            /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#2E6DA4" } }, p.curiosidade), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase" } }, "\uD83D\uDC40 Curiosos")),
-            /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#F59E0B" } }, intencaoTotal), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase" } }, "\u270B Interesse")),
-            /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#16A34A" } }, p.leads), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase" } }, "\u2705 Leads"))
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 16, marginBottom: 10 } },
+            /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 26, fontWeight: 900, color: "#F59E0B" } }, intencaoTotal), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase" } }, "\u270B Interesse")),
+            /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 26, fontWeight: 900, color: "#16A34A" } }, p.leads), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase" } }, "\u2705 Leads"))
           ),
           (p.intencaoCliente > 0 || p.intencaoCandidato > 0) && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", marginBottom: 8 } }, p.intencaoCliente > 0 ? "\u2728 " + p.intencaoCliente + " quis ser cliente" : "", p.intencaoCliente > 0 && p.intencaoCandidato > 0 ? " \u2022 " : "", p.intencaoCandidato > 0 ? "\uD83D\uDC65 " + p.intencaoCandidato + " quis candidatar-se" : ""),
-          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: taxaInteresse >= 20 ? "#16A34A" : taxaInteresse > 0 ? "#F59E0B" : "#94A3B8", background: taxaInteresse >= 20 ? "#F0FDF4" : taxaInteresse > 0 ? "#FFFBEB" : "#F8FAFC", borderRadius: 6, padding: "3px 8px", display: "inline-block" } }, intencaoTotal > 0 ? "Gerou interesse: " + taxaInteresse + "%" : "S\xF3 curiosidade, sem interesse ainda")
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: p.leads > 0 ? "#16A34A" : "#F59E0B", background: p.leads > 0 ? "#F0FDF4" : "#FFFBEB", borderRadius: 6, padding: "3px 8px", display: "inline-block" } }, p.leads > 0 ? "Convers\xE3o: " + taxaConversao + "% (interesse \u2192 lead)" : "Mostraram interesse, sem submeter ainda")
         );
       }))
     ),
