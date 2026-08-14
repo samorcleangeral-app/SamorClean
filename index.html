@@ -5498,16 +5498,20 @@ function StockAnalise(props) {
 function AuditoriaQR() {
   const [aberturas, setAberturas] = useState([]);
   const [servicosDia, setServicosDia] = useState([]);
+  const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dia, setDia] = useState(localDateStr(/* @__PURE__ */ new Date()));
   const [filtroCliente, setFiltroCliente] = useState("");
+  const [periodoPlacas, setPeriodoPlacas] = useState("7");
   useEffect(function() {
     Promise.all([
       db.list("qr_aberturas", "?select=*&order=aberto_em.desc&limit=1000"),
-      db.list("servicos", "?select=id,client_id,cn,date,check_in,check_out&order=date.desc&limit=1000")
+      db.list("servicos", "?select=id,client_id,cn,date,check_in,check_out&order=date.desc&limit=1000"),
+      db.list("leads", "?select=id,origem_cliente_id,origem_cliente_nome,created_at&order=created_at.desc&limit=1000")
     ]).then(function(res) {
       setAberturas(res[0] || []);
       setServicosDia(res[1] || []);
+      setLeads(res[2] || []);
       setLoading(false);
     });
   }, []);
@@ -5555,9 +5559,58 @@ function AuditoriaQR() {
     var hb = b.aberturas.length ? b.aberturas.slice().sort()[0] : (b.checkIn || "");
     return ha < hb ? -1 : 1;
   });
+  // Desempenho das placas — curiosidade (aberturas) vs intenção (entrou nos fluxos) vs conversão (leads/candidatos)
+  var periodoDias = periodoPlacas === "sempre" ? 100000 : parseInt(periodoPlacas, 10);
+  var desdeData = new Date();
+  desdeData.setDate(desdeData.getDate() - periodoDias);
+  var desdeStr = desdeData.toISOString();
+  var placaStats = {};
+  function garantir(nome) {
+    if (!placaStats[nome]) placaStats[nome] = { nome: nome, curiosidade: 0, intencaoCliente: 0, intencaoCandidato: 0, leads: 0 };
+    return placaStats[nome];
+  }
+  aberturas.forEach(function(a) {
+    if (!a.aberto_em || (periodoPlacas !== "sempre" && a.aberto_em < desdeStr)) return;
+    var nome = a.client_nome || "Cliente";
+    var tipo = a.tipo || "abertura";
+    if (tipo === "abertura") garantir(nome).curiosidade++;
+    else if (tipo === "intencao_cliente") garantir(nome).intencaoCliente++;
+    else if (tipo === "intencao_candidato") garantir(nome).intencaoCandidato++;
+  });
+  leads.forEach(function(l) {
+    if (!l.created_at || (periodoPlacas !== "sempre" && l.created_at < desdeStr)) return;
+    if (!l.origem_cliente_nome) return;
+    garantir(l.origem_cliente_nome).leads++;
+  });
+  var placaLista = Object.keys(placaStats).map(function(k) { return placaStats[k]; }).filter(function(p) { return p.curiosidade > 0 || p.intencaoCliente > 0 || p.intencaoCandidato > 0 || p.leads > 0; }).sort(function(a, b) { return b.curiosidade - a.curiosidade; });
   return /* @__PURE__ */ React.createElement("div", null,
     /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 900, fontSize: 20, color: "#1A3A5C", marginBottom: 6 } }, "\uD83D\uDD0D Auditoria QR"),
     /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 18 } }, "Por cliente: a que horas o link foi aberto vs entrada e sa\xEDda reais no servi\xE7o. Serve para detectar quando abriram o link muito antes ou depois de estarem no local."),
+    /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, background: "#F5F3FF", border: "1.5px solid #DDD6FE" }) },
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10, marginBottom: 4 } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#5B21B6" } }, "\uD83D\uDCCD Desempenho das Placas QR"),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } }, [["7", "7 dias"], ["30", "30 dias"], ["sempre", "Sempre"]].map(function(op) {
+          var activo = periodoPlacas === op[0];
+          return /* @__PURE__ */ React.createElement("button", { key: op[0], onClick: function() { setPeriodoPlacas(op[0]); }, style: { padding: "4px 12px", borderRadius: 8, border: "1.5px solid " + (activo ? "#7C3AED" : "#DDD6FE"), background: activo ? "#7C3AED" : "#fff", color: activo ? "#fff" : "#7C3AED", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, op[1]);
+        }))
+      ),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#7C3AED", marginBottom: 14 } }, "Curiosidade (abriram a placa) \u2192 Interesse (entraram no formul\xE1rio) \u2192 Convers\xE3o (lead criado)."),
+      placaLista.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8", padding: "10px 0" } }, "Ainda sem actividade neste per\xEDodo. Assim que algu\xE9m abrir uma placa, aparece aqui.") :
+      /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(230px,1fr))", gap: 12 } }, placaLista.map(function(p) {
+        var intencaoTotal = p.intencaoCliente + p.intencaoCandidato;
+        var taxaInteresse = p.curiosidade > 0 ? Math.round(intencaoTotal / p.curiosidade * 100) : 0;
+        return /* @__PURE__ */ React.createElement("div", { key: p.nome, style: { background: "#fff", borderRadius: 10, padding: "14px 16px", border: "1px solid #E2EBF4" } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, p.nome),
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 14, marginBottom: 10 } },
+            /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#2E6DA4" } }, p.curiosidade), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase" } }, "\uD83D\uDC40 Curiosos")),
+            /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#F59E0B" } }, intencaoTotal), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase" } }, "\u270B Interesse")),
+            /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#16A34A" } }, p.leads), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase" } }, "\u2705 Leads"))
+          ),
+          (p.intencaoCliente > 0 || p.intencaoCandidato > 0) && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", marginBottom: 8 } }, p.intencaoCliente > 0 ? "\u2728 " + p.intencaoCliente + " quis ser cliente" : "", p.intencaoCliente > 0 && p.intencaoCandidato > 0 ? " \u2022 " : "", p.intencaoCandidato > 0 ? "\uD83D\uDC65 " + p.intencaoCandidato + " quis candidatar-se" : ""),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: taxaInteresse >= 20 ? "#16A34A" : taxaInteresse > 0 ? "#F59E0B" : "#94A3B8", background: taxaInteresse >= 20 ? "#F0FDF4" : taxaInteresse > 0 ? "#FFFBEB" : "#F8FAFC", borderRadius: 6, padding: "3px 8px", display: "inline-block" } }, intencaoTotal > 0 ? "Gerou interesse: " + taxaInteresse + "%" : "S\xF3 curiosidade, sem interesse ainda")
+        );
+      }))
+    ),
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" } },
       /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 180 }), type: "date", value: dia, onChange: function(e) { setDia(e.target.value); } }),
       /* @__PURE__ */ React.createElement("select", { style: Object.assign({}, inp, { maxWidth: 240 }), value: filtroCliente, onChange: function(e) { setFiltroCliente(e.target.value); } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "Todos os clientes"), clientesUnicos.map(function(cn) { return /* @__PURE__ */ React.createElement("option", { key: cn, value: cn }, cn); }))
@@ -8692,6 +8745,16 @@ function ClientPortal(props) {
       });
     }
   }, [clientId]);
+  function registarIntencao(tipo) {
+    try {
+      fetch(SUPABASE_URL + "/rest/v1/qr_aberturas", {
+        method: "POST",
+        headers: dbHeaders(),
+        body: JSON.stringify({ client_id: clientId || null, client_nome: client ? client.name : null, tipo: tipo }),
+        keepalive: true
+      }).catch(function(e) { console.warn("Falha ao registar inten\xE7\xE3o:", e); });
+    } catch (e) { console.warn("Falha ao registar inten\xE7\xE3o:", e); }
+  }
   async function submitLead() {
     const data = Object.assign({}, leadForm, {
       origem_cliente_id: clientId || null,
@@ -8868,8 +8931,9 @@ function ClientPortal(props) {
     }, style: { width: 96, height: 96, display: "block", borderRadius: 12, objectFit: "contain" } })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, fontWeight: 900, color: "#fff", marginBottom: 4, textAlign: "center" } }, "SamorClean"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#38B6D8", fontWeight: 700, letterSpacing: 1.5, marginBottom: 16, textAlign: "center" } }, "BY FRAGANCELINES, LDA"), socialProof.count > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 16, justifyContent: "center", marginBottom: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#38B6D8" } }, socialProof.count, "+"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.5)", fontWeight: 700, textTransform: "uppercase" } }, "Clientes")), /* @__PURE__ */ React.createElement("div", { style: { width: 1, background: "rgba(255,255,255,0.1)" } }), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#F59E0B" } }, "\u2605".repeat(Math.round(socialProof.avg))), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.5)", fontWeight: 700, textTransform: "uppercase" } }, socialProof.avg, " estrelas")), /* @__PURE__ */ React.createElement("div", { style: { width: 1, background: "rgba(255,255,255,0.1)" } }), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#38B6D8" } }, "4+"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.5)", fontWeight: 700, textTransform: "uppercase" } }, "Anos"))), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.5)", textAlign: "center", marginTop: -10, marginBottom: 14, fontStyle: "italic", padding: "0 16px" } }, "\u2B50 Classifica\xE7\xE3o m\xe9dia de todos os nossos clientes. A sua avalia\xE7\xE3o ajuda-nos a melhorar!"), client ? /* @__PURE__ */ React.createElement("div", { style: { background: "rgba(56,182,216,0.12)", border: "1px solid rgba(56,182,216,0.3)", borderRadius: 16, padding: "20px 24px", marginBottom: 28, width: "100%", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.5)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 } }, "Portal exclusivo"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: "#fff", marginBottom: 4 } }, client.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.5)" } }, "Acesso reservado para clientes e equipa SamorClean")) : /* @__PURE__ */ React.createElement("div", { style: { background: "rgba(56,182,216,0.12)", border: "1px solid rgba(56,182,216,0.3)", borderRadius: 16, padding: "20px 24px", marginBottom: 28, width: "100%", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, color: "#fff", lineHeight: 1.6 } }, "Portal exclusivo reservado para clientes SamorClean."), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.5)", marginTop: 8 } }, "Se ainda n\xE3o \xE9 cliente, saiba como aderir.")), client ? /* @__PURE__ */ React.createElement("button", { onClick: function() {
       setPhase("choose");
     }, style: { width: "100%", background: "#38B6D8", border: "none", borderRadius: 14, padding: "16px 0", color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", marginBottom: 12 } }, "Entrar") : null, /* @__PURE__ */ React.createElement("button", { onClick: function() {
+      registarIntencao("intencao_cliente");
       setPhase("lead");
-    }, style: { width: "100%", background: "rgba(255,255,255,0.08)", border: "1.5px solid rgba(255,255,255,0.2)", borderRadius: 14, padding: "13px 0", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" } }, "\u2728 Quero tornar-me cliente"), /* @__PURE__ */ React.createElement("button", { onClick: function() { setPhase("recrutamento"); }, style: { width: "100%", background: "rgba(255,255,255,0.05)", border: "1.5px solid rgba(255,255,255,0.1)", borderRadius: 14, padding: "13px 0", color: "rgba(255,255,255,0.7)", fontSize: 14, fontWeight: 700, cursor: "pointer", marginTop: 10 } }, "\uD83D\uDC65 Quero juntar-me \xE0 equipa"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 16, textAlign: "center" } }, "910 637 588 \xA0|\xA0 samorclean.geral@gmail.com")));
+    }, style: { width: "100%", background: "rgba(255,255,255,0.08)", border: "1.5px solid rgba(255,255,255,0.2)", borderRadius: 14, padding: "13px 0", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" } }, "\u2728 Quero tornar-me cliente"), /* @__PURE__ */ React.createElement("button", { onClick: function() { registarIntencao("intencao_candidato"); setPhase("recrutamento"); }, style: { width: "100%", background: "rgba(255,255,255,0.05)", border: "1.5px solid rgba(255,255,255,0.1)", borderRadius: 14, padding: "13px 0", color: "rgba(255,255,255,0.7)", fontSize: 14, fontWeight: 700, cursor: "pointer", marginTop: 10 } }, "\uD83D\uDC65 Quero juntar-me \xE0 equipa"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 16, textAlign: "center" } }, "910 637 588 \xA0|\xA0 samorclean.geral@gmail.com")));
   }
   if (phase === "lead") {
     let togDia = function(d) {
