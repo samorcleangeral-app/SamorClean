@@ -184,12 +184,6 @@ function getWeek(offset) {
     return localDateStr(dt);
   });
 }
-const EMPS = [
-  { id: "F001", name: "Carlos Mendes", role: "T\xE9cnico Senior", pin: "1234", av: "CM", rating: 4.8 },
-  { id: "F002", name: "Ana Rodrigues", role: "Tecnica", pin: "5678", av: "AR", rating: 4.6 },
-  { id: "F003", name: "Bruno Fonseca", role: "T\xE9cnico", pin: "9012", av: "BF", rating: 4.7 },
-  { id: "F004", name: "Sara Lopes", role: "Tecnica", pin: "3456", av: "SL", rating: 4.9 }
-];
 const PRODS = [
   { id: "P001", name: "Desengordurante", brand: "Faren", dosage: "50ml por 1L agua", instructions: "Aplicar com pano humido. Enxaguar ap\xF3s 3 minutos.", warning: "Usar luvas. Evitar contacto com olhos.", stock: 12 },
   { id: "P002", name: "Lixivia Concentrada", brand: "Sonasol", dosage: "100ml por 5L agua", instructions: "Usar em superficies brancas. Actuar 5 minutos.", warning: "N\xE3o misturar com outros produtos.", stock: 8 },
@@ -197,24 +191,6 @@ const PRODS = [
   { id: "P004", name: "Detergente Estofos", brand: "HG", dosage: "30ml por 500ml agua", instructions: "Diluir em agua morna. Aspirar ap\xF3s secar.", warning: "Testar em area escondida.", stock: 5 },
   { id: "P005", name: "Removedor de Tinta", brand: "Rubson", dosage: "Aplicar puro com pincel", instructions: "Aguardar 10 min. Raspar com espatula.", warning: "Luvas e mascara obrigat\xF3rios.", stock: 3 }
 ];
-const CLIENTS = [
-  { id: "SC-001", name: "Construtora Ribatejo Lda", type: "Empresa", contact: "Joao Ferreira", phone: "963 111 222", email: "geral@ribatejo.pt", address: "Rua da Liberdade 45, Benavente", service: "Limpeza P\xF3s-Obra", freq: "Pontual", notes: "Portao traseiro.", checklist: ["Remocao entulho", "Pavimentos", "Vidros", "WC"], since: "2024-03-10", rating: 4.8 },
-  { id: "SC-002", name: "Clinica Saude Samora", type: "Empresa", contact: "Dra Ana Costa", phone: "910 333 444", email: "clinica@saude.pt", address: "Av. Central 12, Samora Correia", service: "Limpeza Comercial", freq: "Semanal", notes: "Esteriliza\xE7\xE3o obrigatoria.", checklist: ["Desinfeccao salas", "WC", "Aspira\xE7\xE3o", "Secretarias"], since: "2023-11-05", rating: 4.9 },
-  { id: "SC-003", name: "Familia Silva", type: "Particular", contact: "Maria Silva", phone: "926 555 666", email: "msilva@gmail.com", address: "Quinta das Flores Lote 3, Alcochete", service: "Limpeza Profunda", freq: "Trimestral", notes: "Tem cao. Sem amoniaco.", checklist: ["Limpeza geral", "Estofos", "Frigorifico", "Janelas"], since: "2024-01-20", rating: 4.6 },
-  { id: "SC-004", name: "Armazens Logitrans", type: "Empresa", contact: "Pedro Nunes", phone: "962 444 555", email: "geral@logitrans.pt", address: "Zona Industrial, Benavente", service: "Limpeza Comercial", freq: "Mensal", notes: "Portao principal.", checklist: ["Pavimentos", "Escritorio", "WC"], since: "2024-05-01", rating: 4.7 },
-  { id: "SC-005", name: "Escritorios Montijo Park", type: "Empresa", contact: "Sofia Barros", phone: "961 777 888", email: "admin@montijo.pt", address: "Parque Empresarial, Montijo", service: "Limpeza Comercial", freq: "Semanal", notes: "Fora de expediente.", checklist: ["Open space", "Salas", "Cozinha", "WC", "Vidros"], since: "2024-02-14", rating: 4.8 }
-];
-function getJobs() {
-  const w = getWeek(0);
-  return [
-    { id: "J001", cn: "Construtora Ribatejo Lda", addr: "Rua da Liberdade 45, Benavente", svc: "Limpeza P\xF3s-Obra", date: w[0], t1: "08:00", t2: "13:00", team: ["F001", "F002"], status: "completed", cl: ["Entulho", "Pavimentos", "Vidros", "WC"], prods: ["P001", "P003", "P005"], notes: "Portao traseiro. C\xF3digo: 4521.", val: 480 },
-    { id: "J002", cn: "Clinica Saude Samora", addr: "Av. Central 12, Samora Correia", svc: "Limpeza Comercial", date: w[1], t1: "14:00", t2: "17:00", team: ["F003", "F004"], status: "pending", cl: ["Desinfeccao", "WC", "Carpetes", "Secretarias"], prods: ["P001", "P002", "P003"], notes: "Esteriliza\xE7\xE3o obrigatoria.", val: 220 },
-    { id: "J003", cn: "Familia Silva", addr: "Quinta das Flores Lote 3, Alcochete", svc: "Limpeza Profunda", date: w[1], t1: "09:00", t2: "12:00", team: ["F001", "F003"], status: "completed", cl: ["Limpeza geral", "Estofos", "Frigorifico", "Janelas"], prods: ["P001", "P003", "P004"], notes: "Sem amoniaco.", val: 180 },
-    { id: "J004", cn: "Armazens Logitrans", addr: "Zona Industrial, Benavente", svc: "Limpeza Comercial", date: w[2], t1: "07:00", t2: "11:00", team: ["F002", "F004"], status: "pending", cl: ["Pavimentos", "Escritorio", "WC"], prods: ["P001", "P002"], notes: "Portao principal.", val: 320 },
-    { id: "J005", cn: "Escritorios Montijo Park", addr: "Parque Empresarial, Montijo", svc: "Limpeza Comercial", date: w[3], t1: "18:00", t2: "21:00", team: ["F001", "F002"], status: "pending", cl: ["Open space", "Salas", "Cozinha", "WC"], prods: ["P001", "P003"], notes: "Fora de expediente.", val: 260 },
-    { id: "J006", cn: "Construtora Ribatejo Lda", addr: "Av. da Republica 88, Alcochete", svc: "Limpeza P\xF3s-Obra", date: w[4], t1: "08:00", t2: "14:00", team: ["F003", "F004"], status: "pending", cl: ["Entulho", "Pavimentos", "Vidros", "WC"], prods: ["P001", "P003", "P005"], notes: "Nova obra.", val: 560 }
-  ];
-}
 function fmt(v) {
   return v.toLocaleString("pt-PT", { style: "currency", currency: "EUR", minimumFractionDigits: 0 });
 }
@@ -2268,7 +2244,7 @@ function Routes() {
       db.list("ausencias", "?select=*")
     ]).then(function(r) {
       setJobs(r[0] || []);
-      setEmps(r[1] && r[1].length ? r[1] : EMPS);
+      setEmps(r[1] || []);
       setClients(r[2] || []);
       setAusencias(r[3] || []);
       setLoading(false);
@@ -3017,7 +2993,7 @@ function Routes() {
           var t1parts = (nj.t1 || "08:00").split(":"); var t2parts = (nj.t2 || "10:00").split(":");
           var hrs = (parseInt(t2parts[0])*60+parseInt(t2parts[1]) - parseInt(t1parts[0])*60-parseInt(t1parts[1])) / 60;
           var teamSize = (c.equipa_habitual || []).length || 1;
-          return Math.round(teamSize * hrs * (c.price_per_hour || 13.66) * 100) / 100;
+          return Math.round(teamSize * hrs * (c.price_per_hour || PRICE_PER_HOUR) * 100) / 100;
         })() }));
         setClientSearch(c.name);
         setShowClientDropdown(false);
@@ -3384,13 +3360,13 @@ function FotosCliente(props) {
 }
 function Clients() {
   const [clients, setClients] = useState([]);
-  const [emps, setEmps] = useState(EMPS);
+  const [emps, setEmps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState("list");
   const [sel, setSel] = useState(null);
   const [q, setQ] = useState("");
   const [ft, setFt] = useState("Todos");
-  const [form, setForm] = useState({ name: "", type: "Empresa", contact: "", phone: "", email: "", address: "", service: SVCS[0], freq: FREQS[0], notes: "", checklist: [""], schedule: [], hours_contracted: 0, price_per_hour: 13.66, iva_type: "normal", tipo_faturacao: "hora", valor_visita: 0, ativo: true });
+  const [form, setForm] = useState({ name: "", type: "Empresa", contact: "", phone: "", email: "", address: "", service: SVCS[0], freq: FREQS[0], notes: "", checklist: [""], schedule: [], hours_contracted: 0, price_per_hour: PRICE_PER_HOUR, iva_type: "normal", tipo_faturacao: "hora", valor_visita: 0, ativo: true });
   const [newContacts, setNewContacts] = useState([{ name: "", cargo: "", phone: "", email: "", pin: "" }]);
   const [saved, setSaved] = useState(false);
   const [contacts, setContacts] = useState([]);
@@ -3412,7 +3388,7 @@ function Clients() {
       freq: sel.freq || FREQS[0],
       notes: sel.notes || "",
       hours_contracted: sel.hours_contracted || 0,
-      price_per_hour: sel.price_per_hour || 13.66,
+      price_per_hour: sel.price_per_hour || PRICE_PER_HOUR,
       tipo_faturacao: sel.tipo_faturacao || "hora",
       valor_visita: sel.valor_visita || 0,
       ativo: sel.ativo !== false,
@@ -3599,14 +3575,14 @@ function Clients() {
   }
   if (view === "list") {
     const totalRecSemIva = clients.reduce(function(s, c) {
-      return s + horasPessoaSemanaEsperadas(c) * (c.price_per_hour || 13.66);
+      return s + horasPessoaSemanaEsperadas(c) * (c.price_per_hour || PRICE_PER_HOUR);
     }, 0);
     const totalFixos = clients.filter(function(c) {
       return c.freq && c.freq !== "Pontual";
     }).length;
     return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Clientes"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, clients.length, " registados")), /* @__PURE__ */ React.createElement("button", { style: btn, onClick: function() {
       setSel(null);
-      setForm({ name: "", type: "Empresa", contact: "", phone: "", email: "", address: "", service: SVCS[0], freq: FREQS[0], notes: "", checklist: [""], schedule: [], hours_contracted: 0, price_per_hour: 13.66, iva_type: "normal" });
+      setForm({ name: "", type: "Empresa", contact: "", phone: "", email: "", address: "", service: SVCS[0], freq: FREQS[0], notes: "", checklist: [""], schedule: [], hours_contracted: 0, price_per_hour: PRICE_PER_HOUR, iva_type: "normal" });
       setView("new");
     } }, "+ Novo Cliente")), clients.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 16 } }, [
       { l: "Clientes fixos", v: totalFixos + " clientes", s: "com aven\xE7a semanal", c: "#2E6DA4" },
@@ -3621,7 +3597,7 @@ function Clients() {
         setFt(t);
       }, style: Object.assign({}, ft === t ? btn : btnO, { padding: "8px 14px", fontSize: 12 }) }, t);
     }), /* @__PURE__ */ React.createElement("div", { style: { marginLeft: "auto", fontSize: 12, color: "#64748B" } }, filt.length, " resultados")), /* @__PURE__ */ React.createElement("div", null, filt.map(function(c) {
-      const rec = horasPessoaSemanaEsperadas(c) * (c.price_per_hour || 13.66);
+      const rec = horasPessoaSemanaEsperadas(c) * (c.price_per_hour || PRICE_PER_HOUR);
       const freqCor = (c.freq || "").toLowerCase() === "semanal" ? "#16A34A" : (c.freq || "").toLowerCase() === "quinzenal" ? "#F59E0B" : (c.freq || "").toLowerCase() === "mensal" ? "#2E6DA4" : "#94A3B8";
       const inativo = c.ativo === false;
       const temNotaNova = !!clientesComNotaNova[c.id];
@@ -3776,7 +3752,7 @@ function Clients() {
       }, style: Object.assign({}, btnX, { padding: "9px 10px", color: "#EF4444", fontSize: 16 }) }, "X"));
     })), /* @__PURE__ */ React.createElement("button", { style: Object.assign({}, btnO, { fontSize: 13, padding: "8px 16px" }), onClick: function() {
       setForm(Object.assign({}, form, { checklist: form.checklist.concat([""]) }));
-    } }, "+ Tarefa")), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 12 } }, "Financeiro"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tipo de fatura\xE7\xE3o"), /* @__PURE__ */ React.createElement("select", { style: inp, value: (form.service === "Limpeza P\xF3s-Obra" || form.service === "Limpeza Profunda") ? "orcamento" : (form.tipo_faturacao || "hora"), disabled: form.service === "Limpeza P\xF3s-Obra" || form.service === "Limpeza Profunda", onChange: function(e) { setForm(Object.assign({}, form, { tipo_faturacao: e.target.value })); } }, /* @__PURE__ */ React.createElement("option", { value: "hora" }, "Por hora (horas \xD7 pre\xE7o/h)"), /* @__PURE__ */ React.createElement("option", { value: "visita" }, "Por visita (valor fixo/visita)"), /* @__PURE__ */ React.createElement("option", { value: "mensal" }, "Mensal fixo"), /* @__PURE__ */ React.createElement("option", { value: "orcamento" }, "Por or\xE7amento (valor pr\xF3prio por servi\xE7o)"))), (form.service === "Limpeza P\xF3s-Obra" || form.service === "Limpeza Profunda") ? /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1", background: "#FFFBEB", border: "1.5px solid #F59E0B", borderRadius: 10, padding: "10px 14px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#92400E" } }, "\u2139 Cada obra deste cliente ter\xE1 o seu pr\xF3prio valor, definido ao criar o serviço em Rotas."), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#78350F", marginTop: 2, marginBottom: 8 } }, "50% adjudica\xE7\xE3o + 50% a 30 dias (condi\xE7\xE3o habitual)"), /* @__PURE__ */ React.createElement("label", { style: Object.assign({}, lbl, { color: "#92400E" }) }, "Horas estimadas para a obra actual"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "1", min: "0", value: form.horas_estimadas_obra || "", placeholder: "Ex: 80", onFocus: function(e) { e.target.select(); }, onChange: function(e) { setForm(Object.assign({}, form, { horas_estimadas_obra: parseFloat(e.target.value) || 0 })); } })) : /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Pre\xE7o/hora (sem IVA)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: form.price_per_hour || 13.66, onFocus: function(e) { e.target.select(); }, onChange: function(e) {
+    } }, "+ Tarefa")), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 12 } }, "Financeiro"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tipo de fatura\xE7\xE3o"), /* @__PURE__ */ React.createElement("select", { style: inp, value: (form.service === "Limpeza P\xF3s-Obra" || form.service === "Limpeza Profunda") ? "orcamento" : (form.tipo_faturacao || "hora"), disabled: form.service === "Limpeza P\xF3s-Obra" || form.service === "Limpeza Profunda", onChange: function(e) { setForm(Object.assign({}, form, { tipo_faturacao: e.target.value })); } }, /* @__PURE__ */ React.createElement("option", { value: "hora" }, "Por hora (horas \xD7 pre\xE7o/h)"), /* @__PURE__ */ React.createElement("option", { value: "visita" }, "Por visita (valor fixo/visita)"), /* @__PURE__ */ React.createElement("option", { value: "mensal" }, "Mensal fixo"), /* @__PURE__ */ React.createElement("option", { value: "orcamento" }, "Por or\xE7amento (valor pr\xF3prio por servi\xE7o)"))), (form.service === "Limpeza P\xF3s-Obra" || form.service === "Limpeza Profunda") ? /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1", background: "#FFFBEB", border: "1.5px solid #F59E0B", borderRadius: 10, padding: "10px 14px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#92400E" } }, "\u2139 Cada obra deste cliente ter\xE1 o seu pr\xF3prio valor, definido ao criar o serviço em Rotas."), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#78350F", marginTop: 2, marginBottom: 8 } }, "50% adjudica\xE7\xE3o + 50% a 30 dias (condi\xE7\xE3o habitual)"), /* @__PURE__ */ React.createElement("label", { style: Object.assign({}, lbl, { color: "#92400E" }) }, "Horas estimadas para a obra actual"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "1", min: "0", value: form.horas_estimadas_obra || "", placeholder: "Ex: 80", onFocus: function(e) { e.target.select(); }, onChange: function(e) { setForm(Object.assign({}, form, { horas_estimadas_obra: parseFloat(e.target.value) || 0 })); } })) : /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Pre\xE7o/hora (sem IVA)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: form.price_per_hour || PRICE_PER_HOUR, onFocus: function(e) { e.target.select(); }, onChange: function(e) {
       setForm(Object.assign({}, form, { price_per_hour: parseFloat(e.target.value) || 0 }));
     } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Km desde o armaz\xE9m"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", min: "0", step: "0.1", value: form.km_armazem || 0, onFocus: function(e) { e.target.select(); }, onChange: function(e) {
       setForm(Object.assign({}, form, { km_armazem: parseFloat(e.target.value) || 0 }));
@@ -7287,7 +7263,7 @@ function Manager(props) {
   const [todayJobs, setTodayJobs] = useState([]);
   const [recentJobs, setRecentJobs] = useState([]);
   const [recentCompletedJobs, setRecentCompletedJobs] = useState([]);
-  const [emps, setEmps] = useState(EMPS);
+  const [emps, setEmps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pedidosPendentes, setPedidosPendentes] = useState(0);
   const [pedidosColabPendentes, setPedidosColabPendentes] = useState(0);
@@ -7335,7 +7311,7 @@ function Manager(props) {
       setRecentJobs(results[2] || []);
       setRecentCompletedJobs(results[3] || []);
       setAlertasDispensados((results[14] || []).map(function(r) { return r.chave; }));
-      setEmps(results[4] && results[4].length ? results[4] : EMPS);
+      setEmps(results[4] || []);
       setPedidosPendentes(results[5] ? results[5].length : 0);
       setPedidosColabPendentes(results[7] ? results[7].length : 0);
       setNotasClientesNovas(results[9] ? results[9].length : 0);
@@ -7637,7 +7613,7 @@ function EmpPedidos(props) {
     db.list("stock_produtos", "?select=id,nome&order=nome").then(function(rows) { setStockProdutos(rows || []); });
   }, []);
   useEffect(function() {
-    fetch(SUPABASE_URL + "/rest/v1/pedidos_colaboradores?funcionario_id=eq." + encodeURIComponent(empId) + "&estado=neq.pendente&visto=is.false", { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ visto: true }), keepalive: true }).catch(function() {});
+    fetch(SUPABASE_URL + "/rest/v1/pedidos_colaboradores?funcionario_id=eq." + encodeURIComponent(empId) + "&estado=neq.pendente&visto=is.false", { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ visto: true }), keepalive: true }).catch(function(e) { console.warn("Falha ao marcar pedidos como vistos:", e); });
   }, [empId]);
   useEffect(function() {
     if (tab === "historico") {
@@ -7796,7 +7772,7 @@ function Employee(props) {
   const onExit = props.onExit;
   const clientContext = props.clientContext || null;
   const [phase, setPhase] = useState("login");
-  const [emps, setEmps] = useState(EMPS);
+  const [emps, setEmps] = useState([]);
   const lastActivityRef = React.useRef(Date.now());
   const EMP_TIMEOUT = 5 * 60 * 1000; // 5 min
   useEffect(function() {
@@ -7850,7 +7826,7 @@ function Employee(props) {
   const [popupEmpJob, setPopupEmpJob] = useState(null);
   useEffect(function() {
     db.list("funcionarios", "?select=*&ativo=neq.false&order=id").then(function(rows) {
-      setEmps(rows && rows.length ? rows : EMPS);
+      setEmps(rows || []);
     });
   }, []);
   const [notasEmpPreload, setNotasEmpPreload] = useState([]);
@@ -8563,7 +8539,7 @@ function ClientPortal(props) {
   }, [phase]);
   const [client, setClient] = useState(null);
   const [contacts, setContacts] = useState([]);
-  const [allEmps, setAllEmps] = useState(EMPS);
+  const [allEmps, setAllEmps] = useState([]);
   const [currentContact, setCurrentContact] = useState(null);
   const [currentEmp, setCurrentEmp] = useState(null);
   const [pin, setPin] = useState("");
@@ -8573,7 +8549,7 @@ function ClientPortal(props) {
   const [tab, setTab] = useState("home");
   const [history, setHistory] = useState([]);
   const [upcoming, setUpcoming] = useState([]);
-  const [emps, setEmps] = useState(EMPS);
+  const [emps, setEmps] = useState([]);
   const [showRate, setShowRate] = useState(null);
   const [autoRatePrompted, setAutoRatePrompted] = useState(false);
   useEffect(function() {
@@ -8655,10 +8631,10 @@ function ClientPortal(props) {
             headers: dbHeaders(),
             body: JSON.stringify({ client_id: clientId, client_nome: results[0][0].name }),
             keepalive: true
-          }).catch(function() {});
+          }).catch(function(e) { console.warn("Falha ao registar abertura QR:", e); });
         }
         setContacts(results[1] || []);
-        const empList = results[2] && results[2].length ? results[2] : EMPS;
+        const empList = results[2] || [];
         setEmps(empList);
         setAllEmps(empList);
         setLoading(false);
@@ -9301,7 +9277,7 @@ function PortalArmazem() {
   const [checking, setChecking] = useState(false);
   useEffect(function() {
     db.list("funcionarios", "?select=*&ativo=neq.false&order=name").then(function(rows) {
-      setEmps(rows && rows.length ? rows : EMPS);
+      setEmps(rows || []);
       setLoading(false);
     });
   }, []);
