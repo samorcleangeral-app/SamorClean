@@ -2246,6 +2246,7 @@ function Routes() {
     setEquipasLivresDia(null);
     setDiaEquipasLivres(null);
   }
+  const [nj, setNj] = useState({ cn: "", addr: "", svc: "", date: "", date_end: "", t1: "08:00", t2: "10:00", team: [], val: "", obra_ref: "" });
   useEffect(function() {
     var c = clients.find(function(x) { return x.name === nj.cn; });
     if (!c) return;
