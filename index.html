@@ -2194,7 +2194,58 @@ function Routes() {
     setConflitosAlocacao(null);
     setAlocandoEquipa(false);
   }
-  const [nj, setNj] = useState({ cn: "", addr: "", svc: "", date: "", date_end: "", t1: "08:00", t2: "10:00", team: [], val: "", obra_ref: "" });
+  const [equipasLivresDia, setEquipasLivresDia] = useState(null);
+  const [diaEquipasLivres, setDiaEquipasLivres] = useState(null);
+  function calcularEquipasLivres(dataAlvo) {
+    // Serviços do dia que NÃO são pós-obra/profunda (as voltas fixas normais)
+    var doDia = jobs.filter(function(j) { return j.date === dataAlvo && j.status !== "completed"; });
+    var obrasDoDia = doDia.filter(function(j) {
+      var c = clients.find(function(x) { return x.id === j.client_id; });
+      return c && (c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda");
+    });
+    var voltasNormais = doDia.filter(function(j) {
+      var c = clients.find(function(x) { return x.id === j.client_id; });
+      return !(c && (c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda"));
+    });
+    // Agrupar por conjunto de equipa (quem andou exactamente junto nesse dia)
+    var grupos = {};
+    voltasNormais.forEach(function(j) {
+      var team = (j.team || []).filter(function(eid) { var e = emps.find(function(x) { return x.id === eid; }); return e && e.ativo !== false; });
+      if (team.length === 0) return;
+      var chave = team.slice().sort().join("+");
+      if (!grupos[chave]) grupos[chave] = { membros: team.slice().sort(), ultimaHora: j.t2, servicos: 0 };
+      grupos[chave].servicos++;
+      if (j.t2 > grupos[chave].ultimaHora) grupos[chave].ultimaHora = j.t2;
+    });
+    // Verificar que nenhum membro do grupo tem serviços DEPOIS da última hora (senão não está livre)
+    var lista = Object.keys(grupos).map(function(k) { return grupos[k]; }).filter(function(g) {
+      // algum membro tem outro serviço que começa depois da última hora do grupo?
+      var temMaisTarde = voltasNormais.some(function(j) {
+        return j.t1 >= g.ultimaHora && (j.team || []).some(function(eid) { return g.membros.indexOf(eid) !== -1; }) && g.membros.join("+") !== (j.team || []).slice().sort().join("+");
+      });
+      return !temMaisTarde;
+    }).sort(function(a, b) { return a.ultimaHora.localeCompare(b.ultimaHora); });
+    return { equipas: lista, obras: obrasDoDia };
+  }
+  function abrirEquipasLivres(dataAlvo) {
+    var r = calcularEquipasLivres(dataAlvo);
+    if (r.equipas.length === 0) { alert("N\xE3o h\xE1 equipas de voltas fixas neste dia para sugerir."); return; }
+    setDiaEquipasLivres(dataAlvo);
+    setEquipasLivresDia(r);
+  }
+  async function alocarEquipaAObra(membros, horaInicio, obraJob) {
+    var novaTeam = (obraJob.team || []).slice();
+    membros.forEach(function(m) { if (novaTeam.indexOf(m) === -1) novaTeam.push(m); });
+    var patch = { team: novaTeam };
+    if (window.confirm("Ajustar a hora de in\xEDcio da obra para " + horaInicio + " (quando a equipa fica livre)?\n\nOK = ajusta a hora\nCancelar = mant\xE9m a hora actual da obra")) {
+      patch.t1 = horaInicio;
+    }
+    await updateJob(obraJob.id, patch);
+    registarAlertaRota(Object.assign({}, obraJob, patch), "equipa", "Foste alocado ao p\xF3s-obra de " + obraJob.cn, membros);
+    alert("\u2713 Equipa alocada \xE0 obra de " + obraJob.cn + ".");
+    setEquipasLivresDia(null);
+    setDiaEquipasLivres(null);
+  }
   useEffect(function() {
     var c = clients.find(function(x) { return x.name === nj.cn; });
     if (!c) return;
@@ -2751,7 +2802,15 @@ function Routes() {
     setNj({ cn: "", addr: "", svc: "", date: localDateStr(), date_end: "", t1: "08:00", t2: "10:00", team: [], val: "", obra_ref: "" });
     setClientSearch("");
     setShowNew(true);
-  }, style: btn }, "+ Servi\xE7o"), /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowVoltasFixas(true); }, style: Object.assign({}, btnO, { fontSize: 13, background: "#F5F3FF", border: "1.5px solid #7C3AED", color: "#7C3AED" }) }, "\u2699 Voltas Fixas"), /* @__PURE__ */ React.createElement("button", { onClick: recalcularValoresEmLote, style: Object.assign({}, btnO, { fontSize: 13 }) }, "\uD83D\uDD04 Recalcular valores"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: alocarEquipaSemana, style: Object.assign({}, btnG, { fontSize: 13, whiteSpace: "nowrap" }) }, "\u26A1 Gerar Semana (equipa)"), calView === "week" && wJobs.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: function() {
+  }, style: btn }, "+ Servi\xE7o"), /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowVoltasFixas(true); }, style: Object.assign({}, btnO, { fontSize: 13, background: "#F5F3FF", border: "1.5px solid #7C3AED", color: "#7C3AED" }) }, "\u2699 Voltas Fixas"), /* @__PURE__ */ React.createElement("button", { onClick: recalcularValoresEmLote, style: Object.assign({}, btnO, { fontSize: 13 }) }, "\uD83D\uDD04 Recalcular valores"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: alocarEquipaSemana, style: Object.assign({}, btnG, { fontSize: 13, whiteSpace: "nowrap" }) }, "\u26A1 Gerar Semana (equipa)"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    // Sugerir para o próximo dia com pós-obra na semana (ou hoje)
+    var hojeStr = localDateStr();
+    var diaComObra = dates.find(function(d) {
+      return jobs.some(function(j) { var c = clients.find(function(x) { return x.id === j.client_id; }); return j.date === d && d >= hojeStr && c && (c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda") && j.status !== "completed"; });
+    });
+    if (!diaComObra) { alert("N\xE3o h\xE1 servi\xE7os de p\xF3s-obra nesta semana para sugerir equipas."); return; }
+    abrirEquipasLivres(diaComObra);
+  }, style: Object.assign({}, btnO, { fontSize: 13, whiteSpace: "nowrap", background: "#FFF7ED", border: "1.5px solid #F59E0B", color: "#B45309" }) }, "\uD83D\uDCA1 Equipas livres p/ obra"), calView === "week" && wJobs.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: function() {
     const win = window.open("", "_blank");
     const byEmp = {};
     emps.forEach(function(e) {
@@ -3124,7 +3183,32 @@ function Routes() {
     );
   })))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 16 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setShowNew(false);
-  }, style: Object.assign({}, btnX, { flex: 1 }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: addJ, disabled: !nj.cn || !nj.date, style: Object.assign({}, btn, { flex: 2, opacity: !nj.cn || !nj.date ? 0.5 : 1 }) }, "Adicionar")))), conflitosAlocacao && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 500, padding: 16 } },
+  }, style: Object.assign({}, btnX, { flex: 1 }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: addJ, disabled: !nj.cn || !nj.date, style: Object.assign({}, btn, { flex: 2, opacity: !nj.cn || !nj.date ? 0.5 : 1 }) }, "Adicionar")))), equipasLivresDia && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 500, padding: 16 } },
+    /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 24, width: "100%", maxWidth: 480, maxHeight: "85vh", overflowY: "auto" } },
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 17, color: "#1A3A5C", marginBottom: 4 } }, "\uD83D\uDCA1 Equipas livres para obra"),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 16 } }, (/* @__PURE__ */ new Date(diaEquipasLivres + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long" }), " \u2014 equipas que acabam as voltas fixas e podem reforçar o p\xF3s-obra."),
+      equipasLivresDia.obras.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF3C7", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#92400E", marginBottom: 14 } }, "\u26A0 N\xE3o h\xE1 servi\xE7os de p\xF3s-obra neste dia. Podes na mesma criar um servi\xE7o novo com uma equipa livre.") : null,
+      equipasLivresDia.equipas.map(function(eq, idx) {
+        var nomes = eq.membros.map(function(m) { var e = emps.find(function(x) { return x.id === m; }); return e ? e.name.split(" ")[0] : m; }).join(" + ");
+        return /* @__PURE__ */ React.createElement("div", { key: idx, style: { border: "1.5px solid #E2EBF4", borderRadius: 10, padding: "12px 14px", marginBottom: 10 } },
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
+            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C" } }, nomes),
+            /* @__PURE__ */ React.createElement("span", { style: { background: "#DCFCE7", color: "#15803D", borderRadius: 8, padding: "2px 10px", fontSize: 12, fontWeight: 800 } }, "livre \xE0s ", eq.ultimaHora)
+          ),
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
+            equipasLivresDia.obras.map(function(obra) {
+              return /* @__PURE__ */ React.createElement("button", { key: obra.id, onClick: function() { alocarEquipaAObra(eq.membros, eq.ultimaHora, obra); }, style: Object.assign({}, btnG, { fontSize: 12, padding: "6px 12px" }) }, "\u2192 Alocar a ", obra.cn);
+            }),
+            /* @__PURE__ */ React.createElement("button", { onClick: function() {
+              setNj({ cn: "", addr: "", svc: "Limpeza P\xF3s-Obra", date: diaEquipasLivres, date_end: "", t1: eq.ultimaHora, t2: "18:00", team: eq.membros.slice(), val: "", obra_ref: "" });
+              setEquipasLivresDia(null); setDiaEquipasLivres(null); setShowNew(true);
+            }, style: Object.assign({}, btnO, { fontSize: 12, padding: "6px 12px" }) }, "+ Criar serviço novo")
+          )
+        );
+      }),
+      /* @__PURE__ */ React.createElement("button", { onClick: function() { setEquipasLivresDia(null); setDiaEquipasLivres(null); }, style: Object.assign({}, btnX, { width: "100%", marginTop: 8 }) }, "Fechar")
+    )
+  ), conflitosAlocacao && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 500, padding: 16 } },
   /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 24, maxWidth: 560, width: "100%", maxHeight: "85vh", overflowY: "auto" } },
     /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 900, fontSize: 17, color: "#DC2626", marginBottom: 4 } }, "\u26A0 Conflitos a resolver"),
     /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 16 } }, "Tens de resolver todos antes de continuar \u2014 n\xE3o \xE9 poss\xEDvel ignorar ou fechar sem decidir."),
