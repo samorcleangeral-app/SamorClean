@@ -417,6 +417,7 @@ function Finance() {
   const [contaCorrenteJobs, setContaCorrenteJobs] = useState([]);
   const [contaCorrenteNome, setContaCorrenteNome] = useState("");
   const [contaCorrenteId, setContaCorrenteId] = useState(null);
+  const [faturaSearch, setFaturaSearch] = useState("");
   const [contaCorrenteEdits, setContaCorrenteEdits] = useState({});
   const [carregandoConta, setCarregandoConta] = useState(false);
   async function abrirContaCorrente(clientId) {
@@ -716,6 +717,34 @@ function Finance() {
     if (cc.tipo_faturacao !== "mensal" || cc.cliente_principal_id) return s;
     return s + avencaPendenteTotalCliente(cc.id);
   }, 0);
+  // ─── Os 4 números da aba Faturação (incluindo avenças mensais) ───
+  const fatMesData = (function() {
+    var faturado = 0, pago = 0, projecao = 0;
+    clientes.filter(function(c) { return !c.cliente_principal_id; }).forEach(function(c) {
+      if (c.tipo_faturacao === "mensal") return;
+      var jobsFeitos = jobsDoGrupo(c, monthJobs);
+      var jobsTodos = jobsDoGrupo(c, monthJobsAll);
+      var horasF = jobsFeitos.reduce(function(s, j) { return s + horasReais(j.t1, j.t2) * ((j.team || []).length || 1); }, 0);
+      var horasT = jobsTodos.reduce(function(s, j) { return s + horasReais(j.t1, j.t2) * ((j.team || []).length || 1); }, 0);
+      var calcF = calcValorFaturacao(c, jobsFeitos, horasF);
+      var calcT = calcValorFaturacao(c, jobsTodos, horasT);
+      var isAuto = c.iva_type === "autoliquida\xE7\xE3o";
+      faturado += isAuto ? calcF.valor : calcF.valor * 1.23;
+      projecao += isAuto ? calcT.valor : calcT.valor * 1.23;
+    });
+    pago += monthJobs.reduce(function(s, j) {
+      var c = clientsMap[j.client_id];
+      if (c && c.tipo_faturacao === "mensal") return s;
+      return s + valorPagoDoJob(j);
+    }, 0);
+    clientes.filter(function(c) { return c.tipo_faturacao === "mensal" && !c.cliente_principal_id; }).forEach(function(c) {
+      var av = avencaComIva(c.id);
+      faturado += av;
+      projecao += av;
+      pago += avencaPagoComIva(c.id, mesActualStr);
+    });
+    return { faturado: faturado, pago: pago, porPagar: dividaTotalAcumulada, projecao: projecao };
+  })();
   const totalCustos = despesas.reduce(function(s, d) {
     return s + d.valor;
   }, 0);
@@ -1642,272 +1671,78 @@ function Finance() {
       )
     ),
     finTab === "faturacao" && /* @__PURE__ */ React.createElement("div", null,
+      // Cabeçalho + exportação
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 } },
         /* @__PURE__ */ React.createElement("div", null,
-          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C" } }, "Resumo de Fatura\xE7\xE3o"),
-          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, now.toLocaleDateString("pt-PT", { month: "long", year: "numeric" }), " \u2014 inclui servi\xE7os conclu\xEDdos e agendados at\xE9 ao fim do m\xEAs")
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C" } }, "Faturação"),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, now.toLocaleDateString("pt-PT", { month: "long", year: "numeric" }))
         ),
-        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } },
-          /* @__PURE__ */ React.createElement("button", { onClick: function() {
-          var lines = ["RESUMO DE FATURAÇÃO — " + now.toLocaleDateString("pt-PT", { month: "long", year: "numeric" }).toUpperCase(), ""];
-          var total = 0;
+        /* @__PURE__ */ React.createElement("button", { onClick: function() {
+          var lines = ["FATURAÇÃO — " + now.toLocaleDateString("pt-PT", { month: "long", year: "numeric" }).toUpperCase(), ""];
           clientes.filter(function(c) { return !c.cliente_principal_id; }).forEach(function(c) {
             var jobs = jobsDoGrupo(c, monthJobsAll);
-            if (!jobs.length) return;
-            var horas = jobs.reduce(function(s, j) {
-              return s + horasReais(j.t1, j.t2) * ((j.team || []).length || 1);
-            }, 0);
+            var isMensal = c.tipo_faturacao === "mensal";
+            if (!jobs.length && !isMensal) return;
+            var horas = jobs.reduce(function(s, j) { return s + horasReais(j.t1, j.t2) * ((j.team || []).length || 1); }, 0);
             var calc = calcValorFaturacao(c, jobs, horas);
-            var valor = calc.valor;
-            var isOrcamento = calc.tipo === "orcamento";
             var iva = c.iva_type === "autoliquida\xE7\xE3o" ? "Autoliquidação" : "23%";
-            total += valor;
-            lines.push(c.name);
-            if (isOrcamento) {
-              lines.push("  Tipo: Orçamento");
-              lines.push("  Valor s/IVA: " + fmt(valor) + "€  |  IVA: " + iva);
-            } else if (calc.tipo === "mensal") {
-              lines.push("  Tipo: Mensal (avença fixa) \u2014 " + jobs.length + " visitas realizadas");
-              lines.push("  Valor s/IVA: " + fmt(valor) + "€  |  IVA: " + iva);
-            } else if (calc.tipo === "visita") {
-              lines.push("  Visitas: " + jobs.length + "  |  Valor/visita: " + fmt(parseFloat(c.valor_visita) || 0) + "€");
-              lines.push("  Valor s/IVA: " + fmt(valor) + "€  |  IVA: " + iva);
-            } else {
-              lines.push("  Visitas: " + jobs.length + "  |  Horas: " + horas.toFixed(1) + "h  |  Preço/h: " + fmt(c.price_per_hour || 0) + "€");
-              lines.push("  Valor s/IVA: " + fmt(valor) + "€  |  IVA: " + iva);
-            }
-            lines.push("");
+            lines.push(c.name + " \u2014 " + fmt(calc.valor) + "\u20AC s/IVA (" + iva + ")");
           });
-          lines.push("TOTAL S/IVA: " + fmt(total) + "€");
-          var text = lines.join("\n");
-          navigator.clipboard.writeText(text).then(function() { alert("Resumo copiado para a área de transferência!"); });
-        }, style: Object.assign({}, btnO, { fontSize: 12 }) }, "\uD83D\uDCCB Copiar resumo"),
-          /* @__PURE__ */ React.createElement("button", { onClick: function() {
-            var rows = "";
-            var totalGeral = 0;
-            clientes.filter(function(c) { return !c.cliente_principal_id && jobsDoGrupo(c, monthJobsAll).length > 0; }).forEach(function(c) {
-              var jobs = jobsDoGrupo(c, monthJobsAll);
-              var horas = jobs.reduce(function(s, j) { return s + horasReais(j.t1, j.t2) * ((j.team || []).length || 1); }, 0);
-              var calc = calcValorFaturacao(c, jobs, horas);
-              var valorSemIva = calc.valor;
-              var isOrcamento = calc.tipo === "orcamento";
-              var isAutoliq = c.iva_type === "autoliquida\xE7\xE3o";
-              var valorComIva = isAutoliq ? valorSemIva : valorSemIva * 1.23;
-              totalGeral += valorSemIva;
-              rows += "<tr><td style='padding:10px;font-weight:600'>" + c.name + "</td><td style='padding:10px;text-align:center'>" + (isOrcamento ? "\u2014" : jobs.length) + "</td><td style='padding:10px;text-align:center'>" + (isOrcamento ? "\u2014" : horas.toFixed(1) + "h") + "</td><td style='padding:10px;text-align:center'>" + (isOrcamento ? "Or\xE7amento" : fmt(c.price_per_hour || 0) + "\u20AC/h") + "</td><td style='padding:10px;text-align:right'>" + fmt(valorSemIva) + "\u20AC</td><td style='padding:10px;text-align:center'>" + (isAutoliq ? "Autoliquida\xE7\xE3o" : "23%") + "</td><td style='padding:10px;text-align:right;font-weight:700'>" + fmt(valorComIva) + "\u20AC</td></tr>";
-            });
-            var win = window.open("", "_blank");
-            win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Fatura\xE7\xE3o \u2014 " + now.toLocaleDateString("pt-PT", { month: "long", year: "numeric" }) + "</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C}h1{margin-bottom:2px}h2{color:#64748B;font-weight:normal;margin-top:0;margin-bottom:20px}table{width:100%;border-collapse:collapse;font-size:13px}th{background:#1A3A5C;color:#fff;padding:10px;text-align:left}tr:nth-child(even){background:#F8FAFC}tfoot td{font-weight:800;border-top:2px solid #1A3A5C;padding:10px}@media print{body{padding:15px}}</style></head><body><h1>SamorClean \u2014 Resumo de Fatura\xE7\xE3o</h1><h2>" + now.toLocaleDateString("pt-PT", { month: "long", year: "numeric" }) + "</h2><table><thead><tr><th>Cliente</th><th>Visitas</th><th>Horas</th><th>Pre\xE7o</th><th>Valor s/IVA</th><th>IVA</th><th>Valor c/IVA</th></tr></thead><tbody>" + rows + "</tbody><tfoot><tr><td colspan='4'>TOTAL</td><td style='text-align:right'>" + fmt(totalGeral) + "\u20AC</td><td></td><td></td></tr></tfoot></table><script>window.onload=function(){window.print();}<\/script></body></html>");
-            win.document.close();
-          }, style: Object.assign({}, btnG, { fontSize: 12 }) }, "\uD83D\uDCC4 Exportar PDF")
-        )
+          lines.push("");
+          lines.push("Faturado: " + fmt(fatMesData.faturado) + "\u20AC | Pago: " + fmt(fatMesData.pago) + "\u20AC | Por pagar: " + fmt(fatMesData.porPagar) + "\u20AC | Projecção: " + fmt(fatMesData.projecao) + "\u20AC");
+          navigator.clipboard.writeText(lines.join("\n")).then(function() { alert("Resumo copiado!"); });
+        }, style: Object.assign({}, btnO, { fontSize: 12 }) }, "\uD83D\uDCCB Exportar resumo")
       ),
-      monthJobsAll.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Sem servi\xE7os este m\xEAs.") :
-      /* @__PURE__ */ React.createElement("div", null,
-        /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar cliente...", value: faturacaoSearch, onChange: function(e) { setFaturacaoSearch(e.target.value); } }),
-        /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 12, marginBottom: 14 } },
-        clientes.filter(function(c) { return !c.cliente_principal_id && jobsDoGrupo(c, monthJobsAll).length > 0; }).filter(function(c) { return !faturacaoSearch || c.name.toLowerCase().indexOf(faturacaoSearch.toLowerCase()) !== -1; }).map(function(c) {
-          var jobs = jobsDoGrupo(c, monthJobsAll);
-          var horas = jobs.reduce(function(s, j) {
-            return s + horasReais(j.t1, j.t2) * ((j.team || []).length || 1);
-          }, 0);
-          var calc = calcValorFaturacao(c, jobs, horas);
-          var valorSemIva = calc.valor;
-          var isOrcamento = calc.tipo === "orcamento";
-          var isAutoliq = c.iva_type === "autoliquida\xE7\xE3o";
-          var valorComIva = isAutoliq ? valorSemIva : valorSemIva * 1.23;
-          var todosPagos = jobs.length > 0 && jobs.every(function(j) { return valorPendenteDoJob(j) < 0.01; });
-          var totalEmFaltaCliente = jobs.reduce(function(s, j) { return s + valorPendenteDoJob(j); }, 0);
-          var ultimaData = jobs.reduce(function(m, j) { return j.date > m ? j.date : m; }, jobs[0].date);
-          var diasDesde = Math.floor((now - new Date(ultimaData + "T12:00:00")) / (24 * 3600 * 1e3));
-          var corEstado = todosPagos ? "#16A34A" : diasDesde >= 30 ? "#DC2626" : diasDesde >= 15 ? "#F97316" : "#F59E0B";
-          var tipoLabel = calc.tipo === "mensal" ? "\uD83D\uDCC5 Aven\xE7a mensal" : calc.tipo === "visita" ? "\u2713 Por visita" : isOrcamento ? "\uD83D\uDCC4 Por or\xE7amento" : "\uD83D\uDD52 Por hora";
-          return /* @__PURE__ */ React.createElement("div", { key: c.id, onClick: function() { setSelFaturacaoCliente(c.id); }, style: { border: "1px solid #E2EBF4", borderLeft: "4px solid " + corEstado, borderRadius: 10, padding: "12px 14px", cursor: "pointer" } },
-            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.name),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#7C3AED", fontWeight: 700, marginBottom: 6 } }, tipoLabel),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 6 } }, calc.tipo === "mensal" ? jobs.length + " visita" + (jobs.length !== 1 ? "s" : "") + " inclu\xEDda" + (jobs.length !== 1 ? "s" : "") : jobs.length + " servi\xE7o" + (jobs.length !== 1 ? "s" : ""), " \u2022 \xFAltimo ", new Date(ultimaData + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "short" })),
-            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-              /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, fmt(valorComIva), "\u20AC"),
-              todosPagos ? /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 11, color: corEstado } }, "\u2713 Pago") : /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 11, color: corEstado } }, fmt(totalEmFaltaCliente), "\u20AC")
-            )
+      // Os 4 números
+      /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 } }, [
+        { l: "Faturado", v: fatMesData.faturado, c: "#2E6DA4", s: "este mês" },
+        { l: "Pago", v: fatMesData.pago, c: "#16A34A", s: "recebido" },
+        { l: "Por pagar", v: fatMesData.porPagar, c: "#DC2626", s: "todos os meses" },
+        { l: "Projecção", v: fatMesData.projecao, c: "#7C3AED", s: "até fim do mês" }
+      ].map(function(k) {
+        return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 14, borderTop: "3px solid " + k.c }) },
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 8 } }, k.l),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 900, color: k.c } }, fmt(k.v), "\u20AC"),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 4 } }, k.s)
+        );
+      })),
+      // Motor de busca
+      /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { marginBottom: 14 }), placeholder: "\uD83D\uDD0D Procurar cliente...", value: faturaSearch, onChange: function(e) { setFaturaSearch(e.target.value); } }),
+      // Cards de todos os clientes com faturação este mês
+      /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 12 } },
+        clientes.filter(function(c) {
+          if (c.cliente_principal_id) return false;
+          var isMensal = c.tipo_faturacao === "mensal";
+          var temJobs = jobsDoGrupo(c, monthJobsAll).length > 0;
+          if (!temJobs && !isMensal) return false;
+          if (faturaSearch && c.name.toLowerCase().indexOf(faturaSearch.toLowerCase()) === -1) return false;
+          return true;
+        }).map(function(c) {
+          var isMensal = c.tipo_faturacao === "mensal";
+          var jobsFeitos = jobsDoGrupo(c, monthJobs);
+          var horasF = jobsFeitos.reduce(function(s, j) { return s + horasReais(j.t1, j.t2) * ((j.team || []).length || 1); }, 0);
+          var calcF = calcValorFaturacao(c, jobsFeitos, horasF);
+          var isAuto = c.iva_type === "autoliquida\xE7\xE3o";
+          var faturadoCliente = isMensal ? avencaComIva(c.id) : (isAuto ? calcF.valor : calcF.valor * 1.23);
+          // Estado de pagamento
+          var pendente = isMensal ? avencaPendenteTotalCliente(c.id) : jobsFeitos.reduce(function(s, j) { return s + valorPendenteDoJob(j); }, 0);
+          var pago = isMensal ? mesesDevidosAvenca(c.id).reduce(function(s, m) { return s + avencaPagoComIva(c.id, m); }, 0) : jobsFeitos.reduce(function(s, j) { return s + valorPagoDoJob(j); }, 0);
+          var estaPago = pendente < 0.01 && (pago > 0.01 || faturadoCliente < 0.01);
+          var tipoLabel = isMensal ? "Mensal" : c.tipo_faturacao === "orcamento" ? "Orçamento" : c.tipo_faturacao === "visita" ? "Visita" : "Hora";
+          return /* @__PURE__ */ React.createElement("div", { key: c.id, onClick: function() { abrirContaCorrente(c.id); }, style: { background: "#fff", border: "1.5px solid " + (estaPago ? "#BBF7D0" : "#FECACA"), borderLeft: "4px solid " + (estaPago ? "#16A34A" : "#DC2626"), borderRadius: 12, padding: 14, cursor: "pointer", transition: "transform 0.1s" } },
+            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", lineHeight: 1.2 } }, c.name),
+              /* @__PURE__ */ React.createElement("span", { style: { fontSize: 9, fontWeight: 700, color: "#7C3AED", background: "#F5F3FF", borderRadius: 6, padding: "2px 6px", whiteSpace: "nowrap", marginLeft: 6 } }, tipoLabel)
+            ),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 900, color: "#1A3A5C", marginBottom: 6 } }, fmt(faturadoCliente), "\u20AC"),
+            estaPago ?
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#16A34A" } }, "\u2713 Pago") :
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#DC2626" } }, "Em falta: ", fmt(pendente), "\u20AC")
           );
         })
-        ),
-        (function() {
-          if (!selFaturacaoCliente) return null;
-          var c = clientes.find(function(x) { return x.id === selFaturacaoCliente; });
-          if (!c) return null;
-          var jobs = jobsDoGrupo(c, monthJobsAll);
-          var horas = jobs.reduce(function(s, j) {
-            return s + horasReais(j.t1, j.t2) * ((j.team || []).length || 1);
-          }, 0);
-          var calc = calcValorFaturacao(c, jobs, horas);
-          var valorSemIva = calc.valor;
-          var isOrcamento = calc.tipo === "orcamento";
-          var isAutoliq = c.iva_type === "autoliquida\xE7\xE3o";
-          var valorComIva = isAutoliq ? valorSemIva : valorSemIva * 1.23;
-          var pendentes = jobs.filter(function(j) { return j.status !== "completed"; }).length;
-          var jobIds = jobs.map(function(j) { return j.id; });
-          var todosPagos = jobs.length > 0 && jobs.every(function(j) { return valorPendenteDoJob(j) < 0.01; });
-          var totalPagoCliente = jobs.reduce(function(s, j) { return s + valorPagoDoJob(j); }, 0);
-          return /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }, onClick: function() { setSelFaturacaoCliente(null); } },
-            /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 24, maxWidth: 460, width: "100%", maxHeight: "85vh", overflowY: "auto" }, onClick: function(e) { e.stopPropagation(); } },
-              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 } },
-                /* @__PURE__ */ React.createElement("div", null,
-                  /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C" } }, c.name),
-                  /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 2 } }, c.service, " \u2014 IVA: ", isAutoliq ? "Autoliquida\xE7\xE3o" : "23%", pendentes > 0 && /* @__PURE__ */ React.createElement("span", { style: { color: "#F59E0B", fontWeight: 700 } }, " \u2022 ", pendentes, " por realizar"))
-                ),
-                /* @__PURE__ */ React.createElement("button", { onClick: function() { setSelFaturacaoCliente(null); }, style: { background: "none", border: "none", fontSize: 20, color: "#94A3B8", cursor: "pointer" } }, "\u2715")
-              ),
-              /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right", marginBottom: 10 } },
-                /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#2E6DA4" } }, fmt(valorSemIva), "\u20AC"),
-                /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, "c/IVA: ", fmt(valorComIva), "\u20AC")
-              ),
-              isOrcamento ?
-                /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF3C7", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#92400E", fontWeight: 600, marginBottom: 12 } }, "\uD83D\uDCCB Por or\xE7amento \u2014 50% na adjudica\xE7\xE3o + 50% a 30 dias") :
-                /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 } }, (calc.tipo === "mensal" ? [
-                  { l: "Visitas", v: jobs.length },
-                  { l: "Horas totais", v: horas.toFixed(1) + "h" },
-                  { l: "Valor mensal fixo", v: fmt(parseFloat(c.valor_visita) || 0) + "€" }
-                ] : calc.tipo === "visita" ? [
-                  { l: "Visitas", v: jobs.length },
-                  { l: "Horas totais", v: horas.toFixed(1) + "h" },
-                  { l: "Valor/visita", v: fmt(parseFloat(c.valor_visita) || 0) + "€" }
-                ] : [
-                  { l: "Visitas", v: jobs.length },
-                  { l: "Horas totais", v: horas.toFixed(1) + "h" },
-                  { l: "Pre\xE7o/hora", v: fmt(c.price_per_hour || 0) + "€" }
-                ]).map(function(k) {
-                  return /* @__PURE__ */ React.createElement("div", { key: k.l, style: { background: "#F8FAFC", borderRadius: 6, padding: "6px 10px", textAlign: "center" } },
-                    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase" } }, k.l),
-                    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: "#1A3A5C" } }, k.v)
-                  );
-                })),
-              todosPagos ? /* @__PURE__ */ React.createElement("span", { style: { background: "#DCFCE7", color: "#15803D", borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 700 } }, "\u2713 Pago") :
-                /* @__PURE__ */ React.createElement("div", null,
-                  totalPagoCliente > 0.01 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#F59E0B", fontWeight: 700, marginBottom: 6 } }, "Parcial: ", fmt(totalPagoCliente), "\u20AC recebidos"),
-                  /* @__PURE__ */ React.createElement("button", { onClick: function() { marcarPagoCliente(c.id, jobIds); }, style: Object.assign({}, btnG, { fontSize: 11, padding: "6px 12px" }) }, "Marcar resto como pago")
-                ),
-              /* @__PURE__ */ React.createElement("button", { onClick: function() {
-                var mesNome = now.toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
-                var linhaDetalhe = isOrcamento ? "Por or\xE7amento" : calc.tipo === "mensal" ? "Aven\xE7a mensal \u2014 " + jobs.length + " visitas realizadas" : calc.tipo === "visita" ? jobs.length + " visitas \u2014 " + fmt(parseFloat(c.valor_visita) || 0) + "\u20AC/visita" : jobs.length + " visitas \u2014 " + horas.toFixed(1) + "h totais \u2014 " + fmt(c.price_per_hour || 0) + "\u20AC/hora";
-                var win = window.open("", "_blank");
-                win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Fatura\xE7\xE3o \u2014 " + c.name + "</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C}h1{margin-bottom:2px}h2{color:#64748B;font-weight:normal;margin-top:0;margin-bottom:24px}.box{background:#F8FAFC;border-radius:10px;padding:20px;margin-bottom:16px}.row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #E2EBF4}.total{font-size:22px;font-weight:800;color:#1A3A5C;text-align:right;margin-top:16px}@media print{body{padding:15px}}</style></head><body><h1>SamorClean</h1><h2>Resumo de Fatura\xE7\xE3o \u2014 " + mesNome + "</h2><div class='box'><div class='row'><span>Cliente</span><strong>" + c.name + "</strong></div><div class='row'><span>Detalhe</span><strong>" + linhaDetalhe + "</strong></div><div class='row'><span>Regime de IVA</span><strong>" + (isAutoliq ? "Autoliquida\xE7\xE3o" : "23%") + "</strong></div><div class='row'><span>Valor sem IVA</span><strong>" + fmt(valorSemIva) + "\u20AC</strong></div><div class='row'><span>Valor com IVA</span><strong>" + fmt(valorComIva) + "\u20AC</strong></div></div><div class='total'>TOTAL: " + fmt(valorComIva) + "\u20AC</div><script>window.onload=function(){window.print();}<\/script></body></html>");
-                win.document.close();
-              }, style: Object.assign({}, btnO, { fontSize: 11, padding: "6px 12px", marginTop: 10 }) }, "\uD83D\uDCC4 PDF"),
-              (function() {
-                var dCobrar = byClientCobrar[selFaturacaoCliente];
-                return /* @__PURE__ */ React.createElement("div", { style: { borderTop: "1px solid #F1F5F9", marginTop: 16, paddingTop: 14 } },
-                  /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 } },
-                    /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 12, color: "#64748B", textTransform: "uppercase" } }, "\uD83D\uDCB0 Por Cobrar (todos os meses)"),
-                    /* @__PURE__ */ React.createElement("button", { onClick: function() { var cid = selFaturacaoCliente; setSelFaturacaoCliente(null); abrirContaCorrente(cid); }, style: Object.assign({}, btnO, { background: "#F5F3FF", border: "1.5px solid #7C3AED", color: "#7C3AED", fontSize: 10, padding: "5px 10px" }) }, "\uD83D\uDCCB Conta Corrente")
-                  ),
-                  !dCobrar || dCobrar.jobs.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#16A34A", fontWeight: 700 } }, "\u2713 Nada em falta de meses anteriores.") :
-                  (function() {
-                    var porMes = {};
-                    dCobrar.jobs.forEach(function(j) {
-                      var mesChave = j.date.slice(0, 7);
-                      if (!porMes[mesChave]) porMes[mesChave] = { jobs: [], total: 0 };
-                      porMes[mesChave].jobs.push(j);
-                      porMes[mesChave].total += withIva(j.val || 0, j);
-                    });
-                    var isAvencaC = dCobrar.tipoFat === "mensal";
-                    return Object.keys(porMes).sort().map(function(mesChave) {
-                      var grupo = porMes[mesChave];
-                      var mesLabel = new Date(mesChave + "-15T12:00:00").toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
-                      return /* @__PURE__ */ React.createElement("div", { key: mesChave, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F1F5F9" } },
-                        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#334155", textTransform: "capitalize" } }, mesLabel, " \u2014 ", fmt(grupo.total), "\u20AC"),
-                        /* @__PURE__ */ React.createElement("button", { onClick: function() { marcarPagoCliente(selFaturacaoCliente, grupo.jobs.map(function(j) { return j.id; })); }, style: Object.assign({}, btnG, { fontSize: 10, padding: "4px 10px" }) }, isAvencaC ? "Marcar aven\xE7a paga" : "Marcar m\xEAs pago")
-                      );
-                    });
-                  })()
-                );
-              })()
-            )
-          );
-        })(),
-        /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { background: "#1A3A5C", padding: 16, marginTop: 8 }) },
-          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-            /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: 700 } }, "TOTAL A FATURAR (s/IVA)"),
-            /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontSize: 22, fontWeight: 900 } },
-              fmt(clientes.filter(function(c) { return !c.cliente_principal_id && jobsDoGrupo(c, monthJobsAll).length > 0; }).reduce(function(s, c) {
-                var jobs = jobsDoGrupo(c, monthJobsAll);
-                var isOrc = c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda";
-                var horas = jobs.reduce(function(h, j) { return h + horasReais(j.t1, j.t2) * ((j.team || []).length || 1); }, 0);
-                return s + (isOrc ? jobs.reduce(function(h2, j) { return h2 + (j.val || 0); }, 0) : horas * (c.price_per_hour || 0));
-              }, 0)), "\u20AC"
-            )
-          )
-        )
-      ),
-    (finTab === "faturacao") && /* @__PURE__ */ React.createElement("div", { style: card },
-    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 14 } },
-      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "Clientes por Cobrar (", (function() { var s = new Set((verTudoCobrar ? allPendingJobs : pendingRows).map(function(j) { return j.client_id; })); return s.size; })(), ")"),
-      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } },
-        /* @__PURE__ */ React.createElement("button", { onClick: function() { setVerTudoCobrar(false); setSelCobrar(null); }, style: { padding: "5px 12px", borderRadius: 8, border: "1.5px solid " + (!verTudoCobrar ? "#2E6DA4" : "#E2EBF4"), background: !verTudoCobrar ? "#EFF6FF" : "#fff", color: !verTudoCobrar ? "#2E6DA4" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "Este m\xEAs"),
-        /* @__PURE__ */ React.createElement("button", { onClick: function() { setVerTudoCobrar(true); setSelCobrar(null); }, style: { padding: "5px 12px", borderRadius: 8, border: "1.5px solid " + (verTudoCobrar ? "#2E6DA4" : "#E2EBF4"), background: verTudoCobrar ? "#EFF6FF" : "#fff", color: verTudoCobrar ? "#2E6DA4" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "Desde sempre")
       )
     ),
-    (function() {
-      var pendingRowsAtivo = verTudoCobrar ? allPendingJobs : pendingRows;
-      if (pendingRowsAtivo.length === 0) return /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24 } }, "Tudo cobrado! \u{1F389}");
-      if (selCobrar && byClientCobrar[selCobrar]) {
-        var d = byClientCobrar[selCobrar];
-        var porMesCobrar = {};
-        d.jobs.forEach(function(j) {
-          var mesChave = j.date.slice(0, 7);
-          if (!porMesCobrar[mesChave]) porMesCobrar[mesChave] = { jobs: [], total: 0 };
-          porMesCobrar[mesChave].jobs.push(j);
-          porMesCobrar[mesChave].total += withIva(j.val || 0, j);
-        });
-        var mesesOrdenados = Object.keys(porMesCobrar).sort();
-        return /* @__PURE__ */ React.createElement("div", null,
-          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 } },
-            /* @__PURE__ */ React.createElement("button", { onClick: function() { setSelCobrar(null); }, style: btnO }, "\u2190 Voltar")
-          ),
-          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 2 } }, d.cn),
-          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#7C3AED", fontWeight: 700, marginBottom: 14 } }, d.tipoFat === "mensal" ? "\uD83D\uDCC5 Aven\xE7a mensal" : d.tipoFat === "visita" ? "\u2713 Por visita" : d.tipoFat === "orcamento" ? "\uD83D\uDCC4 Por or\xE7amento" : "\uD83D\uDD52 Por hora"),
-          mesesOrdenados.map(function(mesChave) {
-            var grupo = porMesCobrar[mesChave];
-            var mesLabel = new Date(mesChave + "-15T12:00:00").toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
-            var isAvenca = d.tipoFat === "mensal";
-            return /* @__PURE__ */ React.createElement("div", { key: mesChave, style: Object.assign({}, card, { marginBottom: 14, padding: 14 }) },
-              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 } },
-                /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", textTransform: "capitalize" } }, isAvenca ? "Aven\xE7a de " + mesLabel + " (" + grupo.jobs.length + " visita" + (grupo.jobs.length !== 1 ? "s" : "") + " inclu\xEDda" + (grupo.jobs.length !== 1 ? "s" : "") + ")" : mesLabel, " \u2014 ", fmt(grupo.total), "\u20AC"),
-                /* @__PURE__ */ React.createElement("button", { onClick: function() { marcarPagoCliente(selCobrar, grupo.jobs.map(function(j) { return j.id; })); }, style: Object.assign({}, btnG, { fontSize: 11, padding: "5px 12px" }) }, isAvenca ? "Marcar aven\xE7a como paga" : "Marcar m\xEAs como pago")
-              ),
-              grupo.jobs.sort(function(a, b) { return a.date < b.date ? -1 : 1; }).map(function(j) {
-                var cor = j.diffDays >= 30 ? "#DC2626" : j.diffDays >= 15 ? "#F97316" : j.diffDays >= 9 ? "#F59E0B" : "#64748B";
-                return /* @__PURE__ */ React.createElement("div", { key: j.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F1F5F9" } },
-                  /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, new Date(j.date + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "short" }), " \u2022 ", j.t1, "\u2013", j.t2),
-                  /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 14, alignItems: "center" } },
-                    /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, fontSize: 13 } }, fmt(withIva(j.val || 0, j)), "\u20AC"),
-                    /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 12, color: cor } }, j.diffDays, "d")
-                  )
-                );
-              })
-            );
-          })
-        );
-      }
-      return /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 12 } },
-        Object.keys(byClientCobrar).map(function(cid) { return Object.assign({ cid: cid }, byClientCobrar[cid]); }).sort(function(a, b) { return b.maxDias - a.maxDias; }).map(function(c) {
-          const cor = c.maxDias >= 30 ? "#DC2626" : c.maxDias >= 15 ? "#F97316" : c.maxDias >= 9 ? "#F59E0B" : "#64748B";
-          const tipoLabel = c.tipoFat === "mensal" ? "\uD83D\uDCC5 Aven\xE7a mensal" : c.tipoFat === "visita" ? "\u2713 Por visita" : c.tipoFat === "orcamento" ? "\uD83D\uDCC4 Por or\xE7amento" : "\uD83D\uDD52 Por hora";
-          return /* @__PURE__ */ React.createElement("div", { key: c.cid, onClick: function() { setSelCobrar(c.cid); }, style: { border: "1px solid #E2EBF4", borderLeft: "4px solid " + cor, borderRadius: 10, padding: "12px 14px", cursor: "pointer" } },
-            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.cn),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#7C3AED", fontWeight: 700, marginBottom: 6 } }, tipoLabel),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 6 } }, c.tipoFat === "mensal" ? c.count + " visita" + (c.count !== 1 ? "s" : "") + " inclu\xEDda" + (c.count !== 1 ? "s" : "") : c.count + " servi\xE7o" + (c.count !== 1 ? "s" : ""), " \u2022 \xFAltimo ", new Date(c.ultimaData + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "short" })),
-            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-              /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, fmt(c.comIva), "\u20AC"),
-              /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 12, color: cor } }, c.maxDias, "d")
-            )
-          );
-        })
-      );
-    })()
-  )
-    ),
+
     finTab === "geral" && /* @__PURE__ */ React.createElement("div", null,
     mostrarAvisoFaturacao && /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", border: "1.5px solid #2E6DA4", borderRadius: 10, padding: "14px 16px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 } },
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } },
