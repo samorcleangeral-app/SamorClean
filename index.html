@@ -1802,7 +1802,7 @@ function Finance() {
   }).map(function(cat) {
     const pct = totalCustos > 0 ? Math.round(custosCat[cat] / totalCustos * 100) : 0;
     return /* @__PURE__ */ React.createElement("div", { key: cat, style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#334155", fontWeight: 600 } }, cat), /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B" } }, fmt(custosCat[cat]), "\u20AC (", pct, "%)")), /* @__PURE__ */ React.createElement("div", { style: { height: 6, background: "#F1F5F9", borderRadius: 3 } }, /* @__PURE__ */ React.createElement("div", { style: { height: 6, width: pct + "%", background: "#EF4444", borderRadius: 3 } })));
-  }))), contaCorrenteAberta && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 600, padding: 20 }, onClick: function() { setContaCorrenteAberta(false); } },
+  })))), contaCorrenteAberta && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 600, padding: 20 }, onClick: function() { setContaCorrenteAberta(false); } },
             /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 24, maxWidth: 620, width: "100%", maxHeight: "85vh", overflowY: "auto" }, onClick: function(e) { e.stopPropagation(); } },
               /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } },
                 /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C" } }, "\uD83D\uDCCB Conta Corrente \u2014 ", contaCorrenteNome),
@@ -1871,7 +1871,7 @@ function Finance() {
                 })
               )
             )
-          )));
+          ));
 }
 function Routes() {
   const [jobs, setJobs] = useState([]);
