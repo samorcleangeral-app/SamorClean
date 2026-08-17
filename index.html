@@ -497,57 +497,6 @@ function Finance() {
       alert("\u26A0 Erro ao guardar o pagamento parcial.");
     }
   }
-  async function marcarAvencaPaga(clientId, mes, total) {
-    var existente = pagamentosAvenca.find(function(p) { return p.client_id === clientId && p.mes === mes; });
-    var body = { client_id: clientId, mes: mes, pago_total: total, valor_pago: total ? 0 : 0 };
-    try {
-      if (existente) {
-        await fetch(SUPABASE_URL + "/rest/v1/pagamentos_avenca?id=eq." + existente.id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ pago_total: total }) });
-        setPagamentosAvenca(function(p) { return p.map(function(x) { return x.id === existente.id ? Object.assign({}, x, { pago_total: total }) : x; }); });
-      } else {
-        var res = await fetch(SUPABASE_URL + "/rest/v1/pagamentos_avenca", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }), body: JSON.stringify(body) });
-        var novo = await res.json();
-        if (novo && novo[0]) setPagamentosAvenca(function(p) { return p.concat([novo[0]]); });
-      }
-    } catch (e) { alert("\u26A0 Erro ao registar pagamento da aven\xE7a."); }
-  }
-  async function salvarAvencaParcialVisita(clientId, mes, valorComIva) {
-    var c = clientsMap[clientId];
-    var isAutoliq = c && c.iva_type === "autoliquida\xE7\xE3o";
-    var valorSemIva = isAutoliq ? valorComIva : valorComIva / 1.23;
-    var totalComIva = visitaValorMesComIva(clientId, mes);
-    var totalSemIva = isAutoliq ? totalComIva : totalComIva / 1.23;
-    var pagoTotal = valorSemIva >= totalSemIva - 0.01;
-    var existente = pagamentosAvenca.find(function(p) { return p.client_id === clientId && p.mes === mes; });
-    try {
-      if (existente) {
-        await fetch(SUPABASE_URL + "/rest/v1/pagamentos_avenca?id=eq." + existente.id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ valor_pago: Math.min(valorSemIva, totalSemIva), pago_total: pagoTotal }) });
-        setPagamentosAvenca(function(p) { return p.map(function(x) { return x.id === existente.id ? Object.assign({}, x, { valor_pago: Math.min(valorSemIva, totalSemIva), pago_total: pagoTotal }) : x; }); });
-      } else {
-        var res = await fetch(SUPABASE_URL + "/rest/v1/pagamentos_avenca", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }), body: JSON.stringify({ client_id: clientId, mes: mes, valor_pago: Math.min(valorSemIva, totalSemIva), pago_total: pagoTotal }) });
-        var novo = await res.json();
-        if (novo && novo[0]) setPagamentosAvenca(function(p) { return p.concat([novo[0]]); });
-      }
-    } catch (e) { alert("\u26A0 Erro ao guardar pagamento parcial."); }
-  }
-  async function salvarAvencaParcial(clientId, mes, valorComIva) {
-    var c = clientsMap[clientId];
-    var isAutoliq = c && c.iva_type === "autoliquida\xE7\xE3o";
-    var valorSemIva = isAutoliq ? valorComIva : valorComIva / 1.23;
-    var totalSemIva = parseFloat(c ? c.valor_visita : 0) || 0;
-    var pagoTotal = valorSemIva >= totalSemIva - 0.01;
-    var existente = pagamentosAvenca.find(function(p) { return p.client_id === clientId && p.mes === mes; });
-    try {
-      if (existente) {
-        await fetch(SUPABASE_URL + "/rest/v1/pagamentos_avenca?id=eq." + existente.id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ valor_pago: Math.min(valorSemIva, totalSemIva), pago_total: pagoTotal }) });
-        setPagamentosAvenca(function(p) { return p.map(function(x) { return x.id === existente.id ? Object.assign({}, x, { valor_pago: Math.min(valorSemIva, totalSemIva), pago_total: pagoTotal }) : x; }); });
-      } else {
-        var res = await fetch(SUPABASE_URL + "/rest/v1/pagamentos_avenca", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }), body: JSON.stringify({ client_id: clientId, mes: mes, valor_pago: Math.min(valorSemIva, totalSemIva), pago_total: pagoTotal }) });
-        var novo = await res.json();
-        if (novo && novo[0]) setPagamentosAvenca(function(p) { return p.concat([novo[0]]); });
-      }
-    } catch (e) { alert("\u26A0 Erro ao guardar pagamento parcial da aven\xE7a."); }
-  }
   function exportarContaCorrentePDF(nomeCliente, jobs) {
     var linhas = jobs.slice().sort(function(a, b) { return a.date < b.date ? -1 : 1; }).map(function(j) {
       var v = withIva(j.val || 0, j);
@@ -583,7 +532,6 @@ function Finance() {
   const [clientsMap, setClientsMap] = useState({});
   const [despesas, setDespesas] = useState([]);
   const [clientes, setClientes] = useState([]);
-  const [pagamentosAvenca, setPagamentosAvenca] = useState([]);
   const [avencaParcialEdit, setAvencaParcialEdit] = useState({});
   const [pagMovimentos, setPagMovimentos] = useState([]);
   const [pagDataEdit, setPagDataEdit] = useState({});
@@ -632,8 +580,7 @@ function Finance() {
       db.list("ordenado_gerencia", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
       db.list("ajuste_dias_recibo_verde", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
       db.list("premio_assiduidade_opcional", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
-      db.list("historico_financeiro", "?select=ano,mes,despesas,faturado&ano=eq." + now.getFullYear() + "&order=mes.desc"),
-      db.list("pagamentos_avenca", "?select=*")
+      db.list("historico_financeiro", "?select=ano,mes,despesas,faturado&ano=eq." + now.getFullYear() + "&order=mes.desc")
     ]).then(function(results) {
       const cm = {};
       (results[2] || []).forEach(function(c) { cm[c.id] = c; });
@@ -659,7 +606,6 @@ function Finance() {
       setReceitaMediaMensal(mediaFat);
       setClientsMap(cm);
       setClientes(results[2] || []);
-      setPagamentosAvenca(results[18] || []);
       db.list("pagamentos_movimentos", "?select=*&order=data_pagamento.desc").then(function(mv) { setPagMovimentos(mv || []); });
       setDespesas(results[3] || []);
       setRhData(results[5] || []);
@@ -793,9 +739,6 @@ function Finance() {
     if (!c) return 0;
     return parseFloat(c.valor_visita) || 0;
   }
-  function avencaPagamento(cid, mes) {
-    return pagamentosAvenca.find(function(p) { return p.client_id === cid && p.mes === mes; });
-  }
   function avencaComIva(cid) {
     var c = clientsMap[cid];
     var base = avencaValorCliente(cid);
@@ -821,7 +764,7 @@ function Finance() {
       if (m <= mesActualStr) meses[m] = true;
     });
     // Incluir também meses já com pagamento registado (para mostrarem como pagos, não desaparecerem)
-    pagamentosAvenca.forEach(function(p) {
+    pagMovimentos.forEach(function(p) {
       if (p.client_id === cid && p.mes <= mesActualStr) meses[p.mes] = true;
     });
     return Object.keys(meses).sort();
@@ -865,7 +808,7 @@ function Finance() {
       var m = j.date.slice(0, 7);
       if (m <= mesActualStr) meses[m] = true;
     });
-    pagamentosAvenca.forEach(function(p) {
+    pagMovimentos.forEach(function(p) {
       if (p.client_id === cid && p.mes <= mesActualStr) meses[p.mes] = true;
     });
     return Object.keys(meses).sort();
@@ -907,12 +850,7 @@ function Finance() {
       Object.keys(porMes).forEach(function(m) {
         var baseSemIva = porMes[m] * vVisita;
         var totalComIva = isAuto ? baseSemIva : baseSemIva * 1.23;
-        var pg = pagamentosAvenca.find(function(x) { return x.client_id === cc.id && x.mes === m; });
-        var pagoComIva = 0;
-        if (pg) {
-          if (pg.pago_total) pagoComIva = totalComIva;
-          else { var par = parseFloat(pg.valor_pago) || 0; pagoComIva = isAuto ? par : par * 1.23; }
-        }
+        var pagoComIva = Math.min(totalPagoMovimentos(cc.id, m), totalComIva);
         tot += Math.max(0, totalComIva - pagoComIva);
       });
       if (tot > 0.01) out[cc.id] = tot;
@@ -1078,12 +1016,7 @@ function Finance() {
       Object.keys(porMes).forEach(function(m) {
         var baseSemIva = porMes[m].n * vVisita;
         var totalComIva = isAuto ? baseSemIva : baseSemIva * 1.23;
-        var pg = pagamentosAvenca.find(function(x) { return x.client_id === cc.id && x.mes === m; });
-        var pagoComIva = 0;
-        if (pg) {
-          if (pg.pago_total) pagoComIva = totalComIva;
-          else { var par = parseFloat(pg.valor_pago) || 0; pagoComIva = isAuto ? par : par * 1.23; }
-        }
+        var pagoComIva = Math.min(totalPagoMovimentos(cc.id, m), totalComIva);
         var pend = Math.max(0, totalComIva - pagoComIva);
         if (pend < 0.01) return;
         if (!byC[cc.id]) byC[cc.id] = { cn: cc.name, count: 0, semIva: 0, comIva: 0, ultimaData: m + "-01", maxDias: 0, jobs: [], tipoFat: tf, mesesVisita: [] };
