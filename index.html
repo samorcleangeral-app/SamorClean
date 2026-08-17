@@ -452,6 +452,12 @@ function Finance() {
   const [contaCorrenteNome, setContaCorrenteNome] = useState("");
   const [contaCorrenteId, setContaCorrenteId] = useState(null);
   const [contaCorrenteAllJobs, setContaCorrenteAllJobs] = useState([]);
+  const [obras, setObras] = useState([]);
+  const [obraForm, setObraForm] = useState(null);
+  function carregarObras() {
+    db.list("obras", "?select=*&order=data_adjudicacao.desc").then(function(r) { setObras(r || []); });
+  }
+  useEffect(function() { carregarObras(); }, []);
   const [faturaSearch, setFaturaSearch] = useState("");
   const [contaCorrenteEdits, setContaCorrenteEdits] = useState({});
   const [carregandoConta, setCarregandoConta] = useState(false);
@@ -806,6 +812,55 @@ function Finance() {
     });
     return Object.keys(meses).sort();
   }
+  // ─── Modelo 3: PÓS-OBRA (adjudicação + restante, prazo de 30 dias) ───
+  function isClienteObra(cid) {
+    var c = clientsMap[cid];
+    return c && c.tipo_faturacao === "orcamento";
+  }
+  function obrasDoCliente(cid) {
+    return obras.filter(function(o) { return o.client_id === cid; })
+      .sort(function(a, b) { return (b.data_adjudicacao || "") < (a.data_adjudicacao || "") ? -1 : 1; });
+  }
+  function obraValorComIva(obra) {
+    var c = clientsMap[obra.client_id];
+    return aplicaIva(parseFloat(obra.valor_orcamento) || 0, c ? c.iva_type : "normal");
+  }
+  function obraPagoComIva(obraId) {
+    return pagMovimentos.filter(function(m) { return m.obra_id === obraId; })
+      .reduce(function(s2, m) { return s2 + (parseFloat(m.valor) || 0); }, 0);
+  }
+  function obraPendenteComIva(obra) {
+    return Math.max(0, obraValorComIva(obra) - obraPagoComIva(obra.id));
+  }
+  function obraPrazo(obra) {
+    // Contador só arranca quando a obra fica concluída
+    if (obra.estado !== "concluida" || !obra.data_conclusao) return null;
+    var limite = new Date(obra.data_conclusao + "T12:00:00");
+    limite.setDate(limite.getDate() + 30);
+    var dias = Math.ceil((limite - now) / (24 * 3600 * 1e3));
+    return { dias: dias, limite: limite, atraso: dias < 0 };
+  }
+  function obraPendenteTotalCliente(cid) {
+    return obrasDoCliente(cid).reduce(function(s2, o) { return s2 + obraPendenteComIva(o); }, 0);
+  }
+  async function registarPagamentoObra(obra, valorComIva, dataPag, nota) {
+    try {
+      var res = await fetch(SUPABASE_URL + "/rest/v1/pagamentos_movimentos", {
+        method: "POST",
+        headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }),
+        body: JSON.stringify({ client_id: obra.client_id, obra_id: obra.id, mes: (dataPag || "").slice(0, 7), data_pagamento: dataPag, valor: valorComIva, nota: nota || null })
+      });
+      var novo = await res.json();
+      if (novo && novo[0]) setPagMovimentos(function(pp) { return [novo[0]].concat(pp); });
+      setPagFormAberto(null);
+    } catch (e) { alert("\u26A0 Erro ao registar o pagamento da obra."); }
+  }
+  async function guardarObra(obra, patch) {
+    try {
+      await fetch(SUPABASE_URL + "/rest/v1/obras?id=eq." + obra.id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify(patch) });
+      setObras(function(pp) { return pp.map(function(o) { return o.id === obra.id ? Object.assign({}, o, patch) : o; }); });
+    } catch (e) { alert("\u26A0 Erro ao guardar a obra."); }
+  }
   function pendenteTotalCliente(cid) {
     return mesesDevidosCliente(cid).reduce(function(s, m) { return s + pendenteMesComIva(cid, m); }, 0);
   }
@@ -853,7 +908,10 @@ function Finance() {
     if (cc.cliente_principal_id) return s;
     if (cc.tipo_faturacao === "mensal") return s + avencaPendenteTotalCliente(cc.id);
     return s;
-  }, 0) + Object.keys(byClientCobrarVisita).reduce(function(s, k) { return s + byClientCobrarVisita[k]; }, 0);
+  }, 0) + Object.keys(byClientCobrarVisita).reduce(function(s, k) { return s + byClientCobrarVisita[k]; }, 0) + clientes.reduce(function(s, cc) {
+    if (cc.cliente_principal_id || cc.excluir_financeiro === true) return s;
+    return s + (isClienteObra(cc.id) ? obraPendenteTotalCliente(cc.id) : 0);
+  }, 0);
   // ─── Os 4 números da aba Faturação (incluindo avenças mensais) ───
   const fatMesData = (function() {
     var faturado = 0, pago = 0, projecao = 0;
@@ -1891,8 +1949,8 @@ function Finance() {
           var isAuto = c.iva_type === "autoliquida\xE7\xE3o";
           var faturadoCliente = isMensal ? avencaComIva(c.id) : (isAuto ? calcF.valor : calcF.valor * 1.23);
           // Estado de pagamento
-          var pendente = (isMensal || isClienteVisita(c.id)) ? pendenteTotalCliente(c.id) : jobsFeitos.reduce(function(s, j) { return s + valorPendenteDoJob(j); }, 0);
-          var pago = (isMensal || isClienteVisita(c.id)) ? mesesDevidosCliente(c.id).reduce(function(s, m) { return s + pagoMesComIva(c.id, m); }, 0) : jobsFeitos.reduce(function(s, j) { return s + valorPagoDoJob(j); }, 0);
+          var pendente = isClienteObra(c.id) ? obraPendenteTotalCliente(c.id) : (isMensal || isClienteVisita(c.id)) ? pendenteTotalCliente(c.id) : jobsFeitos.reduce(function(s, j) { return s + valorPendenteDoJob(j); }, 0);
+          var pago = isClienteObra(c.id) ? obrasDoCliente(c.id).reduce(function(s2, o) { return s2 + obraPagoComIva(o.id); }, 0) : (isMensal || isClienteVisita(c.id)) ? mesesDevidosCliente(c.id).reduce(function(s, m) { return s + pagoMesComIva(c.id, m); }, 0) : jobsFeitos.reduce(function(s, j) { return s + valorPagoDoJob(j); }, 0);
           var estaPago = pendente < 0.01 && (pago > 0.01 || faturadoCliente < 0.01);
           var tipoLabel = isMensal ? "Mensal" : c.tipo_faturacao === "orcamento" ? "Orçamento" : c.tipo_faturacao === "visita" ? "Visita" : "Hora";
           return /* @__PURE__ */ React.createElement("div", { key: c.id, onClick: function() { abrirContaCorrente(c.id); }, style: { background: "#fff", border: "1.5px solid " + (estaPago ? "#BBF7D0" : "#FECACA"), borderLeft: "4px solid " + (estaPago ? "#16A34A" : "#DC2626"), borderRadius: 12, padding: 14, cursor: "pointer", transition: "transform 0.1s" } },
@@ -1976,8 +2034,8 @@ function Finance() {
               ),
               carregandoConta ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 30, color: "#94A3B8" } }, "A carregar...") : /* @__PURE__ */ React.createElement("div", null,
                 (function() {
-                  var totalPago = isClienteMensal(contaCorrenteId) ? mesesDevidosAvenca(contaCorrenteId).reduce(function(s, m) { return s + avencaPagoComIva(contaCorrenteId, m); }, 0) : isClienteVisita(contaCorrenteId) ? mesesDevidosVisita(contaCorrenteId).reduce(function(s, m) { return s + visitaPagoMesComIva(contaCorrenteId, m); }, 0) : contaCorrenteJobs.reduce(function(s, j) { return s + valorPagoDoJob(j); }, 0);
-                  var totalPendente = isClienteMensal(contaCorrenteId) ? avencaPendenteTotalCliente(contaCorrenteId) : isClienteVisita(contaCorrenteId) ? visitaPendenteTotalCliente(contaCorrenteId) : contaCorrenteJobs.reduce(function(s, j) { return s + valorPendenteDoJob(j); }, 0);
+                  var totalPago = isClienteObra(contaCorrenteId) ? obrasDoCliente(contaCorrenteId).reduce(function(s2, o) { return s2 + obraPagoComIva(o.id); }, 0) : (isClienteMensal(contaCorrenteId) || isClienteVisita(contaCorrenteId)) ? mesesDevidosCliente(contaCorrenteId).reduce(function(s2, m) { return s2 + pagoMesComIva(contaCorrenteId, m); }, 0) : contaCorrenteJobs.reduce(function(s2, j) { return s2 + valorPagoDoJob(j); }, 0);
+                  var totalPendente = isClienteObra(contaCorrenteId) ? obraPendenteTotalCliente(contaCorrenteId) : (isClienteMensal(contaCorrenteId) || isClienteVisita(contaCorrenteId)) ? pendenteTotalCliente(contaCorrenteId) : contaCorrenteJobs.reduce(function(s2, j) { return s2 + valorPendenteDoJob(j); }, 0);
                   return /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 12, marginBottom: 16 } },
                     /* @__PURE__ */ React.createElement("div", { style: { background: "#F0FDF4", borderRadius: 8, padding: "8px 14px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B" } }, "Total pago"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 800, color: "#16A34A" } }, fmt(totalPago))),
                     /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF2F2", borderRadius: 8, padding: "8px 14px" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B" } }, "Total pendente"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 800, color: "#DC2626" } }, fmt(totalPendente)))
@@ -1999,6 +2057,93 @@ function Finance() {
                         /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 800, color: estado === "Paga" ? "#16A34A" : estado === "Parcial" ? "#F59E0B" : "#DC2626", background: estado === "Paga" ? "#DCFCE7" : estado === "Parcial" ? "#FFFBEB" : "#FEF2F2", borderRadius: 8, padding: "4px 12px" } }, estado, estado === "Parcial" ? " (" + fmt(pagoAvenca) + "\u20AC)" : "")
                       ),
                       renderPagamentoBloco(cid, mes, totalAvenca, pagoAvenca)
+                    );
+                  }));
+                })() :
+                isClienteObra(contaCorrenteId) ? (function() {
+                  var cid = contaCorrenteId;
+                  var lista = obrasDoCliente(cid);
+                  if (lista.length === 0) return /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 20, color: "#94A3B8", fontSize: 13 } }, "Sem obras registadas.");
+                  return /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } }, lista.map(function(o) {
+                    var total = obraValorComIva(o);
+                    var pago = obraPagoComIva(o.id);
+                    var falta = Math.max(0, total - pago);
+                    var pct = total > 0 ? Math.round(pago / total * 100) : 0;
+                    var prazo = obraPrazo(o);
+                    var movs = pagMovimentos.filter(function(m) { return m.obra_id === o.id; }).sort(function(a, b) { return a.data_pagamento < b.data_pagamento ? 1 : -1; });
+                    var chave = "obra" + o.id;
+                    var aberto = pagFormAberto === chave;
+                    var vEdit = avencaParcialEdit[chave] !== undefined ? avencaParcialEdit[chave] : (falta > 0.01 ? falta.toFixed(2) : "");
+                    var dEdit = pagDataEdit[chave] !== undefined ? pagDataEdit[chave] : localDateStr();
+                    var corPrazo = !prazo ? "#94A3B8" : prazo.atraso ? "#DC2626" : prazo.dias <= 7 ? "#F59E0B" : "#16A34A";
+                    return /* @__PURE__ */ React.createElement("div", { key: o.id, style: { border: "1.5px solid " + (falta < 0.01 ? "#BBF7D0" : "#F59E0B"), borderRadius: 12, padding: 16, background: falta < 0.01 ? "#F0FDF4" : "#FFFBEB" } },
+                      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 8 } },
+                        /* @__PURE__ */ React.createElement("div", null,
+                          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "\uD83C\uDFD7 ", o.nome),
+                          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 2 } }, o.estado === "concluida" ? "Conclu\xEDda em " + (o.data_conclusao || "\u2014") : "Em curso \u00B7 adjudicada em " + (o.data_adjudicacao || "\u2014"))
+                        ),
+                        /* @__PURE__ */ React.createElement("button", { onClick: function() {
+                          var v = window.prompt("Valor do or\xE7amento acordado (sem IVA):", o.valor_orcamento || 0);
+                          if (v === null) return;
+                          var nv = parseFloat(String(v).replace(",", "."));
+                          if (isNaN(nv) || nv < 0) { alert("Valor inv\xE1lido."); return; }
+                          guardarObra(o, { valor_orcamento: nv });
+                        }, style: Object.assign({}, btnX, { fontSize: 10, padding: "3px 8px" }) }, "\u270E or\xE7amento")
+                      ),
+                      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 } },
+                        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#1A3A5C" } }, fmt(total)),
+                        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: falta < 0.01 ? "#16A34A" : "#B45309" } }, falta < 0.01 ? "\u2713 Pago" : "Falta " + fmt(falta))
+                      ),
+                      /* @__PURE__ */ React.createElement("div", { style: { background: "#E2E8F0", borderRadius: 5, height: 8, marginBottom: 6, overflow: "hidden" } },
+                        /* @__PURE__ */ React.createElement("div", { style: { width: Math.min(100, pct) + "%", height: "100%", background: pct >= 100 ? "#16A34A" : "#F59E0B" } })
+                      ),
+                      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", marginBottom: 8 } }, pct, "% pago", movs.length > 0 ? " \u00B7 " + movs.length + " pagamento(s)" : ""),
+                      prazo && falta > 0.01 && /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", border: "1px solid " + corPrazo, borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 700, color: corPrazo, marginBottom: 8 } },
+                        prazo.atraso ? "\u26A0 Em atraso h\xE1 " + Math.abs(prazo.dias) + " dia(s) \u2014 prazo terminou a " + prazo.limite.toLocaleDateString("pt-PT") : "\u23F1 Faltam " + prazo.dias + " dia(s) \u2014 prazo at\xE9 " + prazo.limite.toLocaleDateString("pt-PT")
+                      ),
+                      o.estado !== "concluida" && /* @__PURE__ */ React.createElement("button", { onClick: function() {
+                        var d = window.prompt("Data de conclus\xE3o da obra (AAAA-MM-DD).\nO prazo de 30 dias come\xE7a a contar a partir daqui.", localDateStr());
+                        if (!d) return;
+                        guardarObra(o, { estado: "concluida", data_conclusao: d });
+                      }, style: Object.assign({}, btnO, { fontSize: 11, padding: "5px 10px", marginBottom: 8 }) }, "\u2713 Marcar obra como conclu\xEDda"),
+                      movs.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { borderTop: "1px solid #E2E8F0", paddingTop: 8, marginBottom: 8 } },
+                        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 800, color: "#64748B", textTransform: "uppercase", marginBottom: 4 } }, "Pagamentos"),
+                        movs.map(function(m) {
+                          return /* @__PURE__ */ React.createElement("div", { key: m.id, style: { display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0", color: "#334155" } },
+                            /* @__PURE__ */ React.createElement("span", null, new Date(m.data_pagamento + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "short" }), m.nota ? " \u00B7 " + m.nota : ""),
+                            /* @__PURE__ */ React.createElement("span", { style: { display: "flex", gap: 8, alignItems: "center" } },
+                              /* @__PURE__ */ React.createElement("strong", null, fmt(parseFloat(m.valor) || 0)),
+                              /* @__PURE__ */ React.createElement("button", { onClick: function() { apagarPagamento(m.id); }, style: { background: "none", border: "none", color: "#CBD5E1", cursor: "pointer", fontSize: 13, padding: 0 } }, "\u2715")
+                            )
+                          );
+                        })
+                      ),
+                      falta > 0.01 && !aberto && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
+                        /* @__PURE__ */ React.createElement("button", { onClick: function() { setAvencaParcialEdit(Object.assign({}, avencaParcialEdit, { [chave]: (total * 0.5).toFixed(2) })); setPagFormAberto(chave); }, style: Object.assign({}, btnO, { fontSize: 11, padding: "6px 12px" }) }, "50% adjudica\xE7\xE3o"),
+                        /* @__PURE__ */ React.createElement("button", { onClick: function() { setPagFormAberto(chave); }, style: Object.assign({}, btnG, { fontSize: 11, padding: "6px 12px", flex: 1 }) }, "+ Registar pagamento")
+                      ),
+                      falta > 0.01 && aberto && /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 8, padding: 10 } },
+                        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" } },
+                          /* @__PURE__ */ React.createElement("div", null,
+                            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", marginBottom: 2 } }, "Data"),
+                            /* @__PURE__ */ React.createElement("input", { type: "date", value: dEdit, style: Object.assign({}, inp, { padding: "5px 8px", fontSize: 12 }), onChange: function(e) { setPagDataEdit(Object.assign({}, pagDataEdit, { [chave]: e.target.value })); } })
+                          ),
+                          /* @__PURE__ */ React.createElement("div", null,
+                            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", marginBottom: 2 } }, "Valor (c/IVA)"),
+                            /* @__PURE__ */ React.createElement("input", { type: "number", step: "0.01", value: vEdit, style: Object.assign({}, inp, { width: 110, padding: "5px 8px", fontSize: 12 }), onFocus: function(e) { e.target.select(); }, onChange: function(e) { setAvencaParcialEdit(Object.assign({}, avencaParcialEdit, { [chave]: e.target.value })); } })
+                          )
+                        ),
+                        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } },
+                          /* @__PURE__ */ React.createElement("button", { onClick: function() {
+                            var v = parseFloat(vEdit);
+                            if (isNaN(v) || v <= 0) { alert("Indica um valor v\xE1lido."); return; }
+                            if (!dEdit) { alert("Indica a data."); return; }
+                            var nota = window.prompt("Nota (opcional): ex. adjudica\xE7\xE3o, pagamento final", pago < 0.01 ? "Adjudica\xE7\xE3o" : "Pagamento final");
+                            registarPagamentoObra(o, v, dEdit, nota);
+                          }, style: Object.assign({}, btnG, { fontSize: 12, padding: "7px 14px", flex: 1 }) }, "\u2713 Guardar"),
+                          /* @__PURE__ */ React.createElement("button", { onClick: function() { setPagFormAberto(null); }, style: Object.assign({}, btnX, { fontSize: 12, padding: "7px 14px" }) }, "Cancelar")
+                        )
+                      )
                     );
                   }));
                 })() :
