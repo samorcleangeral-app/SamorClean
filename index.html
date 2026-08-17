@@ -5516,8 +5516,16 @@ function PedidosColab(props) {
   const TIPO_COR = { ausencia: "#2E6DA4", fardamento: "#7C3AED", material: "#F59E0B" };
   const ESTADO_COR = { pendente: "#F59E0B", aprovado: "#16A34A", recusado: "#EF4444" };
   useEffect(function() {
-    db.list("pedidos_colaboradores", "?select=*&order=created_at.desc").then(function(rows) {
-      setPedidos(rows || []);
+    // "Inactivo é inactivo para tudo": pedidos de colaboradores inactivos saem do quadro.
+    // O histórico deles mantém-se acessível na ficha do próprio colaborador.
+    Promise.all([
+      db.list("pedidos_colaboradores", "?select=*&order=created_at.desc"),
+      db.list("funcionarios", "?select=id,ativo")
+    ]).then(function(r) {
+      var rows = r[0] || [];
+      var fAtivo = {};
+      (r[1] || []).forEach(function(f) { fAtivo[f.id] = f.ativo; });
+      setPedidos(rows.filter(function(pd) { return fAtivo[pd.funcionario_id] !== false; }));
       setLoading(false);
     });
   }, []);
