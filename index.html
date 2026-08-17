@@ -2386,12 +2386,17 @@ function Routes() {
         var jaExiste = jobsFrescos.some(function(j) { return j.client_id === v.client_id && j.date === dataStr; }) || novosServicos.some(function(j) { return j.client_id === v.client_id && j.date === dataStr; });
         if (jaExiste) return;
         var horas = horasReais(v.hora_inicio, v.hora_fim);
-        var teamSize = (v.equipa || []).length || 1;
+        // Nunca arrastar inactivos dos moldes para serviços novos
+        var equipaMolde = (v.equipa || []).filter(function(eid) {
+          var e = emps.find(function(x) { return x.id === eid; });
+          return e && e.ativo !== false;
+        });
+        var teamSize = equipaMolde.length || 1;
         var tipoFat = c.tipo_faturacao || "hora";
         var val;
         if (tipoFat === "visita" || tipoFat === "mensal") val = parseFloat(c.valor_visita) || 0;
         else val = teamSize * horas * (c.price_per_hour || PRICE_PER_HOUR);
-        var equipaAAtribuir = (!jaGerouAntes && dataStr === primeiraDesteLote) ? (v.equipa || []) : [];
+        var equipaAAtribuir = (!jaGerouAntes && dataStr === primeiraDesteLote) ? equipaMolde : [];
         novosServicos.push({
           client_id: c.id, cn: c.name, addr: c.address, svc: c.service || "", t1: v.hora_inicio, t2: v.hora_fim,
           team: equipaAAtribuir, status: "pending", cl: c.checklist || [], prods: [], val: val,
@@ -3100,7 +3105,7 @@ function Routes() {
             return /* @__PURE__ */ React.createElement("div", { key: v.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #F1F5F9", opacity: v.ativo === false ? 0.5 : 1 } },
               /* @__PURE__ */ React.createElement("div", null,
                 /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#334155" } }, labelVolta(v), " \u2022 ", v.hora_inicio, "\u2013", v.hora_fim, v.ativo === false ? " (pausada)" : ""),
-                /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, "Equipa: ", (v.equipa || []).map(function(eid) { var e = emps.find(function(x) { return x.id === eid; }); return e ? e.name.split(" ")[0] : eid; }).join(", ") || "\u2014", " \u2022 Desde ", v.data_inicio)
+                /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, "Equipa: ", (v.equipa || []).map(function(eid) { var e = emps.find(function(x) { return x.id === eid; }); return e ? (e.name.split(" ")[0] + (e.ativo === false ? " (inactivo)" : "")) : eid; }).join(", ") || "\u2014", " \u2022 Desde ", v.data_inicio)
               ),
               /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } },
                 /* @__PURE__ */ React.createElement("button", { onClick: function() {
