@@ -2464,15 +2464,46 @@ function Routes() {
     setReforcoSel(null);
   }
   async function alocarEquipaAServico(membros, horaInicio, servicoAlvo, forcar) {
-    var conflitos = detectarConflito(membros, servicoAlvo.date, servicoAlvo.t1, servicoAlvo.t2, servicoAlvo.id);
+    // Turno novo: cria um SERVIÇO SEPARADO no mesmo dia/cliente, com o seu horário próprio.
+    // Assim os custos somam certo e cada colaborador vê a sua hora real. Valor = 0 (não duplica faturação).
+    var horaFim = window.prompt("Hora de fim deste turno (HH:MM):", servicoAlvo.t2 || "18:00");
+    if (!horaFim) return { bloqueado: false };
+    horaFim = horaFim.trim();
+    if (!/^\d{1,2}:\d{2}$/.test(horaFim)) { alert("Hora inv\xE1lida. Usa o formato HH:MM (ex: 17:00)."); return { bloqueado: false }; }
+    if (horaFim.length === 4) horaFim = "0" + horaFim;
+    if (horaFim <= horaInicio) { alert("A hora de fim tem de ser depois das " + horaInicio + "."); return { bloqueado: false }; }
+    var conflitos = detectarConflito(membros, servicoAlvo.date, horaInicio, horaFim, null);
     if (conflitos.length > 0 && !forcar) {
       return { bloqueado: true, conflitos: conflitos };
     }
-    var novaTeam = (servicoAlvo.team || []).slice();
-    membros.forEach(function(m) { if (novaTeam.indexOf(m) === -1) novaTeam.push(m); });
-    await updateJob(servicoAlvo.id, { team: novaTeam });
-    registarAlertaRota(servicoAlvo, "equipa", "Foste alocado como refor\xE7o a " + servicoAlvo.cn, membros);
-    alert("\u2713 Equipa alocada a " + servicoAlvo.cn + ".");
+    var novo = {
+      client_id: servicoAlvo.client_id,
+      cn: servicoAlvo.cn,
+      addr: servicoAlvo.addr || "",
+      svc: servicoAlvo.svc,
+      date: servicoAlvo.date,
+      t1: horaInicio,
+      t2: horaFim,
+      team: membros.slice(),
+      val: 0,
+      status: "pending",
+      obra_ref: servicoAlvo.obra_ref || null
+    };
+    try {
+      var res = await fetch(SUPABASE_URL + "/rest/v1/servicos", {
+        method: "POST",
+        headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }),
+        body: JSON.stringify(novo)
+      });
+      var criado = await res.json();
+      if (criado && criado[0]) {
+        setJobs(function(p) { return p.concat([criado[0]]); });
+        registarAlertaRota(criado[0], "novo", "Novo turno em " + servicoAlvo.cn + " (" + horaInicio + "\u2013" + horaFim + ")", membros);
+      }
+      alert("\u2713 Turno criado em " + servicoAlvo.cn + ": " + horaInicio + "\u2013" + horaFim + " (sem valor acrescido).");
+    } catch (e) {
+      alert("\u26A0 Erro ao criar o turno.");
+    }
     setEquipasLivresDia(null);
     setReforcoSel(null);
     return { bloqueado: false };
@@ -3411,7 +3442,7 @@ function Routes() {
                 /* @__PURE__ */ React.createElement("button", { onClick: function() { setReforcoSel(estaAberto ? null : { key: selKey, membros: eq.membros, hora: eq.ultimaHora, data: dia.data, conflitoJob: null }); }, style: Object.assign({}, btnO, { fontSize: 11, padding: "5px 10px" }) }, estaAberto ? "Fechar" : "Alocar")
               ),
               estaAberto && /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 8, padding: 10 } },
-                /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", marginBottom: 6 } }, "Refor\xE7ar um servi\xE7o deste dia:"),
+                /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", marginBottom: 6 } }, "Criar turno neste servi\xE7o (equipa entra depois):"),
                 dia.servicos.filter(function(s) { return s.team.slice().sort().join("+") !== eq.membros.join("+"); }).map(function(s) {
                   var conf = detectarConflito(eq.membros, dia.data, s.t1, s.t2, s.id);
                   var temConf = conf.length > 0;
