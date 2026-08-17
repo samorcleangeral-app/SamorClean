@@ -375,6 +375,11 @@ async function registarMovimentoStock(mov) {
     return true;
   } catch (e) { return false; }
 }
+function contaNoPeriodo(emp, jobsPeriodo) {
+  // Activo conta sempre. Inactivo só conta no período em que realmente participou (histórico).
+  if (emp.ativo !== false) return true;
+  return (jobsPeriodo || []).some(function(j) { return (j.team || []).indexOf(emp.id) !== -1; });
+}
 function normalizarItemStock(txt) {
   var s = (txt || "").toString().toLowerCase().trim();
   try { s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); } catch (e) {}
@@ -968,7 +973,7 @@ function Finance() {
   var custoOrdenadoGerenciaBase = ordenadoGerencia ? parseFloat(ordenadoGerencia.valor) || 0 : 0;
   var custoOrdenadoGerenciaSS = custoOrdenadoGerenciaBase * 0.2375;
   var custoOrdenadoGerenciaTotal = custoOrdenadoGerenciaBase + custoOrdenadoGerenciaSS;
-  const totalCustoMaoObraGeral = emps.reduce(function(s, e) {
+  const totalCustoMaoObraGeral = emps.filter(function(e) { return contaNoPeriodo(e, monthJobs); }).reduce(function(s, e) {
     return s + calcCustoColaboradorMes(e, rhData, absData, monthJobs, now, ajustesRecibo, premiosOpcionais).total;
   }, 0) + custoOrdenadoGerenciaTotal;
   const margemBruta = fatSemIva - totalCustos - totalCustoMaoObraGeral;
@@ -1121,7 +1126,7 @@ function Finance() {
     Object.keys(buckets).forEach(function(key) {
       var b = buckets[key];
       var jobsDoMes = last6Months.filter(function(j) { return j.date.slice(0, 7) === key; });
-      b.mo = emps.reduce(function(s, e) {
+      b.mo = emps.filter(function(e) { return contaNoPeriodo(e, jobsDoMes); }).reduce(function(s, e) {
         return s + calcCustoColaboradorMes(e, rhData, absData6Months, jobsDoMes, b.refDate).total;
       }, 0);
     });
@@ -1233,7 +1238,7 @@ function Finance() {
   }
   const METit = { cash_flow: "\uD83D\uDCB0 Cash Flow", margem_lucro: "\uD83D\uDCC8 Margem de Lucro", faturacao: "\uD83E\uDDFE Factura\xE7\xE3o", outro: "\uD83C\uDFAF Outro" };
 
-  var custosColab = emps.map(function(e) {
+  var custosColab = emps.filter(function(e) { return contaNoPeriodo(e, monthJobs); }).map(function(e) {
     var c = custoColaborador(e);
     var jobsEmp = monthJobs.filter(function(j) { return (j.team || []).indexOf(e.id) !== -1; });
     var horasEmp = jobsEmp.reduce(function(s, j) {
@@ -1773,6 +1778,7 @@ function Finance() {
         /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "\uD83C\uDF81 Prémio de assiduidade — Recibo Verde (opcional)"),
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 12 } }, "Para colaboradores a Recibo Verde, o prémio n\xE3o \xE9 autom\xE1tico \u2014 decides tu, colaborador a colaborador, se atribuis ou n\xE3o este m\xEAs."),
         emps.filter(function(e) {
+          if (e.ativo === false) return false;
           var rh = rhData.find(function(r) { return r.funcionario_id === e.id; });
           return rh && rh.tipo_contrato === "Recibo Verde";
         }).map(function(e) {
