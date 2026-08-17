@@ -355,6 +355,15 @@ function ChartCanvas(props) {
 function aplicaIva(val, ivaType) {
   return ivaType === "autoliquida\xE7\xE3o" ? (val || 0) : (val || 0) * 1.23;
 }
+function normalizarItemStock(txt) {
+  var s = (txt || "").toString().toLowerCase().trim();
+  try { s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); } catch (e) {}
+  s = s.replace(/^\s*\d+\s*[x\u00D7]?\s*/, "");
+  s = s.replace(/\s*[x\u00D7]\s*\d+\s*$/, "");
+  s = s.replace(/\s*\d+\s*(pares?|unidades?|uds?|un)?\s*$/, "");
+  s = s.replace(/[^a-z0-9]/g, "");
+  return s;
+}
 function calcValorFaturacao(c, jobs, horas) {
   var isOrcamento = c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda";
   if (isOrcamento) return { valor: jobs.reduce(function(s, j) { return s + (j.val || 0); }, 0), tipo: "orcamento" };
@@ -6098,7 +6107,17 @@ function Stock() {
       db.list("funcionarios", "?select=id,name&ativo=neq.false")
     ]).then(function(res) {
       var rows = (res[0] || []).filter(function(p) { return p.detalhes && p.detalhes.item; }).map(function(p) {
-        return { funcionario_id: p.funcionario_id, funcionario_nome: p.funcionario_nome, item: p.detalhes.item, quantidade: parseFloat(p.detalhes.quantidade) || 0, data: (p.created_at || "").slice(0, 10) };
+        return { funcionario_id: p.funcionario_id, funcionario_nome: p.funcionario_nome, item: p.detalhes.item, itemRaw: p.detalhes.item, chave: normalizarItemStock(p.detalhes.item), quantidade: parseFloat(p.detalhes.quantidade) || 0, data: (p.created_at || "").slice(0, 10) };
+      });
+      // Unificar grafias diferentes do mesmo produto (versão antiga era texto livre)
+      var rotulo = {};
+      rows.forEach(function(r) {
+        var k = r.chave || (r.itemRaw || "").toLowerCase();
+        if (!rotulo[k] || (r.itemRaw || "").length > rotulo[k].length) rotulo[k] = r.itemRaw || "?";
+      });
+      rows.forEach(function(r) {
+        var k = r.chave || (r.itemRaw || "").toLowerCase();
+        r.item = rotulo[k] || r.itemRaw;
       });
       setConsumos(rows);
       setEmpsList(res[1] || []);
