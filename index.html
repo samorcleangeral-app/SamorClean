@@ -7419,7 +7419,28 @@ function RelatorioMensal() {
     });
     const byEmp = {};
     (funcs || []).forEach(function(f) {
-      byEmp[f.id] = { name: f.name, servicos: 0, horas: 0, faltas: 0, parciais: 0, atrasos: 0, avsStars: [], rating: f.rating };
+      byEmp[f.id] = { name: f.name, servicos: 0, horas: 0, faltas: 0, faltasJust: 0, faltasInjust: 0, semPicagem: 0, parciais: 0, atrasos: 0, avsStars: [], rating: f.rating };
+    });
+    // Faltas registadas pela gestão (tabela de ausências) — dias úteis dentro do mês do relatório
+    (absData || []).forEach(function(a) {
+      if (!byEmp[a.funcionario_id] || !a.data_inicio) return;
+      var tipoA = (a.tipo || "").toLowerCase();
+      if (tipoA.indexOf("falta") === -1) return;
+      var ini = new Date(a.data_inicio + "T12:00:00");
+      var fimA = new Date((a.data_fim || a.data_inicio) + "T12:00:00");
+      var mIni = new Date(ano, mes, 1), mFim = new Date(ano, mes + 1, 0);
+      if (ini < mIni) ini = new Date(mIni);
+      if (fimA > mFim) fimA = new Date(mFim);
+      var d = new Date(ini), conta = 0;
+      while (d <= fimA) {
+        var dow = d.getDay();
+        if (dow !== 0 && dow !== 6) conta++;
+        d.setDate(d.getDate() + 1);
+      }
+      if (conta <= 0) return;
+      byEmp[a.funcionario_id].faltas += conta;
+      if (tipoA.indexOf("injustificada") !== -1) byEmp[a.funcionario_id].faltasInjust += conta;
+      else if (tipoA.indexOf("justificada") !== -1) byEmp[a.funcionario_id].faltasJust += conta;
     });
     (servicos || []).forEach(function(j) {
       (j.team || []).forEach(function(eid) {
@@ -7431,7 +7452,7 @@ function RelatorioMensal() {
           const h = (o[0] * 60 + o[1] - i[0] * 60 - i[1]) / 60;
           if (h > 0 && h < 16) byEmp[eid].horas += h;
         }
-        if (!j.check_in && j.status === "completed") byEmp[eid].faltas++;
+        if (!j.check_in && j.status === "completed") byEmp[eid].semPicagem++;
         if (j.early_leave && j.early_leave.indexOf && j.early_leave.indexOf(eid) !== -1) byEmp[eid].parciais++;
         if (j.check_in && j.t1) {
           const prev = j.t1.split(":").map(Number);
@@ -7502,7 +7523,7 @@ function RelatorioMensal() {
         <td style="padding:8px 10px;text-align:center">${e.servicos}</td>
         <td style="padding:8px 10px;text-align:center">${e.horas.toFixed(1)}h</td>
         <td style="padding:8px 10px;text-align:center;font-weight:700;color:${prod >= 80 ? "#15803D" : prod >= 60 ? "#92400E" : "#DC2626"}">${prod}%</td>
-        <td style="padding:8px 10px;text-align:center;color:#DC2626">${e.faltas}</td>
+        <td style="padding:8px 10px;text-align:center;color:#DC2626">${e.faltas > 0 ? e.faltas + (e.faltasInjust > 0 ? " (" + e.faltasInjust + " inj.)" : "") : 0}</td><td style="padding:8px 10px;text-align:center;color:#F59E0B">${e.semPicagem}</td>
         <td style="padding:8px 10px;text-align:center;color:#F59E0B">${e.parciais}</td>
         <td style="padding:8px 10px;text-align:center;color:#EF4444">${e.atrasos}</td>
         <td style="padding:8px 10px;text-align:center">${mediaAvs} ${stars}</td>
@@ -7572,7 +7593,7 @@ function RelatorioMensal() {
 
     <h2>Desempenho dos Colaboradores</h2>
     <table><thead><tr>
-      <th>Colaborador</th><th style="text-align:center">Servi\xE7os</th><th style="text-align:center">Horas reais</th><th style="text-align:center">Produtividade</th><th style="text-align:center">Faltas</th><th style="text-align:center">Parciais</th><th style="text-align:center">Atrasos</th><th style="text-align:center">Avalia\xE7\xE3o</th>
+      <th>Colaborador</th><th style="text-align:center">Servi\xE7os</th><th style="text-align:center">Horas reais</th><th style="text-align:center">Produtividade</th><th style="text-align:center">Faltas</th><th style="text-align:center">Sem picagem</th><th style="text-align:center">Parciais</th><th style="text-align:center">Atrasos</th><th style="text-align:center">Avalia\xE7\xE3o</th>
     </tr></thead><tbody>${empRows}</tbody></table>
 
     <h2>Operacional</h2>
@@ -7623,7 +7644,7 @@ function RelatorioMensal() {
     { l: "Custo desloca\xE7\xE3o (est.)", v: data.custoKm.toFixed(2) + "\u20AC", c: "#F59E0B" }
   ].map(function(k) {
     return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 16 }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, k.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: k.c } }, k.v));
-  })), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Desempenho dos Colaboradores"), /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { borderBottom: "2px solid #E2EBF4" } }, ["Colaborador", "Servi\xE7os", "Horas reais", "Produtividade", "Faltas", "Atrasos", "Avalia\xE7\xE3o"].map(function(h) {
+  })), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Desempenho dos Colaboradores"), /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { borderBottom: "2px solid #E2EBF4" } }, ["Colaborador", "Servi\xE7os", "Horas reais", "Produtividade", "Faltas", "Sem picagem", "Atrasos", "Avalia\xE7\xE3o"].map(function(h) {
     return /* @__PURE__ */ React.createElement("th", { key: h, style: { padding: "8px 10px", textAlign: "left", fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, h);
   }))), /* @__PURE__ */ React.createElement("tbody", null, Object.values(data.byEmp).filter(function(e) {
     return e.servicos > 0;
@@ -7633,7 +7654,7 @@ function RelatorioMensal() {
     const mediaAvs = e.avsStars.length > 0 ? (e.avsStars.reduce(function(s, x) {
       return s + x;
     }, 0) / e.avsStars.length).toFixed(1) : "\u2014";
-    return /* @__PURE__ */ React.createElement("tr", { key: e.name, style: { borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 600, color: "#1A3A5C" } }, e.name), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", textAlign: "center" } }, e.servicos), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", textAlign: "center" } }, e.horas.toFixed(1), "h"), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("span", { style: { background: prod >= 80 ? "#DCFCE7" : prod >= 60 ? "#FEF3C7" : "#FEE2E2", color: prod >= 80 ? "#15803D" : prod >= 60 ? "#92400E" : "#DC2626", borderRadius: 6, padding: "2px 8px", fontWeight: 700, fontSize: 12 } }, prod, "%")), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", textAlign: "center", color: "#EF4444", fontWeight: 700 } }, e.faltas), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", textAlign: "center", color: e.atrasos > 0 ? "#F59E0B" : "#16A34A", fontWeight: 700 } }, e.atrasos), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", textAlign: "center" } }, mediaAvs));
+    return /* @__PURE__ */ React.createElement("tr", { key: e.name, style: { borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 600, color: "#1A3A5C" } }, e.name), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", textAlign: "center" } }, e.servicos), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", textAlign: "center" } }, e.horas.toFixed(1), "h"), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("span", { style: { background: prod >= 80 ? "#DCFCE7" : prod >= 60 ? "#FEF3C7" : "#FEE2E2", color: prod >= 80 ? "#15803D" : prod >= 60 ? "#92400E" : "#DC2626", borderRadius: 6, padding: "2px 8px", fontWeight: 700, fontSize: 12 } }, prod, "%")), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", textAlign: "center", color: "#EF4444", fontWeight: 700 }, title: e.faltasJust + " justificada(s), " + e.faltasInjust + " injustificada(s)" }, e.faltas), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", textAlign: "center", color: e.semPicagem > 0 ? "#F59E0B" : "#94A3B8", fontWeight: 700 } }, e.semPicagem), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", textAlign: "center", color: e.atrasos > 0 ? "#F59E0B" : "#16A34A", fontWeight: 700 } }, e.atrasos), /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", textAlign: "center" } }, mediaAvs));
   })))))));
 }
 function Avaliacoes() {
