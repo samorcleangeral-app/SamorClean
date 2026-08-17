@@ -355,6 +355,26 @@ function ChartCanvas(props) {
 function aplicaIva(val, ivaType) {
   return ivaType === "autoliquida\xE7\xE3o" ? (val || 0) : (val || 0) * 1.23;
 }
+async function encontrarProdutoStock(nomeItem) {
+  // Só produtos do catálogo — comparação tolerante a maiúsculas/acentos/quantidades no nome
+  var chave = normalizarItemStock(nomeItem);
+  if (!chave) return null;
+  var todos = await db.list("stock_produtos", "?select=*");
+  var exacto = (todos || []).find(function(p) { return normalizarItemStock(p.nome) === chave; });
+  return exacto || null;
+}
+async function registarMovimentoStock(mov) {
+  try {
+    var res = await fetch(SUPABASE_URL + "/rest/v1/stock_movimentos", {
+      method: "POST",
+      headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }),
+      body: JSON.stringify(mov)
+    });
+    if (res.status === 409) return "duplicado";
+    if (!res.ok) return false;
+    return true;
+  } catch (e) { return false; }
+}
 function normalizarItemStock(txt) {
   var s = (txt || "").toString().toLowerCase().trim();
   try { s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); } catch (e) {}
@@ -5547,6 +5567,19 @@ function PedidosColab(props) {
       headers: dbHeaders(),
       body: JSON.stringify({ estado, resposta })
     });
+    if (estado !== "aprovado" && selPedido && selPedido.estado === "aprovado" && selPedido.tipo === "material" && selPedido.detalhes && selPedido.detalhes.item) {
+      var revProd = await encontrarProdutoStock(selPedido.detalhes.item);
+      var movs = await db.list("stock_movimentos", "?select=*&pedido_id=eq." + id);
+      if (revProd && movs && movs.length > 0) {
+        var qtdDev = parseFloat(movs[0].quantidade) || 0;
+        await fetch(SUPABASE_URL + "/rest/v1/stock_produtos?id=eq." + revProd.id, {
+          method: "PATCH", headers: dbHeaders(),
+          body: JSON.stringify({ quantidade: (parseFloat(revProd.quantidade) || 0) + qtdDev })
+        });
+        await fetch(SUPABASE_URL + "/rest/v1/stock_movimentos?id=eq." + movs[0].id, { method: "DELETE", headers: dbHeaders() });
+        alert("\u2713 O stock de \"" + revProd.nome + "\" foi reposto (+" + qtdDev + ") \u2014 o pedido deixou de estar aprovado.");
+      }
+    }
     if (estado !== "aprovado" && selPedido && selPedido.estado === "aprovado" && selPedido.tipo === "ausencia" && selPedido.detalhes) {
       var detRev = selPedido.detalhes;
       await fetch(SUPABASE_URL + "/rest/v1/ausencias?funcionario_id=eq." + encodeURIComponent(selPedido.funcionario_id) + "&data_inicio=eq." + detRev.data_inicio + "&data_fim=eq." + (detRev.data_fim || detRev.data_inicio), {
@@ -5587,20 +5620,30 @@ function PedidosColab(props) {
     }
     if (estado === "aprovado" && selPedido && selPedido.tipo === "material" && selPedido.detalhes && selPedido.detalhes.item) {
       var detM = selPedido.detalhes;
-      var stockRows = await db.list("stock_produtos", "?select=*&nome=eq." + encodeURIComponent(detM.item));
-      if (stockRows && stockRows.length > 0) {
-        var prod = stockRows[0];
-        var novaQtd = Math.max(0, (parseFloat(prod.quantidade) || 0) - (parseFloat(detM.quantidade) || 0));
-        await fetch(SUPABASE_URL + "/rest/v1/stock_produtos?id=eq." + prod.id, {
-          method: "PATCH",
-          headers: dbHeaders(),
-          body: JSON.stringify({ quantidade: novaQtd })
+      var prod = await encontrarProdutoStock(detM.item);
+      if (prod) {
+        var qtdPedida = parseFloat(detM.quantidade) || 0;
+        var atual = parseFloat(prod.quantidade) || 0;
+        var novaQtd = atual - qtdPedida;
+        var okMov = await registarMovimentoStock({
+          produto_id: prod.id, produto_nome: prod.nome, tipo: "saida", quantidade: qtdPedida,
+          motivo: "Pedido de material aprovado", funcionario_id: selPedido.funcionario_id,
+          funcionario_nome: selPedido.funcionario_nome, pedido_id: id
         });
-        if (novaQtd <= (parseFloat(prod.quantidade_minima) || 0)) {
-          alert("\u26A0 Stock de \"" + detM.item + "\" ficou em " + novaQtd + " \u2014 j\xE1 est\xE1 no ou abaixo do m\xEDnimo definido.");
+        if (okMov === "duplicado") {
+          alert("\u2139 Este pedido j\xE1 tinha descontado do stock \u2014 n\xE3o foi descontado outra vez.");
+        } else if (okMov) {
+          await fetch(SUPABASE_URL + "/rest/v1/stock_produtos?id=eq." + prod.id, {
+            method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ quantidade: novaQtd })
+          });
+          if (novaQtd < 0) {
+            alert("\u26A0 ATEN\xC7\xC3O: o stock de \"" + prod.nome + "\" ficou NEGATIVO (" + novaQtd + "). Foi entregue mais do que havia registado \u2014 confirma a contagem real.");
+          } else if (novaQtd <= (parseFloat(prod.quantidade_minima) || 0)) {
+            alert("\u26A0 Stock de \"" + prod.nome + "\" ficou em " + novaQtd + " \u2014 no ou abaixo do m\xEDnimo definido.");
+          }
         }
       } else {
-        alert("\u26A0 O pedido foi aprovado, mas n\xE3o encontrei \"" + detM.item + "\" no Stock para descontar automaticamente. Ajusta manualmente se necess\xE1rio.");
+        alert("\u26A0 O pedido foi aprovado, mas \"" + detM.item + "\" n\xE3o existe no cat\xE1logo do Stock \u2014 nada foi descontado. Cria o produto no Stock se for para controlar.");
       }
     }
     var pedidosAtualizados = pedidos.map(function(x) {
@@ -6090,6 +6133,12 @@ function Stock() {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade", preco_unitario: "" });
+  const [movimentos, setMovimentos] = useState([]);
+  const [verHistorico, setVerHistorico] = useState(false);
+  function carregarMovimentos() {
+    db.list("stock_movimentos", "?select=*&order=created_at.desc&limit=200").then(function(r) { setMovimentos(r || []); });
+  }
+  useEffect(function() { carregarMovimentos(); }, []);
   const [q, setQ] = useState("");
   const [showAnalise, setShowAnalise] = useState(false);
   const [consumos, setConsumos] = useState([]);
@@ -6132,6 +6181,9 @@ function Stock() {
   async function salvar() {
     if (!form.nome.trim()) return;
     var payload = { nome: form.nome.trim(), quantidade: parseFloat(form.quantidade) || 0, quantidade_minima: parseFloat(form.quantidade_minima) || 0, unidade: form.unidade || "unidade", preco_unitario: parseFloat(form.preco_unitario) || 0 };
+    // Ao EDITAR, a quantidade não é tocada (evita sobrepor saídas entretanto registadas).
+    // A quantidade altera-se pelos botões +/- (que geram movimento) ou pelo ajuste de contagem.
+    if (editId) delete payload.quantidade;
     if (editId) {
       var res = await fetch(SUPABASE_URL + "/rest/v1/stock_produtos?id=eq." + editId, {
         method: "PATCH",
@@ -6158,7 +6210,14 @@ function Stock() {
     setForm({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade", preco_unitario: "" });
   }
   async function ajustarQtd(prod, delta) {
-    var nova = Math.max(0, (parseFloat(prod.quantidade) || 0) + delta);
+    var nova = (parseFloat(prod.quantidade) || 0) + delta;
+    if (nova < 0) { alert("\u26A0 N\xE3o d\xE1 para ficar abaixo de zero. Se saiu mais do que havia, corrige a contagem real no produto."); return; }
+    await registarMovimentoStock({
+      produto_id: prod.id, produto_nome: prod.nome,
+      tipo: delta > 0 ? "entrada" : "saida", quantidade: Math.abs(delta),
+      motivo: delta > 0 ? "Ajuste manual (+)" : "Ajuste manual (-)"
+    });
+    carregarMovimentos();
     var res = await fetch(SUPABASE_URL + "/rest/v1/stock_produtos?id=eq." + prod.id, {
       method: "PATCH",
       headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }),
@@ -6182,8 +6241,24 @@ function Stock() {
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 900, fontSize: 20, color: "#1A3A5C" } }, "\uD83D\uDCCB Stock"),
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } },
         /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowAnalise(function(s) { return !s; }); }, style: Object.assign({}, btnO, { background: showAnalise ? "#F5F3FF" : undefined, border: showAnalise ? "1.5px solid #7C3AED" : undefined }) }, "\uD83D\uDCCA An\xE1lise de Consumo"),
-        /* @__PURE__ */ React.createElement("button", { onClick: function() { setForm({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade", preco_unitario: "" }); setEditId(null); setShowForm(true); }, style: btn }, "+ Novo Produto")
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setForm({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade", preco_unitario: "" }); setEditId(null); setShowForm(true); }, style: btn }, "+ Novo Produto"),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setVerHistorico(!verHistorico); }, style: Object.assign({}, btnO, { marginLeft: 8 }) }, verHistorico ? "Fechar hist\xF3rico" : "\uD83D\uDCCB Hist\xF3rico de movimentos")
       )
+    ),
+    verHistorico && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "\uD83D\uDCCB Hist\xF3rico de movimentos"),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 12 } }, "Todas as entradas e sa\xEDdas registadas (\xFAltimas 200)."),
+      movimentos.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 16, color: "#94A3B8", fontSize: 12 } }, "Ainda sem movimentos registados.") :
+      /* @__PURE__ */ React.createElement("div", { style: { maxHeight: 380, overflowY: "auto" } }, movimentos.map(function(m) {
+        var ent = m.tipo === "entrada";
+        return /* @__PURE__ */ React.createElement("div", { key: m.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F1F5F9", gap: 10 } },
+          /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } },
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#1A3A5C" } }, m.produto_nome || "\u2014"),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8" } }, new Date(m.created_at).toLocaleDateString("pt-PT", { day: "2-digit", month: "short", year: "numeric" }), " \u00B7 ", m.motivo || "", m.funcionario_nome ? " \u00B7 " + m.funcionario_nome : "")
+          ),
+          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 800, color: ent ? "#16A34A" : "#DC2626", whiteSpace: "nowrap" } }, ent ? "+" : "\u2212", fmt(parseFloat(m.quantidade) || 0))
+        );
+      }))
     ),
     showAnalise && /* @__PURE__ */ React.createElement(StockAnalise, { consumos, empsList, produtos, analiseTipo, setAnaliseTipo, filtroColabs, setFiltroColabs, filtroProdutos, setFiltroProdutos, dataInicio, setDataInicio, dataFim, setDataFim }),
     emBaixo.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#FEF2F2", border: "1.5px solid #EF4444" }) },
@@ -6195,7 +6270,7 @@ function Stock() {
       /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr", gap: 10, marginBottom: 14 } },
         /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Nome"), /* @__PURE__ */ React.createElement("input", { style: inp, value: form.nome, onChange: function(e) { setForm(Object.assign({}, form, { nome: e.target.value })); } })),
         /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Unidade"), /* @__PURE__ */ React.createElement("select", { style: inp, value: form.unidade, onChange: function(e) { setForm(Object.assign({}, form, { unidade: e.target.value })); } }, ["unidade", "litro", "kg", "caixa", "pack"].map(function(u) { return /* @__PURE__ */ React.createElement("option", { key: u, value: u }, u); }))),
-        /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Quantidade"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", value: form.quantidade, onFocus: function(e) { e.target.select(); }, onChange: function(e) { setForm(Object.assign({}, form, { quantidade: e.target.value })); } })),
+        /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Quantidade", editId ? " (n\xE3o edit\xE1vel aqui)" : ""), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, editId ? { background: "#F1F5F9", color: "#94A3B8" } : {}), type: "number", disabled: !!editId, value: form.quantidade, onFocus: function(e) { e.target.select(); }, onChange: function(e) { setForm(Object.assign({}, form, { quantidade: e.target.value })); } }), editId && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 3 } }, "Usa os bot\xF5es +/- na lista \u2014 assim fica registado no hist\xF3rico.")),
         /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "M\xEDnimo (avisa abaixo disto)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", value: form.quantidade_minima, onFocus: function(e) { e.target.select(); }, onChange: function(e) { setForm(Object.assign({}, form, { quantidade_minima: e.target.value })); } })),
         /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Pre\xE7o/unid. (\u20AC)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: form.preco_unitario, onFocus: function(e) { e.target.select(); }, onChange: function(e) { setForm(Object.assign({}, form, { preco_unitario: e.target.value })); } }))
       ),
