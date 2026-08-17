@@ -2599,7 +2599,7 @@ function Routes() {
   useEffect(function() {
     Promise.all([
       db.list("servicos", "?select=*&order=date"),
-      db.list("funcionarios", "?select=*&ativo=neq.false&order=id"),
+      db.list("funcionarios", "?select=*&order=id"),
       db.list("clientes", "?select=*&order=id"),
       db.list("ausencias", "?select=*")
     ]).then(function(r) {
@@ -3018,7 +3018,7 @@ function Routes() {
           /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } },
             /* @__PURE__ */ React.createElement("label", { style: lbl }, "Equipa"),
             /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 } },
-              emps.map(function(e) {
+              emps.filter(function(e) { return e.ativo !== false; }).map(function(e) {
                 var sel = novaVolta.equipa.indexOf(e.id) !== -1;
                 return /* @__PURE__ */ React.createElement("button", { key: e.id, onClick: function() {
                   var eq = sel ? novaVolta.equipa.filter(function(x) { return x !== e.id; }) : novaVolta.equipa.concat([e.id]);
@@ -3268,7 +3268,7 @@ function Routes() {
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, "\uD83D\uDCCA Produtividade da Equipa (refer\xEAncia: 40h/semana)"),
       /* @__PURE__ */ React.createElement("button", { onClick: function() { exportarProdutividadePDF(); }, style: Object.assign({}, btnO, { fontSize: 11, padding: "5px 10px" }) }, "\uD83D\uDCC4 Exportar PDF")
     ),
-    emps.map(function(e) {
+    emps.filter(function(e) { return e.ativo !== false; }).map(function(e) {
       const horasSemana = wJobs.filter(function(j) { return (j.team || []).indexOf(e.id) !== -1; }).reduce(function(s, j) { return s + horasReais(j.t1, j.t2); }, 0);
       const pct = Math.round(horasSemana / 40 * 100);
       const cor = pct >= 90 ? "#16A34A" : pct >= 60 ? "#F59E0B" : "#EF4444";
@@ -3289,7 +3289,7 @@ function Routes() {
       }),
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#2E6DA4", fontWeight: 700, textAlign: "center" } }, "Total")
     ),
-    emps.map(function(e) {
+    emps.filter(function(e) { return e.ativo !== false; }).map(function(e) {
       const diasSemanaTabela = dates;
       const diasAusenteTabela = diasSemanaTabela.filter(function(d) { return isEmpAusente(e.id, d); });
       const ausente = diasAusenteTabela.length >= diasSemanaTabela.length;
@@ -3354,7 +3354,7 @@ function Routes() {
     return /* @__PURE__ */ React.createElement("option", { key: t }, t);
   })))), /* @__PURE__ */ React.createElement("button", { onClick: moveJob, style: Object.assign({}, btnG, { width: "100%", textAlign: "center" }) }, "Confirmar")), popupAction === "team" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setPopupAction(null);
-  }, style: Object.assign({}, btnX, { padding: "4px 8px" }) }, "\u2190"), /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C" } }, "Alterar equipa")), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, emps.map(function(e) {
+  }, style: Object.assign({}, btnX, { padding: "4px 8px" }) }, "\u2190"), /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C" } }, "Alterar equipa")), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, emps.filter(function(e) { return e.ativo !== false; }).map(function(e) {
     const inTeam = (selJob.team || []).indexOf(e.id) !== -1;
     const ausente = isEmpAusente(e.id, selJob.date, selJob.t1, selJob.t2);
     const conflito = !inTeam && jobs.some(function(j) {
@@ -3906,7 +3906,7 @@ function Clients() {
   useEffect(function() {
     Promise.all([
       db.list("clientes", "?select=*&order=id"),
-      db.list("funcionarios", "?select=*&ativo=neq.false&order=id"),
+      db.list("funcionarios", "?select=*&order=id"),
       db.list("client_notes", "?select=client_id&vista_gestao=eq.false&expires_at=gte." + new Date().toISOString())
     ]).then(function(results) {
       setClients(results[0] || []);
@@ -5122,7 +5122,7 @@ function Formacao() {
   const [form, setForm] = useState({ name: "", cat: "Documentação Interna", role: "Todos", empId: "" });
   const [emps, setEmps] = useState([]);
   useEffect(function() {
-    db.list("funcionarios", "?select=id,name&ativo=neq.false&order=name").then(function(rows) { setEmps(rows || []); });
+    db.list("funcionarios", "?select=id,name&order=name").then(function(rows) { setEmps(rows || []); });
   }, []);
   const [file, setFile] = useState(null);
   const [filtCat, setFiltCat] = useState("Todos");
@@ -5218,7 +5218,7 @@ function Formacao() {
     setForm(Object.assign({}, form, { role: e.target.value, empId: "" }));
   } }, FORM_ROLES.map(function(r) {
     return /* @__PURE__ */ React.createElement("option", { key: r }, r);
-  })))), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Envio individual (opcional)"), /* @__PURE__ */ React.createElement("select", { style: inp, value: form.empId, onChange: function(e) { setForm(Object.assign({}, form, { empId: e.target.value, role: e.target.value ? "individual" : form.role })); } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "— Nenhum (usa destinatário acima) —"), emps.map(function(e) { return /* @__PURE__ */ React.createElement("option", { key: e.id, value: e.id }, e.name); }))), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 20 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Ficheiro PDF"), /* @__PURE__ */ React.createElement("input", { type: "file", accept: ".pdf", onChange: function(e) {
+  })))), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Envio individual (opcional)"), /* @__PURE__ */ React.createElement("select", { style: inp, value: form.empId, onChange: function(e) { setForm(Object.assign({}, form, { empId: e.target.value, role: e.target.value ? "individual" : form.role })); } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "— Nenhum (usa destinatário acima) —"), emps.filter(function(e) { return e.ativo !== false; }).map(function(e) { return /* @__PURE__ */ React.createElement("option", { key: e.id, value: e.id }, e.name); }))), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 20 } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Ficheiro PDF"), /* @__PURE__ */ React.createElement("input", { type: "file", accept: ".pdf", onChange: function(e) {
     setFile(e.target.files[0]);
   }, style: { width: "100%", padding: "8px", border: "1.5px solid #E2EBF4", borderRadius: 8, fontSize: 13 } }), file && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 4 } }, file.name, " \u2014 ", fmtSize(file.size))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setShowAdd(false);
@@ -5426,7 +5426,7 @@ function NotasOperacionais() {
   useEffect(function() {
     Promise.all([
       db.list("notas_operacionais", "?select=*&order=created_at.desc"),
-      db.list("funcionarios", "?select=id,name&ativo=neq.false&order=name")
+      db.list("funcionarios", "?select=id,name&order=name")
     ]).then(function(r) {
       setNotas(r[0] || []);
       setEmps(r[1] || []);
@@ -5483,7 +5483,7 @@ function NotasOperacionais() {
           /* @__PURE__ */ React.createElement("label", { style: lbl }, "Destinat\xE1rio"),
           /* @__PURE__ */ React.createElement("select", { style: inp, value: form.emp_id, onChange: function(e) { setForm(Object.assign({}, form, { emp_id: e.target.value })); } },
             /* @__PURE__ */ React.createElement("option", { value: "" }, "Toda a equipa"),
-            emps.map(function(e) { return /* @__PURE__ */ React.createElement("option", { key: e.id, value: e.id }, e.name); })
+            emps.filter(function(e) { return e.ativo !== false; }).map(function(e) { return /* @__PURE__ */ React.createElement("option", { key: e.id, value: e.id }, e.name); })
           )
         ),
         form.tipo === "provisoria" && /* @__PURE__ */ React.createElement("div", null,
