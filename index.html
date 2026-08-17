@@ -551,6 +551,9 @@ function Finance() {
   const [clientes, setClientes] = useState([]);
   const [pagamentosAvenca, setPagamentosAvenca] = useState([]);
   const [avencaParcialEdit, setAvencaParcialEdit] = useState({});
+  const [pagMovimentos, setPagMovimentos] = useState([]);
+  const [pagDataEdit, setPagDataEdit] = useState({});
+  const [pagFormAberto, setPagFormAberto] = useState(null);
   const [alertasFreq, setAlertasFreq] = useState([]);
   const [rhData, setRhData] = useState([]);
   const [emps, setEmps] = useState([]);
@@ -623,6 +626,7 @@ function Finance() {
       setClientsMap(cm);
       setClientes(results[2] || []);
       setPagamentosAvenca(results[18] || []);
+      db.list("pagamentos_movimentos", "?select=*&order=data_pagamento.desc").then(function(mv) { setPagMovimentos(mv || []); });
       setDespesas(results[3] || []);
       setRhData(results[5] || []);
       setEmps(results[6] || []);
@@ -673,7 +677,79 @@ function Finance() {
   function valorPendenteDoJob(j) {
     return Math.max(0, withIva(j.val || 0, j) - valorPagoDoJob(j));
   }
+  // ─── Movimentos de pagamento (histórico com data) ───
+  function movimentosDoMes(cid, mes) {
+    return pagMovimentos.filter(function(m) { return m.client_id === cid && m.mes === mes; })
+      .sort(function(a, b) { return a.data_pagamento < b.data_pagamento ? 1 : -1; });
+  }
+  function totalPagoMovimentos(cid, mes) {
+    return movimentosDoMes(cid, mes).reduce(function(s, m) { return s + (parseFloat(m.valor) || 0); }, 0);
+  }
+  async function registarPagamento(cid, mes, valorComIva, dataPag, nota) {
+    try {
+      var res = await fetch(SUPABASE_URL + "/rest/v1/pagamentos_movimentos", {
+        method: "POST",
+        headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }),
+        body: JSON.stringify({ client_id: cid, mes: mes, data_pagamento: dataPag, valor: valorComIva, nota: nota || null })
+      });
+      var novo = await res.json();
+      if (novo && novo[0]) setPagMovimentos(function(p) { return [novo[0]].concat(p); });
+      setPagFormAberto(null);
+    } catch (e) { alert("\u26A0 Erro ao registar o pagamento."); }
+  }
+  async function apagarPagamento(movId) {
+    if (!window.confirm("Apagar este pagamento do hist\xF3rico?")) return;
+    try {
+      await fetch(SUPABASE_URL + "/rest/v1/pagamentos_movimentos?id=eq." + movId, { method: "DELETE", headers: dbHeaders() });
+      setPagMovimentos(function(p) { return p.filter(function(m) { return m.id !== movId; }); });
+    } catch (e) { alert("\u26A0 Erro ao apagar."); }
+  }
   var mesActualStr = localDateStr().slice(0, 7);
+  function renderPagamentoBloco(cid, mes, totalComIva, pagoComIva) {
+    var movs = movimentosDoMes(cid, mes);
+    var falta = Math.max(0, totalComIva - pagoComIva);
+    var chave = cid + mes;
+    var aberto = pagFormAberto === chave;
+    var valorEdit = avencaParcialEdit[chave] !== undefined ? avencaParcialEdit[chave] : (falta > 0.01 ? falta.toFixed(2) : "");
+    var dataEdit = pagDataEdit[chave] !== undefined ? pagDataEdit[chave] : localDateStr();
+    return /* @__PURE__ */ React.createElement("div", null,
+      movs.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10, marginBottom: 10, borderTop: "1px solid #E2E8F0", paddingTop: 8 } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 800, color: "#64748B", textTransform: "uppercase", marginBottom: 6 } }, "Hist\xF3rico de pagamentos"),
+        movs.map(function(m) {
+          return /* @__PURE__ */ React.createElement("div", { key: m.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, padding: "4px 0", color: "#334155" } },
+            /* @__PURE__ */ React.createElement("span", null, new Date(m.data_pagamento + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "short", year: "numeric" })),
+            /* @__PURE__ */ React.createElement("span", { style: { display: "flex", gap: 8, alignItems: "center" } },
+              /* @__PURE__ */ React.createElement("strong", null, fmt(parseFloat(m.valor) || 0), "\u20AC"),
+              /* @__PURE__ */ React.createElement("button", { onClick: function() { apagarPagamento(m.id); }, style: { background: "none", border: "none", color: "#CBD5E1", cursor: "pointer", fontSize: 13, padding: 0 }, title: "Apagar" }, "\u2715")
+            )
+          );
+        })
+      ),
+      falta > 0.01 && !aberto && /* @__PURE__ */ React.createElement("button", { onClick: function() { setPagFormAberto(chave); }, style: Object.assign({}, btnG, { fontSize: 12, padding: "8px 16px", width: "100%" }) }, "+ Registar pagamento"),
+      falta > 0.01 && aberto && /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 8, padding: 10, marginTop: 8 } },
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" } },
+          /* @__PURE__ */ React.createElement("div", null,
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", marginBottom: 2 } }, "Data do pagamento"),
+            /* @__PURE__ */ React.createElement("input", { type: "date", value: dataEdit, style: Object.assign({}, inp, { padding: "5px 8px", fontSize: 12 }), onChange: function(e) { setPagDataEdit(Object.assign({}, pagDataEdit, { [chave]: e.target.value })); } })
+          ),
+          /* @__PURE__ */ React.createElement("div", null,
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", marginBottom: 2 } }, "Valor (\u20AC c/IVA)"),
+            /* @__PURE__ */ React.createElement("input", { type: "number", step: "0.01", value: valorEdit, style: Object.assign({}, inp, { width: 110, padding: "5px 8px", fontSize: 12 }), onFocus: function(e) { e.target.select(); }, onChange: function(e) { setAvencaParcialEdit(Object.assign({}, avencaParcialEdit, { [chave]: e.target.value })); } })
+          )
+        ),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } },
+          /* @__PURE__ */ React.createElement("button", { onClick: function() {
+            var v = parseFloat(valorEdit);
+            if (isNaN(v) || v <= 0) { alert("Indica um valor v\xE1lido."); return; }
+            if (!dataEdit) { alert("Indica a data do pagamento."); return; }
+            registarPagamento(cid, mes, v, dataEdit, null);
+          }, style: Object.assign({}, btnG, { fontSize: 12, padding: "7px 14px", flex: 1 }) }, "\u2713 Guardar pagamento"),
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { setPagFormAberto(null); }, style: Object.assign({}, btnX, { fontSize: 12, padding: "7px 14px" }) }, "Cancelar")
+        ),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 6 } }, "Em falta: ", fmt(falta), "\u20AC")
+      )
+    );
+  }
   function isClienteMensal(cid) {
     var c = clientsMap[cid];
     return c && c.tipo_faturacao === "mensal";
@@ -692,12 +768,7 @@ function Finance() {
     return (c && c.iva_type === "autoliquida\xE7\xE3o") ? base : base * 1.23;
   }
   function avencaPagoComIva(cid, mes) {
-    var pg = avencaPagamento(cid, mes);
-    if (!pg) return 0;
-    if (pg.pago_total) return avencaComIva(cid);
-    var c = clientsMap[cid];
-    var parcial = parseFloat(pg.valor_pago) || 0;
-    return (c && c.iva_type === "autoliquida\xE7\xE3o") ? parcial : parcial * 1.23;
+    return Math.min(totalPagoMovimentos(cid, mes), avencaComIva(cid));
   }
   function avencaPendenteComIva(cid, mes) {
     return Math.max(0, avencaComIva(cid) - avencaPagoComIva(cid, mes));
@@ -748,12 +819,7 @@ function Finance() {
     return (c.iva_type === "autoliquida\xE7\xE3o") ? base : base * 1.23;
   }
   function visitaPagoMesComIva(cid, mes) {
-    var pg = avencaPagamento(cid, mes);
-    if (!pg) return 0;
-    if (pg.pago_total) return visitaValorMesComIva(cid, mes);
-    var c = clientsMap[cid];
-    var parcial = parseFloat(pg.valor_pago) || 0;
-    return (c && c.iva_type === "autoliquida\xE7\xE3o") ? parcial : parcial * 1.23;
+    return Math.min(totalPagoMovimentos(cid, mes), visitaValorMesComIva(cid, mes));
   }
   function visitaPendenteMesComIva(cid, mes) {
     return Math.max(0, visitaValorMesComIva(cid, mes) - visitaPagoMesComIva(cid, mes));
@@ -1984,24 +2050,14 @@ function Finance() {
                   return /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } }, meses.slice().reverse().map(function(mes) {
                     var totalAvenca = avencaComIva(cid);
                     var pagoAvenca = avencaPagoComIva(cid, mes);
-                    var pg = avencaPagamento(cid, mes);
-                    var estado = pg && pg.pago_total ? "Paga" : pagoAvenca > 0 ? "Parcial" : "Pendente";
-                    var inputParcial = avencaParcialEdit[cid + mes] !== undefined ? avencaParcialEdit[cid + mes] : "";
+                    var estado = pagoAvenca >= totalAvenca - 0.01 && totalAvenca > 0 ? "Paga" : pagoAvenca > 0.01 ? "Parcial" : "Pendente";
                     return /* @__PURE__ */ React.createElement("div", { key: mes, style: { border: "1.5px solid " + (estado === "Paga" ? "#BBF7D0" : "#7C3AED"), borderRadius: 12, padding: 16, background: estado === "Paga" ? "#F0FDF4" : "#FAF5FF" } },
                       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: estado === "Paga" ? "#15803D" : "#7C3AED", fontWeight: 800, textTransform: "uppercase", marginBottom: 4 } }, "\uD83D\uDCC5 Aven\xE7a \u2014 ", new Date(mes + "-01T12:00:00").toLocaleDateString("pt-PT", { month: "long", year: "numeric" })),
                       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: estado === "Paga" ? 0 : 12 } },
                         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#1A3A5C" } }, fmt(totalAvenca), "\u20AC"),
                         /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 800, color: estado === "Paga" ? "#16A34A" : estado === "Parcial" ? "#F59E0B" : "#DC2626", background: estado === "Paga" ? "#DCFCE7" : estado === "Parcial" ? "#FFFBEB" : "#FEF2F2", borderRadius: 8, padding: "4px 12px" } }, estado, estado === "Parcial" ? " (" + fmt(pagoAvenca) + "\u20AC)" : "")
                       ),
-                      !(pg && pg.pago_total) && /* @__PURE__ */ React.createElement("div", null,
-                        /* @__PURE__ */ React.createElement("button", { onClick: function() { marcarAvencaPaga(cid, mes, true); }, style: Object.assign({}, btnG, { fontSize: 12, padding: "8px 16px", width: "100%", marginBottom: 8 }) }, "\u2713 Marcar como paga"),
-                        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
-                          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: "#94A3B8" } }, "Ou parcial (\u20AC c/IVA):"),
-                          /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { width: 90, padding: "4px 8px", fontSize: 11 }), type: "number", step: "0.01", value: inputParcial, placeholder: "0", onFocus: function(e) { e.target.select(); }, onChange: function(e) { setAvencaParcialEdit(Object.assign({}, avencaParcialEdit, { [cid + mes]: e.target.value })); } }),
-                          /* @__PURE__ */ React.createElement("button", { onClick: function() { var v = parseFloat(inputParcial); if (!isNaN(v) && v >= 0) salvarAvencaParcial(cid, mes, v); }, style: Object.assign({}, btnO, { fontSize: 10, padding: "3px 10px" }) }, "Guardar")
-                        )
-                      ),
-                      pg && pg.pago_total && /* @__PURE__ */ React.createElement("button", { onClick: function() { marcarAvencaPaga(cid, mes, false); }, style: Object.assign({}, btnX, { fontSize: 11, padding: "4px 10px", marginTop: 8 }) }, "Desmarcar")
+                      renderPagamentoBloco(cid, mes, totalAvenca, pagoAvenca)
                     );
                   }));
                 })() :
@@ -2013,9 +2069,7 @@ function Finance() {
                     var visitas = visitasDoMesCliente(cid, mes);
                     var totalMes = visitaValorMesComIva(cid, mes);
                     var pagoMes = visitaPagoMesComIva(cid, mes);
-                    var pg = avencaPagamento(cid, mes);
-                    var estado = pg && pg.pago_total ? "Pago" : pagoMes > 0 ? "Parcial" : "Pendente";
-                    var inputParcial = avencaParcialEdit[cid + mes] !== undefined ? avencaParcialEdit[cid + mes] : "";
+                    var estado = pagoMes >= totalMes - 0.01 && totalMes > 0 ? "Pago" : pagoMes > 0.01 ? "Parcial" : "Pendente";
                     var c = clientsMap[cid];
                     var valorVisita = parseFloat(c ? c.valor_visita : 0) || 0;
                     return /* @__PURE__ */ React.createElement("div", { key: mes, style: { border: "1.5px solid " + (estado === "Pago" ? "#BBF7D0" : "#2E6DA4"), borderRadius: 12, padding: 16, background: estado === "Pago" ? "#F0FDF4" : "#EFF6FF" } },
@@ -2025,15 +2079,7 @@ function Finance() {
                         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#1A3A5C" } }, fmt(totalMes), "\u20AC"),
                         /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 800, color: estado === "Pago" ? "#16A34A" : estado === "Parcial" ? "#F59E0B" : "#DC2626", background: estado === "Pago" ? "#DCFCE7" : estado === "Parcial" ? "#FFFBEB" : "#FEF2F2", borderRadius: 8, padding: "4px 12px" } }, estado, estado === "Parcial" ? " (" + fmt(pagoMes) + "\u20AC)" : "")
                       ),
-                      !(pg && pg.pago_total) && /* @__PURE__ */ React.createElement("div", null,
-                        /* @__PURE__ */ React.createElement("button", { onClick: function() { marcarAvencaPaga(cid, mes, true); }, style: Object.assign({}, btnG, { fontSize: 12, padding: "8px 16px", width: "100%", marginBottom: 8 }) }, "\u2713 Marcar m\xEAs como pago"),
-                        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
-                          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: "#94A3B8" } }, "Ou parcial (\u20AC c/IVA):"),
-                          /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { width: 90, padding: "4px 8px", fontSize: 11 }), type: "number", step: "0.01", value: inputParcial, placeholder: "0", onFocus: function(e) { e.target.select(); }, onChange: function(e) { setAvencaParcialEdit(Object.assign({}, avencaParcialEdit, { [cid + mes]: e.target.value })); } }),
-                          /* @__PURE__ */ React.createElement("button", { onClick: function() { var v = parseFloat(inputParcial); if (!isNaN(v) && v >= 0) salvarAvencaParcialVisita(cid, mes, v); }, style: Object.assign({}, btnO, { fontSize: 10, padding: "3px 10px" }) }, "Guardar")
-                        )
-                      ),
-                      pg && pg.pago_total && /* @__PURE__ */ React.createElement("button", { onClick: function() { marcarAvencaPaga(cid, mes, false); }, style: Object.assign({}, btnX, { fontSize: 11, padding: "4px 10px", marginTop: 8 }) }, "Desmarcar")
+                      renderPagamentoBloco(cid, mes, totalMes, pagoMes)
                     );
                   }));
                 })() :
