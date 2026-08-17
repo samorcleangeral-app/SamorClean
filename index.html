@@ -1239,6 +1239,7 @@ function Finance() {
   const METit = { cash_flow: "\uD83D\uDCB0 Cash Flow", margem_lucro: "\uD83D\uDCC8 Margem de Lucro", faturacao: "\uD83E\uDDFE Factura\xE7\xE3o", outro: "\uD83C\uDFAF Outro" };
 
   var custosColab = emps.filter(function(e) { return contaNoPeriodo(e, monthJobs); }).map(function(e) {
+    var inactivoNoMes = e.ativo === false;
     var c = custoColaborador(e);
     var jobsEmp = monthJobs.filter(function(j) { return (j.team || []).indexOf(e.id) !== -1; });
     var horasEmp = jobsEmp.reduce(function(s, j) {
@@ -1255,7 +1256,7 @@ function Finance() {
     var utilizacaoPct = c.tipo === "Recibo Verde"
       ? (diasUteisDisponiveis > 0 ? Math.round(diasTrabalhadosEmp / diasUteisDisponiveis * 100) : 0)
       : (capacidadeHoras > 0 ? Math.round(horasEmp / capacidadeHoras * 100) : 0);
-    return { emp: e, custo: c.total, custoAteHoje: custoAteHoje, horas: horasEmp, dias: diasTrabalhadosEmp, detalhe: c.detalhe, tipo: c.tipo, custoHora: custoH, capacidadeHoras: capacidadeHoras, diasUteisDisponiveis: diasUteisDisponiveis, diasAusenciaEmp: diasAusenciaEmp, utilizacaoPct: utilizacaoPct };
+    return { emp: e, inactivo: inactivoNoMes, custo: c.total, custoAteHoje: custoAteHoje, horas: horasEmp, dias: diasTrabalhadosEmp, detalhe: c.detalhe, tipo: c.tipo, custoHora: custoH, capacidadeHoras: capacidadeHoras, diasUteisDisponiveis: diasUteisDisponiveis, diasAusenciaEmp: diasAusenciaEmp, utilizacaoPct: utilizacaoPct };
   }).filter(function(x) { return x.custo > 0 || x.horas > 0; });
 
   var totalCustoMaoObra = custosColab.reduce(function(s, c) { return s + c.custo; }, 0) + custoOrdenadoGerenciaTotal;
@@ -1764,7 +1765,7 @@ function Finance() {
             var pct = Math.max(2, Math.round(c.custoAteHoje / maxCusto * 100));
             return /* @__PURE__ */ React.createElement("div", { key: c.emp.id, style: { marginBottom: 10 } },
               /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 } },
-                /* @__PURE__ */ React.createElement("span", { style: { color: "#334155", fontWeight: 600 } }, c.emp.name),
+                /* @__PURE__ */ React.createElement("span", { style: { color: "#334155", fontWeight: 600 } }, c.emp.name, c.inactivo ? /* @__PURE__ */ React.createElement("span", { style: { background: "#F1F5F9", color: "#94A3B8", borderRadius: 5, padding: "1px 6px", fontSize: 9, fontWeight: 700, marginLeft: 6 } }, "inactivo") : null),
                 /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B", fontWeight: 700 } }, fmt(c.custoAteHoje), "\u20AC", c.tipo !== "Recibo Verde" && /* @__PURE__ */ React.createElement("span", { style: { color: "#CBD5E1", fontWeight: 500 } }, " / ", fmt(c.custo), "\u20AC proj."))
               ),
               /* @__PURE__ */ React.createElement("div", { style: { height: 10, background: "#F1F5F9", borderRadius: 5 } },
@@ -1803,7 +1804,7 @@ function Finance() {
               var cor = c.utilizacaoPct >= 80 ? "#16A34A" : c.utilizacaoPct >= 50 ? "#F59E0B" : "#EF4444";
               var isRV = c.tipo === "Recibo Verde";
               return /* @__PURE__ */ React.createElement("tr", { key: c.emp.id, style: { borderBottom: "1px solid #F1F5F9" } },
-                /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 600, color: "#1A3A5C" } }, c.emp.name),
+                /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 600, color: "#1A3A5C" } }, c.emp.name, c.inactivo ? /* @__PURE__ */ React.createElement("span", { style: { background: "#F1F5F9", color: "#94A3B8", borderRadius: 5, padding: "1px 6px", fontSize: 9, fontWeight: 700, marginLeft: 6 } }, "inactivo") : null),
                 /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", color: "#94A3B8", fontSize: 11 } }, c.tipo || "\u2014"),
                 /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", color: "#64748B" } }, isRV ? c.diasUteisDisponiveis + " dias" : c.capacidadeHoras.toFixed(0) + "h", c.diasAusenciaEmp > 0 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#F59E0B" } }, "\u2212", c.diasAusenciaEmp, " dia", c.diasAusenciaEmp !== 1 ? "s" : "", " aus\xEAncia")),
                 /* @__PURE__ */ React.createElement("td", { style: { padding: "10px", fontWeight: 700, color: "#334155" } }, isRV ? c.dias + " dias" : c.horas.toFixed(1) + "h"),
@@ -1825,7 +1826,7 @@ function Finance() {
             /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 10 } },
               /* @__PURE__ */ React.createElement(Av, { init: c.emp.av, size: 32, color: "#2E6DA4" }),
               /* @__PURE__ */ React.createElement("div", { style: { overflow: "hidden" } },
-                /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.emp.name),
+                /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.emp.name, c.inactivo ? /* @__PURE__ */ React.createElement("span", { style: { background: "#F1F5F9", color: "#94A3B8", borderRadius: 5, padding: "1px 6px", fontSize: 9, fontWeight: 700, marginLeft: 6 } }, "inactivo") : null),
                 /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, c.tipo)
               )
             ),
@@ -5821,6 +5822,7 @@ function PedidosColab(props) {
   );
 }
 function StockAnalise(props) {
+  const [verInativosSA, setVerInativosSA] = useState(false);
   const consumos = props.consumos, empsList = props.empsList, produtos = props.produtos;
   const analiseTipo = props.analiseTipo, setAnaliseTipo = props.setAnaliseTipo;
   const filtroColabs = props.filtroColabs, setFiltroColabs = props.setFiltroColabs;
@@ -5926,7 +5928,8 @@ function StockAnalise(props) {
     ),
     /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } },
       /* @__PURE__ */ React.createElement("label", { style: lbl }, "Colaborador(es) \u2014 deixa vazio para todos"),
-      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, empsList.map(function(e) {
+      (function() { var nI = empsList.filter(function(e) { return e.ativo === false; }).length; return nI > 0 ? /* @__PURE__ */ React.createElement("button", { onClick: function() { setVerInativosSA(!verInativosSA); }, style: { padding: "4px 10px", borderRadius: 7, border: "1.5px solid " + (verInativosSA ? "#7C3AED" : "#CBD5E1"), background: verInativosSA ? "#F5F3FF" : "#fff", color: verInativosSA ? "#7C3AED" : "#64748B", fontSize: 10, fontWeight: 700, cursor: "pointer", marginBottom: 6 } }, verInativosSA ? "\u2713 A mostrar inactivos" : "Incluir inactivos (" + nI + ")") : null; })(),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, empsList.filter(function(e) { return e.ativo !== false || verInativosSA; }).map(function(e) {
         var sel = filtroColabs.indexOf(e.id) !== -1;
         return /* @__PURE__ */ React.createElement("button", { key: e.id, onClick: function() { toggleSel(filtroColabs, setFiltroColabs, e.id); }, style: { padding: "5px 10px", borderRadius: 7, border: "1.5px solid " + (sel ? "#7C3AED" : "#E2EBF4"), background: sel ? "#F5F3FF" : "#fff", color: sel ? "#7C3AED" : "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, e.name.split(" ")[0]);
       }))
@@ -7004,7 +7007,7 @@ function QRArmazem() {
           /* @__PURE__ */ React.createElement("input", { type: "date", value: filtroDia, onChange: function(e) { setFiltroDia(e.target.value); }, style: Object.assign({}, inp, { width: "auto", padding: "6px 10px" }) }),
           /* @__PURE__ */ React.createElement("select", { value: filtroEmp, onChange: function(e) { setFiltroEmp(e.target.value); }, style: Object.assign({}, inp, { width: "auto", padding: "6px 10px" }) },
             /* @__PURE__ */ React.createElement("option", null, "Todos"),
-            emps.map(function(e) { return /* @__PURE__ */ React.createElement("option", { key: e.id }, e.name); })
+            emps.filter(function(e) { return e.ativo !== false; }).map(function(e) { return /* @__PURE__ */ React.createElement("option", { key: e.id }, e.name); })
           )
         )
       ),
