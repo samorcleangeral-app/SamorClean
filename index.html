@@ -5507,6 +5507,8 @@ function PedidosColab(props) {
   }, []);
   const [selPedido, setSelPedido] = useState(null);
   const [pcSearch, setPcSearch] = useState("");
+  const [funcAtivo, setFuncAtivo] = useState({});
+  const [incluirInativos, setIncluirInativos] = useState(false);
   const [resposta, setResposta] = useState("");
   const [classificacaoFalta, setClassificacaoFalta] = useState(null);
   const [horaInicioEdit, setHoraInicioEdit] = useState("");
@@ -5525,7 +5527,8 @@ function PedidosColab(props) {
       var rows = r[0] || [];
       var fAtivo = {};
       (r[1] || []).forEach(function(f) { fAtivo[f.id] = f.ativo; });
-      setPedidos(rows.filter(function(pd) { return fAtivo[pd.funcionario_id] !== false; }));
+      setPedidos(rows);
+      setFuncAtivo(fAtivo);
       setLoading(false);
     });
   }, []);
@@ -5601,9 +5604,10 @@ function PedidosColab(props) {
     setResposta("");
     setClassificacaoFalta(null);
   }
-  // Group by employee
+  // Group by employee — inactivos só aparecem se o filtro estiver ligado
   var byFunc = {};
-  pedidos.forEach(function(p) {
+  var pedidosVisiveis = incluirInativos ? pedidos : pedidos.filter(function(p) { return funcAtivo[p.funcionario_id] !== false; });
+  pedidosVisiveis.forEach(function(p) {
     if (!byFunc[p.funcionario_id]) byFunc[p.funcionario_id] = { nome: p.funcionario_nome, pedidos: [] };
     byFunc[p.funcionario_id].pedidos.push(p);
   });
@@ -5611,7 +5615,12 @@ function PedidosColab(props) {
     var pends = byFunc[fid].pedidos.filter(function(p) { return p.estado === "pendente"; }).length;
     return { id: fid, nome: byFunc[fid].nome, pedidos: byFunc[fid].pedidos, pendentes: pends };
   }).sort(function(a, b) { return b.pendentes - a.pendentes || b.pedidos.length - a.pedidos.length; }).filter(function(f) { return !pcSearch || f.nome.toLowerCase().indexOf(pcSearch.toLowerCase()) !== -1; });
-  var totalPendentes = pedidos.filter(function(p) { return p.estado === "pendente"; }).length;
+  var totalPendentes = pedidosVisiveis.filter(function(p) { return p.estado === "pendente"; }).length;
+  var nInativosComPedidos = (function() {
+    var st = {};
+    pedidos.forEach(function(p) { if (funcAtivo[p.funcionario_id] === false) st[p.funcionario_id] = true; });
+    return Object.keys(st).length;
+  })();
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...");
   if (selFunc) {
     var todosPedidosFunc = (byFunc[selFunc.id] ? byFunc[selFunc.id].pedidos : []).slice().sort(function(a, b) { return new Date(b.created_at) - new Date(a.created_at); });
@@ -5717,7 +5726,10 @@ function PedidosColab(props) {
         )
       );
     })(),
-    /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar colaborador...", value: pcSearch, onChange: function(e) { setPcSearch(e.target.value); } }),
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center", marginBottom: 14, flexWrap: "wrap" } },
+      /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 0 }), placeholder: "Pesquisar colaborador...", value: pcSearch, onChange: function(e) { setPcSearch(e.target.value); } }),
+      nInativosComPedidos > 0 && /* @__PURE__ */ React.createElement("button", { onClick: function() { setIncluirInativos(!incluirInativos); }, style: { padding: "8px 14px", borderRadius: 8, border: "1.5px solid " + (incluirInativos ? "#7C3AED" : "#CBD5E1"), background: incluirInativos ? "#F5F3FF" : "#fff", color: incluirInativos ? "#7C3AED" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, incluirInativos ? "\u2713 A mostrar inactivos" : "Incluir inactivos (" + nInativosComPedidos + ")")
+    ),
     funcList.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) },
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, marginBottom: 12 } }, "\u{1F4E5}"),
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16, marginBottom: 8 } }, "Sem pedidos"),
