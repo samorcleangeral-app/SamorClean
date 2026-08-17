@@ -730,94 +730,86 @@ function Finance() {
       )
     );
   }
+  // ─────────────────────────────────────────────────────────────
+  // NÚCLEO ÚNICO de faturação por mês (mensal e por visita)
+  // A única diferença entre modelos é como se obtém o valor do mês:
+  //   mensal → valor fixo do cliente | visita/hora → nº visitas × valor
+  // Tudo o resto (IVA, pago, pendente, meses devidos) é comum.
+  // ─────────────────────────────────────────────────────────────
   function isClienteMensal(cid) {
     var c = clientsMap[cid];
     return c && c.tipo_faturacao === "mensal";
   }
-  function avencaValorCliente(cid) {
-    var c = clientsMap[cid];
-    if (!c) return 0;
-    return parseFloat(c.valor_visita) || 0;
-  }
-  function avencaComIva(cid) {
-    var c = clientsMap[cid];
-    var base = avencaValorCliente(cid);
-    return (c && c.iva_type === "autoliquida\xE7\xE3o") ? base : base * 1.23;
-  }
-  function avencaPagoComIva(cid, mes) {
-    return Math.min(totalPagoMovimentos(cid, mes), avencaComIva(cid));
-  }
-  function avencaPendenteComIva(cid, mes) {
-    return Math.max(0, avencaComIva(cid) - avencaPagoComIva(cid, mes));
-  }
-  function mesesDevidosAvenca(cid) {
-    // Meses (YYYY-MM) em que o cliente teve serviços E que já começaram (actual ou passado)
-    var meses = {};
-    allPendingJobs.forEach(function(j) {
-      if (j.client_id !== cid || !j.date) return;
-      var m = j.date.slice(0, 7);
-      if (m <= mesActualStr) meses[m] = true;
-    });
-    monthJobs.forEach(function(j) {
-      if (j.client_id !== cid || !j.date) return;
-      var m = j.date.slice(0, 7);
-      if (m <= mesActualStr) meses[m] = true;
-    });
-    // Incluir também meses já com pagamento registado (para mostrarem como pagos, não desaparecerem)
-    pagMovimentos.forEach(function(p) {
-      if (p.client_id === cid && p.mes <= mesActualStr) meses[p.mes] = true;
-    });
-    return Object.keys(meses).sort();
-  }
-  function avencaPendenteTotalCliente(cid) {
-    return mesesDevidosAvenca(cid).reduce(function(s, m) {
-      return s + avencaPendenteComIva(cid, m);
-    }, 0);
-  }
-  // ─── Modelo "por visita" agrupado por mês ───
   function isClienteVisita(cid) {
     var c = clientsMap[cid];
-    return c && (c.tipo_faturacao === "visita" || c.tipo_faturacao === "hora" || !c.tipo_faturacao) && c.tipo_faturacao !== "orcamento";
+    if (!c) return false;
+    var tf = c.tipo_faturacao || "hora";
+    return tf === "visita" || tf === "hora";
   }
-  function visitasDoMesCliente(cid, mes) {
-    // Todas as visitas PREVISTAS do mês (agendadas + realizadas), do grupo do cliente
-    var c = clientsMap[cid];
-    if (!c) return [];
-    return contaCorrenteAllJobs.filter(function(j) {
-      return (j.date || "").slice(0, 7) === mes && j.status !== "cancelado";
+  function jobsClienteMes(cid, mes) {
+    // Fonte preferida: serviços carregados na conta corrente (todos, incl. agendados).
+    // Fora dela, cai para os serviços que o Financeiro já tem em memória.
+    var fonte = contaCorrenteAllJobs.filter(function(j) { return j.client_id === cid; });
+    if (fonte.length === 0) fonte = allPendingJobs.concat(monthJobsAll).filter(function(j) { return j.client_id === cid; });
+    var vistos = {};
+    return fonte.filter(function(j) {
+      if (!j.date || j.date.slice(0, 7) !== mes || j.status === "cancelado") return false;
+      if (vistos[j.id]) return false;
+      vistos[j.id] = true;
+      return true;
     });
   }
-  function visitaValorMesComIva(cid, mes) {
+  function valorMesSemIva(cid, mes) {
     var c = clientsMap[cid];
     if (!c) return 0;
-    var visitas = visitasDoMesCliente(cid, mes);
-    var valorVisita = parseFloat(c.valor_visita) || 0;
-    var base = visitas.length * valorVisita;
-    return (c.iva_type === "autoliquida\xE7\xE3o") ? base : base * 1.23;
+    var v = parseFloat(c.valor_visita) || 0;
+    if (c.tipo_faturacao === "mensal") return v;
+    return jobsClienteMes(cid, mes).length * v;
   }
-  function visitaPagoMesComIva(cid, mes) {
-    return Math.min(totalPagoMovimentos(cid, mes), visitaValorMesComIva(cid, mes));
+  function valorMesComIva(cid, mes) {
+    var c = clientsMap[cid];
+    return aplicaIva(valorMesSemIva(cid, mes), c ? c.iva_type : "normal");
   }
-  function visitaPendenteMesComIva(cid, mes) {
-    return Math.max(0, visitaValorMesComIva(cid, mes) - visitaPagoMesComIva(cid, mes));
+  function pagoMesComIva(cid, mes) {
+    return Math.min(totalPagoMovimentos(cid, mes), valorMesComIva(cid, mes));
   }
-  function mesesDevidosVisita(cid) {
+  function pendenteMesComIva(cid, mes) {
+    return Math.max(0, valorMesComIva(cid, mes) - pagoMesComIva(cid, mes));
+  }
+  function mesesDevidosCliente(cid) {
+    // Meses já começados (actual ou passado) com serviços do cliente ou com pagamento registado
     var meses = {};
-    contaCorrenteAllJobs.forEach(function(j) {
-      if (!j.date) return;
-      var m = j.date.slice(0, 7);
-      if (m <= mesActualStr) meses[m] = true;
-    });
-    pagMovimentos.forEach(function(p) {
-      if (p.client_id === cid && p.mes <= mesActualStr) meses[p.mes] = true;
+    function juntar(lista) {
+      lista.forEach(function(j) {
+        if (j.client_id !== cid || !j.date) return;
+        var m = j.date.slice(0, 7);
+        if (m <= mesActualStr) meses[m] = true;
+      });
+    }
+    juntar(allPendingJobs);
+    juntar(monthJobsAll);
+    juntar(contaCorrenteAllJobs);
+    pagMovimentos.forEach(function(pm) {
+      if (pm.client_id === cid && pm.mes <= mesActualStr) meses[pm.mes] = true;
     });
     return Object.keys(meses).sort();
   }
-  function visitaPendenteTotalCliente(cid) {
-    return mesesDevidosVisita(cid).reduce(function(s, m) {
-      return s + visitaPendenteMesComIva(cid, m);
-    }, 0);
+  function pendenteTotalCliente(cid) {
+    return mesesDevidosCliente(cid).reduce(function(s, m) { return s + pendenteMesComIva(cid, m); }, 0);
   }
+  // Atalhos com os nomes antigos (mantidos para as chamadas existentes)
+  function avencaValorCliente(cid) { return valorMesSemIva(cid, mesActualStr); }
+  function avencaComIva(cid) { return valorMesComIva(cid, mesActualStr); }
+  function avencaPagoComIva(cid, mes) { return pagoMesComIva(cid, mes); }
+  function avencaPendenteComIva(cid, mes) { return pendenteMesComIva(cid, mes); }
+  function mesesDevidosAvenca(cid) { return mesesDevidosCliente(cid); }
+  function avencaPendenteTotalCliente(cid) { return pendenteTotalCliente(cid); }
+  function visitasDoMesCliente(cid, mes) { return jobsClienteMes(cid, mes); }
+  function visitaValorMesComIva(cid, mes) { return valorMesComIva(cid, mes); }
+  function visitaPagoMesComIva(cid, mes) { return pagoMesComIva(cid, mes); }
+  function visitaPendenteMesComIva(cid, mes) { return pendenteMesComIva(cid, mes); }
+  function mesesDevidosVisita(cid) { return mesesDevidosCliente(cid); }
+  function visitaPendenteTotalCliente(cid) { return pendenteTotalCliente(cid); }
   const fatSemIva = monthJobs.reduce(function(s, j) {
     return s + (j.val || 0);
   }, 0);
@@ -833,26 +825,9 @@ function Finance() {
     var out = {};
     clientes.forEach(function(cc) {
       if (cc.cliente_principal_id) return;
-      var tf = cc.tipo_faturacao || "hora";
-      if (tf !== "visita" && tf !== "hora") return;
+      if (!isClienteVisita(cc.id)) return;
       if (cc.ativo === false || cc.excluir_financeiro === true) return;
-      var idsG = [cc.id].concat(clientes.filter(function(x) { return x.cliente_principal_id === cc.id; }).map(function(x) { return x.id; }));
-      var porMes = {};
-      allPendingJobs.forEach(function(j) {
-        if (idsG.indexOf(j.client_id) === -1 || !j.date) return;
-        var m = j.date.slice(0, 7);
-        if (m > mesActualStr) return;
-        porMes[m] = (porMes[m] || 0) + 1;
-      });
-      var vVisita = parseFloat(cc.valor_visita) || 0;
-      var isAuto = cc.iva_type === "autoliquida\xE7\xE3o";
-      var tot = 0;
-      Object.keys(porMes).forEach(function(m) {
-        var baseSemIva = porMes[m] * vVisita;
-        var totalComIva = isAuto ? baseSemIva : baseSemIva * 1.23;
-        var pagoComIva = Math.min(totalPagoMovimentos(cc.id, m), totalComIva);
-        tot += Math.max(0, totalComIva - pagoComIva);
-      });
+      var tot = pendenteTotalCliente(cc.id);
       if (tot > 0.01) out[cc.id] = tot;
     });
     return out;
@@ -995,39 +970,24 @@ function Finance() {
         if (m + "-01" > byC[cc.id].ultimaData) byC[cc.id].ultimaData = m + "-01";
       });
     });
-    // Clientes "por visita"/"hora": dívida por MÊS (nº visitas x valor), consistente com a conta corrente
+    // Clientes "por visita"/"hora": dívida por MÊS, calculada pelo núcleo (mesma fonte da conta corrente)
     clientes.forEach(function(cc) {
       if (cc.cliente_principal_id) return;
-      var tf = cc.tipo_faturacao || "hora";
-      if (tf !== "visita" && tf !== "hora") return;
+      if (!isClienteVisita(cc.id)) return;
       if (cc.ativo === false || cc.excluir_financeiro === true) return;
-      var idsG = [cc.id].concat(clientes.filter(function(x) { return x.cliente_principal_id === cc.id; }).map(function(x) { return x.id; }));
-      var porMes = {};
-      allPendingJobs.forEach(function(j) {
-        if (idsG.indexOf(j.client_id) === -1 || !j.date) return;
-        var m = j.date.slice(0, 7);
-        if (m > mesActualStr) return;
-        if (!porMes[m]) porMes[m] = { n: 0, jobs: [] };
-        porMes[m].n++;
-        porMes[m].jobs.push(j);
-      });
-      var vVisita = parseFloat(cc.valor_visita) || 0;
       var isAuto = cc.iva_type === "autoliquida\xE7\xE3o";
-      Object.keys(porMes).forEach(function(m) {
-        var baseSemIva = porMes[m].n * vVisita;
-        var totalComIva = isAuto ? baseSemIva : baseSemIva * 1.23;
-        var pagoComIva = Math.min(totalPagoMovimentos(cc.id, m), totalComIva);
-        var pend = Math.max(0, totalComIva - pagoComIva);
+      mesesDevidosCliente(cc.id).forEach(function(m) {
+        var pend = pendenteMesComIva(cc.id, m);
         if (pend < 0.01) return;
-        if (!byC[cc.id]) byC[cc.id] = { cn: cc.name, count: 0, semIva: 0, comIva: 0, ultimaData: m + "-01", maxDias: 0, jobs: [], tipoFat: tf, mesesVisita: [] };
-        if (!byC[cc.id].mesesVisita) byC[cc.id].mesesVisita = [];
-        byC[cc.id].count += porMes[m].n;
+        var jobsMes = jobsClienteMes(cc.id, m);
+        if (!byC[cc.id]) byC[cc.id] = { cn: cc.name, count: 0, semIva: 0, comIva: 0, ultimaData: m + "-01", maxDias: 0, jobs: [], tipoFat: cc.tipo_faturacao || "hora", mesesVisita: [] };
+        byC[cc.id].count += jobsMes.length;
         byC[cc.id].comIva += pend;
         byC[cc.id].semIva += (isAuto ? pend : pend / 1.23);
-        byC[cc.id].jobs = byC[cc.id].jobs.concat(porMes[m].jobs.map(function(j) {
+        byC[cc.id].jobs = byC[cc.id].jobs.concat(jobsMes.map(function(j) {
           return Object.assign({}, j, { diffDays: Math.floor((now - new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3)) });
         }));
-        byC[cc.id].mesesVisita.push({ mes: m, pendente: pend, visitas: porMes[m].n });
+        byC[cc.id].mesesVisita.push({ mes: m, pendente: pend, visitas: jobsMes.length });
         var fimM = new Date(parseInt(m.slice(0, 4)), parseInt(m.slice(5, 7)), 0);
         var dAtraso = Math.floor((now - fimM) / (24 * 3600 * 1e3));
         if (dAtraso > byC[cc.id].maxDias) byC[cc.id].maxDias = dAtraso;
