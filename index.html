@@ -611,7 +611,7 @@ function Finance() {
       db.list("servicos", "?select=client_id,date&date=gte." + past60 + "&order=date.desc"),
       db.list("funcionarios_rh", "?select=*"),
       db.list("funcionarios", "?select=*"),
-      db.list("ausencias", "?select=*&data_inicio=lte." + monthEnd + "&data_fim=gte." + yearStart),
+      db.list("ausencias", "?select=*&data_inicio=lte." + monthEnd + "&or=(data_fim.gte." + yearStart + ",data_fim.is.null)"),
       db.list("ausencias", "?select=*&data_fim=gte." + sixMonthsAgo),
       db.list("cash_config", "?select=*&order=data_inicio.desc&limit=1"),
       db.list("cash_movimentos", "?select=*&order=data.desc"),
@@ -1307,7 +1307,7 @@ function Finance() {
       db.list("historico_financeiro", "?select=*&ano=eq." + (ano - 1)),
       db.list("funcionarios", "?select=*"),
       db.list("funcionarios_rh", "?select=*"),
-      db.list("ausencias", "?select=*&data_inicio=lte." + fimAtual + "&data_fim=gte." + inicioAnterior)
+      db.list("ausencias", "?select=*&data_inicio=lte." + fimAtual + "&or=(data_fim.gte." + inicioAnterior + ",data_fim.is.null)")
     ]);
     var funcs = res[6] || [];
     var rhData = res[7] || [];
@@ -4442,6 +4442,25 @@ function FichaRH(props) {
       }
     }
   }
+  async function retirarDeRotasPorAusencia(empId, empNome, dataIni, dataFim, tipoAus) {
+    var ini = dataIni, fim = dataFim || dataIni;
+    var afectados = await db.list("servicos", "?select=id,cn,date,t1,t2,team&date=gte." + ini + "&date=lte." + fim + "&status=neq.completed");
+    var meus = (afectados || []).filter(function(j) { return (j.team || []).indexOf(empId) !== -1; });
+    if (meus.length === 0) return;
+    var ficamVazios = meus.filter(function(j) { return (j.team || []).length <= 1; }).length;
+    var msg = empNome + " tem " + meus.length + " servi\xE7o(s) agendado(s) neste per\xEDodo (" + tipoAus + "):\n\n";
+    meus.slice(0, 8).forEach(function(j) { msg += "\u2022 " + j.date + " " + j.t1 + " \u2014 " + j.cn + "\n"; });
+    if (meus.length > 8) msg += "\u2022 (e mais " + (meus.length - 8) + ")\n";
+    msg += "\nRetirar destes servi\xE7os?\n";
+    if (ficamVazios > 0) msg += "\n\u26A0 " + ficamVazios + " ficam SEM equipa \u2014 vais precisar de alocar algu\xE9m nas Rotas.";
+    msg += "\n\nOK = retirar | Cancelar = manter como est\xE1";
+    if (!window.confirm(msg)) return;
+    for (var i = 0; i < meus.length; i++) {
+      var novaTeam = (meus[i].team || []).filter(function(x) { return x !== empId; });
+      await fetch(SUPABASE_URL + "/rest/v1/servicos?id=eq." + meus[i].id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ team: novaTeam }) });
+    }
+    alert("\u2713 " + empNome + " foi retirado(a) de " + meus.length + " servi\xE7o(s).\n\n" + (ficamVazios > 0 ? "\u26A0 " + ficamVazios + " servi\xE7o(s) ficaram sem equipa \u2014 tr" + "ata nas Rotas." : "Os restantes mant\xEAm a equipa que sobra."));
+  }
   async function addAusencia() {
     function limparAus(obj) {
       var o = Object.assign({}, obj);
@@ -4476,6 +4495,7 @@ function FichaRH(props) {
       setAusencias(function(p) {
         return [d[0]].concat(p);
       });
+      await retirarDeRotasPorAusencia(sel.id, sel.name, ausForm.data_inicio, ausForm.data_fim || ausForm.data_inicio, ausForm.tipo);
       if (ausForm.data_inicio) {
         var nRemovidos = await removerFuncionarioDeServicosFuturos(sel.id, ausForm.data_inicio, ausForm.data_fim || ausForm.data_inicio);
         if (nRemovidos > 0) alert(sel.name + " foi removido de " + nRemovidos + " servi\xE7o" + (nRemovidos > 1 ? "s" : "") + " j\xE1 agendado" + (nRemovidos > 1 ? "s" : "") + " nesse per\xEDodo. Pode ser necess\xE1rio reatribuir equipa.");
@@ -4563,7 +4583,21 @@ function FichaRH(props) {
   }
   async function deleteAusencia(id) {
     if (!window.confirm("Apagar esta aus\xEAncia?")) return;
+    var ausApagada = ausencias.find(function(a) { return a.id === id; });
     await fetch(SUPABASE_URL + "/rest/v1/ausencias?id=eq." + id, { method: "DELETE", headers: dbHeaders() });
+    // Reverter: repor o colaborador nos serviços desse período que ficaram sem ele
+    if (ausApagada && ausApagada.data_inicio) {
+      var ini = ausApagada.data_inicio, fim = ausApagada.data_fim || ausApagada.data_inicio;
+      var cands = await db.list("servicos", "?select=id,cn,date,t1,team&date=gte." + ini + "&date=lte." + fim + "&status=neq.completed");
+      var semEle = (cands || []).filter(function(j) { return (j.team || []).indexOf(sel.id) === -1; });
+      if (semEle.length > 0 && window.confirm("Aus\xEAncia apagada.\n\nQueres repor " + sel.name + " nos servi\xE7os deste per\xEDodo?\n\nH\xE1 " + semEle.length + " servi\xE7o(s) em que n\xE3o est\xE1 alocado(a).\n\nOK = repor em todos | Cancelar = tratar nas Rotas")) {
+        for (var i = 0; i < semEle.length; i++) {
+          var nt = (semEle[i].team || []).concat([sel.id]);
+          await fetch(SUPABASE_URL + "/rest/v1/servicos?id=eq." + semEle[i].id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ team: nt }) });
+        }
+        alert("\u2713 " + sel.name + " reposto(a) em " + semEle.length + " servi\xE7o(s).");
+      }
+    }
     setAusencias(function(p) {
       return p.filter(function(a) {
         return a.id !== id;
@@ -5135,7 +5169,7 @@ function Employees() {
     const monthStart = localDateStr(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
     const monthEnd = localDateStr(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0));
     const res = await Promise.all([
-      db.list("ausencias", "?select=*&data_inicio=lte." + monthEnd + "&data_fim=gte." + monthStart + "&order=funcionario_id"),
+      db.list("ausencias", "?select=*&data_inicio=lte." + monthEnd + "&or=(data_fim.gte." + monthStart + ",data_fim.is.null)&order=funcionario_id"),
       soContrato ? db.list("funcionarios_rh", "?select=funcionario_id,tipo_contrato") : Promise.resolve([])
     ]);
     const rows = res[0];
@@ -7318,7 +7352,7 @@ function RelatorioMensal() {
       db.list("pedidos_extra", "?select=*"),
       db.list("despesas", "?select=*&data=gte." + from + "&data=lte." + to),
       db.list("funcionarios_rh", "?select=*"),
-      db.list("ausencias", "?select=*&data_inicio=lte." + to + "&data_fim=gte." + yearStart2),
+      db.list("ausencias", "?select=*&data_inicio=lte." + to + "&or=(data_fim.gte." + yearStart2 + ",data_fim.is.null)"),
       db.list("cash_config", "?select=*&order=data_inicio.desc&limit=1"),
       db.list("cash_movimentos", "?select=*&order=data.desc"),
       db.list("metas_financeiras", "?select=*&order=created_at.desc"),
