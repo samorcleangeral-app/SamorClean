@@ -615,7 +615,7 @@ function Finance() {
       db.list("despesas", "?select=*&data=gte." + monthStart + "&data=lte." + monthEnd),
       db.list("servicos", "?select=client_id,date&date=gte." + past60 + "&order=date.desc"),
       db.list("funcionarios_rh", "?select=*"),
-      db.list("funcionarios", "?select=*&ativo=neq.false"),
+      db.list("funcionarios", "?select=*"),
       db.list("ausencias", "?select=*&data_inicio=lte." + monthEnd + "&data_fim=gte." + yearStart),
       db.list("ausencias", "?select=*&data_fim=gte." + sixMonthsAgo),
       db.list("cash_config", "?select=*&order=data_inicio.desc&limit=1"),
@@ -1300,7 +1300,7 @@ function Finance() {
       db.list("despesas", "?select=data,valor&data=gte." + inicioAnterior + "&data=lte." + fimAnterior),
       db.list("historico_financeiro", "?select=*&ano=eq." + ano),
       db.list("historico_financeiro", "?select=*&ano=eq." + (ano - 1)),
-      db.list("funcionarios", "?select=*&ativo=neq.false"),
+      db.list("funcionarios", "?select=*"),
       db.list("funcionarios_rh", "?select=*"),
       db.list("ausencias", "?select=*&data_inicio=lte." + fimAtual + "&data_fim=gte." + inicioAnterior)
     ]);
@@ -2604,7 +2604,11 @@ function Routes() {
       db.list("ausencias", "?select=*")
     ]).then(function(r) {
       setJobs(r[0] || []);
-      setEmps(r[1] || []);
+      // Histórico preservado: inactivos só aparecem no dia em que realmente trabalharam
+      var jobsDia = r[0] || [];
+      var idsNoDia = {};
+      jobsDia.forEach(function(j) { (j.team || []).forEach(function(eid) { idsNoDia[eid] = true; }); });
+      setEmps((r[1] || []).filter(function(e) { return e.ativo !== false || idsNoDia[e.id]; }));
       setClients(r[2] || []);
       setAusencias(r[3] || []);
       setLoading(false);
@@ -5239,7 +5243,7 @@ function QuadroOperacional() {
     var nowStr = new Date().toISOString();
     Promise.all([
       db.list("servicos", "?select=*&date=eq." + dataView + "&order=t1"),
-      db.list("funcionarios", "?select=*&ativo=neq.false&order=name"),
+      db.list("funcionarios", "?select=*&order=name"),
       db.list("notas_operacionais", "?select=*&order=created_at.desc")
     ]).then(function(r) {
       var empList = r[1] || [];
@@ -6153,7 +6157,7 @@ function Stock() {
     if (!showAnalise) return;
     Promise.all([
       db.list("pedidos_colaboradores", "?select=funcionario_id,funcionario_nome,detalhes,created_at&tipo=eq.material&estado=eq.aprovado&order=created_at.desc"),
-      db.list("funcionarios", "?select=id,name&ativo=neq.false")
+      db.list("funcionarios", "?select=id,name")
     ]).then(function(res) {
       var rows = (res[0] || []).filter(function(p) { return p.detalhes && p.detalhes.item; }).map(function(p) {
         return { funcionario_id: p.funcionario_id, funcionario_nome: p.funcionario_nome, item: p.detalhes.item, itemRaw: p.detalhes.item, chave: normalizarItemStock(p.detalhes.item), quantidade: parseFloat(p.detalhes.quantidade) || 0, data: (p.created_at || "").slice(0, 10) };
@@ -6868,7 +6872,7 @@ function QRArmazem() {
   useEffect(function() {
     Promise.all([
       db.list("picagens_armazem", "?select=*&order=created_at.desc&limit=200"),
-      db.list("funcionarios", "?select=id,name&ativo=neq.false&order=name")
+      db.list("funcionarios", "?select=id,name&order=name")
     ]).then(function(r) {
       setPicagens(r[0] || []);
       setEmps(r[1] || []);
@@ -7521,7 +7525,7 @@ function Avaliacoes() {
     Promise.all([
       db.list("avaliacoes", "?select=*&order=created_at.desc"),
       db.list("clientes", "?select=id,name,email,contact,phone"),
-      db.list("funcionarios", "?select=id,name,av&ativo=neq.false"),
+      db.list("funcionarios", "?select=id,name,av"),
       db.list("servicos", "?select=id,client_id,date,rated&status=eq.completed"),
       db.list("client_contacts", "?select=client_id,name,email,phone")
     ]).then(function(results) {
