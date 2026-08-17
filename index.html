@@ -286,6 +286,7 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
   var ausenciasEmp = absData.filter(function(a) { return a.funcionario_id === emp.id; });
   var diasBaixa = 0;
   var diasFerias = 0;
+  var diasFalta = 0;
   var temAusenciaPenalizante = false;
   var monthStart2 = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
   var monthEnd2 = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0);
@@ -300,7 +301,8 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
       if (d.getDay() !== 0 && d.getDay() !== 6) dias++;
       d.setDate(d.getDate() + 1);
     }
-    if (tipoAus === "férias") { diasFerias += dias; }
+    if (tipoAus.indexOf("falta") !== -1) { diasFalta += dias; }
+    else if (tipoAus === "férias") { diasFerias += dias; }
     else if (tipoAus === "baixa médica" || tipoAus === "baixa m\xe9dica" || tipoAus === "baixa" || tipoAus.indexOf("baixa") !== -1) { diasBaixa += dias; if (diasBaixa > 3) diasBaixa = diasBaixa - 3; }
     else { temAusenciaPenalizante = true; }
   });
@@ -322,10 +324,10 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
     total = custo;
   } else {
     var salario = parseFloat(rh.salario_base) || 0;
-    var diasEfectivos = Math.max(0, diasUteisDoMes - diasBaixa);
+    var diasEfectivos = Math.max(0, diasUteisDoMes - diasBaixa - diasFalta);
     var diasAlim = diasComSubsidioAlim(emp, absData, refDate);
     var subAlim = diasAlim * 6;
-    var salarioEfectivo = diasBaixa > 0 ? salario * (diasEfectivos / Math.max(1, diasUteisDoMes)) : salario;
+    var salarioEfectivo = (diasBaixa > 0 || diasFalta > 0) ? salario * (diasEfectivos / Math.max(1, diasUteisDoMes)) : salario;
     // Verifica se o subsídio de férias já foi pago a s\xE9rio este ano
     var subFerias = salario * 0.0833;
     var notaSubFerias = " (8,33%)";
@@ -345,11 +347,11 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
         notaSubFerias = " (j\xE1 pago em " + new Date(refDate.getFullYear(), mesFerias, 1).toLocaleDateString("pt-PT", { month: "long" }) + ")";
       }
     }
-    var subNatal = diasBaixa > 0 ? salario * 0.0833 * (diasEfectivos / Math.max(1, diasUteisDoMes)) : salario * 0.0833;
+    var subNatal = (diasBaixa > 0 || diasFalta > 0) ? salario * 0.0833 * (diasEfectivos / Math.max(1, diasUteisDoMes)) : salario * 0.0833;
     // SS incide sempre sobre sal\xE1rio + duod\xE9cimo de Natal (pago todos os meses), e sobre o subs\xEDdio de f\xE9rias real só no mês em que for pago a s\xE9rio
     var ss = (salarioEfectivo + subNatal + subFeriasParaSS) * 0.2375;
     var seguro = salarioEfectivo * 0.015;
-    detalhe.push({ l: "Salário base" + (diasBaixa > 0 ? " (prop. " + diasEfectivos + "/" + diasUteisDoMes + " dias)" : ""), v: salarioEfectivo });
+    detalhe.push({ l: "Salário base" + ((diasBaixa > 0 || diasFalta > 0) ? " (prop. " + diasEfectivos + "/" + diasUteisDoMes + " dias" + (diasFalta > 0 ? " — " + diasFalta + " falta(s) descontada(s)" : "") + ")" : ""), v: salarioEfectivo });
     detalhe.push({ l: "Sub. alimentação (" + diasAlim + " dias trabalhados × 6€)", v: subAlim });
     detalhe.push({ l: "Sub. férias" + notaSubFerias, v: subFerias });
     detalhe.push({ l: "Sub. Natal (8,33%)" + (diasBaixa > 0 ? " (prop. baixa)" : ""), v: subNatal });
@@ -373,7 +375,22 @@ function calcCustoHoraReal(emp, rhData, refDate, absData) {
     var diasUteis = calcDiasUteisMes(refDate) || 22;
     // Subsídio de alimentação só nos dias efectivamente trabalhados
     var diasAlim = absData ? diasComSubsidioAlim(emp, absData, refDate) : Math.max(0, diasUteis - feriadosUteisNoMes(refDate));
-    var custoMensal = salario + diasAlim * 6 + salario * 0.0833 + salario * 0.0833 + salario * 0.2375 + salario * 0.015;
+    // Faltas (justificadas ou não) descontam o dia de salário
+    var diasFaltaH = 0;
+    if (absData) {
+      var mS = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
+      var mE = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0);
+      absData.forEach(function(a) {
+        if (a.funcionario_id !== emp.id || (a.tipo || "").toLowerCase().indexOf("falta") === -1) return;
+        var d1 = new Date((a.data_inicio || "") + "T12:00:00");
+        var d2 = new Date((a.data_fim || a.data_inicio || "") + "T12:00:00");
+        var dd = new Date(Math.max(d1, mS)), de = new Date(Math.min(d2, mE));
+        while (dd <= de) { if (dd.getDay() !== 0 && dd.getDay() !== 6) diasFaltaH++; dd.setDate(dd.getDate() + 1); }
+      });
+    }
+    var factor = diasUteis > 0 ? Math.max(0, diasUteis - diasFaltaH) / diasUteis : 1;
+    var salarioEf = salario * factor;
+    var custoMensal = salarioEf + diasAlim * 6 + salarioEf * 0.0833 + salarioEf * 0.0833 + salarioEf * 0.2375 + salarioEf * 0.015;
     return custoMensal / diasUteis / horasDia;
   }
 }
@@ -2237,6 +2254,14 @@ function Routes() {
   const [emps, setEmps] = useState([]);
   const [clients, setClients] = useState([]);
   const [ausencias, setAusencias] = useState([]);
+  const [horasDiaMap, setHorasDiaMap] = useState({});
+  useEffect(function() {
+    db.list("funcionarios_rh", "?select=funcionario_id,horas_dia").then(function(r) {
+      var m = {};
+      (r || []).forEach(function(x) { m[x.funcionario_id] = parseFloat(x.horas_dia) || 8; });
+      setHorasDiaMap(m);
+    });
+  }, []);
   const [loading, setLoading] = useState(true);
   const [autoGerado, setAutoGerado] = useState(false);
   const [conflitosAlocacao, setConflitosAlocacao] = useState(null);
@@ -2992,14 +3017,20 @@ function Routes() {
   function exportarProdutividadePDF() {
     const mesLabel = dates.length ? new Date(dates[0] + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) + " \u2014 " + new Date(dates[dates.length - 1] + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short", year: "numeric" }) : "";
     var linhas = "";
-    emps.forEach(function(e) {
-      const horasSemana = wJobs.filter(function(j) { return (j.team || []).indexOf(e.id) !== -1; }).reduce(function(s, j) { return s + horasReais(j.t1, j.t2); }, 0);
-      const pct = Math.round(horasSemana / 40 * 100);
-      const cor = pct >= 90 ? "#16A34A" : pct >= 60 ? "#F59E0B" : "#EF4444";
-      linhas += "<tr><td style='padding:8px 10px;font-weight:600'>" + e.name + "</td><td style='padding:8px 10px;text-align:right'>" + horasSemana.toFixed(1) + "h</td><td style='padding:8px 10px'><div style='background:#F1F5F9;border-radius:4px;height:14px;width:200px;position:relative'><div style='background:" + cor + ";border-radius:4px;height:100%;width:" + Math.min(100, pct) + "%'></div></div></td><td style='padding:8px 10px;text-align:right;font-weight:700;color:" + cor + "'>" + pct + "%</td></tr>";
+    emps.filter(function(e) { return e.ativo !== false; }).forEach(function(e) {
+      const horasSemana = wJobs.filter(function(j) { return (j.team || []).indexOf(e.id) !== -1 && j.status !== "cancelado"; }).reduce(function(s, j) { return s + horasReais(j.t1, j.t2); }, 0);
+      const hDia = horasDiaMap[e.id] || 8;
+      const diasUteisSem = dates.filter(function(d) { var dw = new Date(d + "T12:00:00").getDay(); return dw !== 0 && dw !== 6; });
+      const diasDisp = diasUteisSem.filter(function(d) { return !isEmpAusente(e.id, d); });
+      const capacidade = diasDisp.length * hDia;
+      const diasFora = diasUteisSem.length - diasDisp.length;
+      const pct = capacidade > 0 ? Math.round(horasSemana / capacidade * 100) : 0;
+      const cor = capacidade === 0 ? "#94A3B8" : pct >= 90 ? "#16A34A" : pct >= 60 ? "#F59E0B" : "#EF4444";
+      const obs = capacidade === 0 ? "ausente toda a semana" : (diasFora > 0 ? diasFora + " dia(s) de ausência" : "");
+      linhas += "<tr><td style='padding:8px 10px;font-weight:600'>" + e.name + "</td><td style='padding:8px 10px;text-align:right'>" + horasSemana.toFixed(1) + "h</td><td style='padding:8px 10px;text-align:right'>" + capacidade + "h</td><td style='padding:8px 10px'><div style='background:#F1F5F9;border-radius:4px;height:14px;width:160px;position:relative'><div style='background:" + cor + ";border-radius:4px;height:100%;width:" + Math.min(100, pct) + "%'></div></div></td><td style='padding:8px 10px;text-align:right;font-weight:700;color:" + cor + "'>" + pct + "%</td><td style='padding:8px 10px;font-size:11px;color:#94A3B8'>" + obs + "</td></tr>";
     });
     const win = window.open("", "_blank");
-    win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Produtividade \u2014 " + mesLabel + "</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C}h1{margin-bottom:2px}h2{color:#64748B;font-weight:normal;margin-top:0;margin-bottom:24px}table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;padding:8px 10px;background:#1A3A5C;color:#fff;font-size:11px;text-transform:uppercase}tr{border-bottom:1px solid #E2EBF4}@media print{body{padding:15px}}</style></head><body><h1>SamorClean</h1><h2>Produtividade da Equipa \u2014 " + mesLabel + " (refer\xEAncia: 40h/semana)</h2><table><thead><tr><th>Colaborador</th><th style='text-align:right'>Horas</th><th>Produtividade</th><th style='text-align:right'>%</th></tr></thead><tbody>" + linhas + "</tbody></table><script>window.onload=function(){window.print();}<\/script></body></html>");
+    win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Horas alocadas \u2014 " + mesLabel + "</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C}h1{margin-bottom:2px}h2{color:#64748B;font-weight:normal;margin-top:0;margin-bottom:24px}table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;padding:8px 10px;background:#1A3A5C;color:#fff;font-size:11px;text-transform:uppercase}tr{border-bottom:1px solid #E2EBF4}@media print{body{padding:15px}}</style></head><body><h1>SamorClean</h1><h2>Horas alocadas vs capacidade \u2014 " + mesLabel + "</h2><table><thead><tr><th>Colaborador</th><th style='text-align:right'>Alocadas</th><th style='text-align:right'>Capacidade</th><th>Ocupa\xE7\xE3o</th><th style='text-align:right'>%</th><th>Observa\xE7\xF5es</th></tr></thead><tbody>" + linhas + "</tbody></table><script>window.onload=function(){window.print();}<\/script></body></html>");
     win.document.close();
   }
   function exportEmpPDF(emp) {
@@ -3363,19 +3394,25 @@ function Routes() {
     );
   })(), calView === "week" && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginTop: 10, padding: 14 }) },
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 } },
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, "\uD83D\uDCCA Produtividade da Equipa (refer\xEAncia: 40h/semana)"),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, "\uD83D\uDCCA Horas alocadas vs capacidade da semana"),
       /* @__PURE__ */ React.createElement("button", { onClick: function() { exportarProdutividadePDF(); }, style: Object.assign({}, btnO, { fontSize: 11, padding: "5px 10px" }) }, "\uD83D\uDCC4 Exportar PDF")
     ),
     emps.filter(function(e) { return e.ativo !== false; }).map(function(e) {
-      const horasSemana = wJobs.filter(function(j) { return (j.team || []).indexOf(e.id) !== -1; }).reduce(function(s, j) { return s + horasReais(j.t1, j.t2); }, 0);
-      const pct = Math.round(horasSemana / 40 * 100);
-      const cor = pct >= 90 ? "#16A34A" : pct >= 60 ? "#F59E0B" : "#EF4444";
+      const horasSemana = wJobs.filter(function(j) { return (j.team || []).indexOf(e.id) !== -1 && j.status !== "cancelado"; }).reduce(function(s, j) { return s + horasReais(j.t1, j.t2); }, 0);
+      // Capacidade real: dias úteis da semana menos ausências, vezes as horas/dia do colaborador
+      const hDia = horasDiaMap[e.id] || 8;
+      const diasUteisSem = dates.filter(function(d) { var dw = new Date(d + "T12:00:00").getDay(); return dw !== 0 && dw !== 6; });
+      const diasDisp = diasUteisSem.filter(function(d) { return !isEmpAusente(e.id, d); });
+      const capacidade = diasDisp.length * hDia;
+      const pct = capacidade > 0 ? Math.round(horasSemana / capacidade * 100) : 0;
+      const diasFora = diasUteisSem.length - diasDisp.length;
+      const cor = capacidade === 0 ? "#94A3B8" : pct >= 90 ? "#16A34A" : pct >= 60 ? "#F59E0B" : "#EF4444";
       return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 8 } },
         /* @__PURE__ */ React.createElement("div", { style: { width: 70, fontSize: 11, fontWeight: 700, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, e.name.split(" ")[0]),
         /* @__PURE__ */ React.createElement("div", { style: { flex: 1, height: 16, background: "#F1F5F9", borderRadius: 4, position: "relative", overflow: "hidden" } },
           /* @__PURE__ */ React.createElement("div", { style: { width: Math.min(100, pct) + "%", height: "100%", background: cor, borderRadius: 4 } })
         ),
-        /* @__PURE__ */ React.createElement("div", { style: { width: 95, fontSize: 11, fontWeight: 700, color: cor, textAlign: "right" } }, horasSemana.toFixed(1), "h \u2014 ", pct, "%")
+        /* @__PURE__ */ React.createElement("div", { style: { width: 130, fontSize: 11, fontWeight: 700, color: cor, textAlign: "right" } }, capacidade === 0 ? "ausente toda a semana" : horasSemana.toFixed(1) + "h / " + capacidade + "h \u2014 " + pct + "%", diasFora > 0 && capacidade > 0 ? /* @__PURE__ */ React.createElement("span", { style: { color: "#94A3B8", fontWeight: 600 } }, " (", diasFora, "d aus.)") : null)
       );
     })
   ), calView === "week" && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginTop: 10, padding: 14 }) },
