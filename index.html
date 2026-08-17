@@ -215,6 +215,40 @@ const btnR = { background: "#EF4444", color: "#fff", border: "none", borderRadiu
 const btnO = { background: "transparent", color: "#2E6DA4", border: "1.5px solid #2E6DA4", borderRadius: 8, padding: "9px 18px", fontWeight: 700, fontSize: 14, cursor: "pointer" };
 const btnX = { background: "transparent", color: "#64748B", border: "none", borderRadius: 8, padding: "9px 14px", fontWeight: 600, fontSize: 14, cursor: "pointer" };
 const divid = { borderTop: "1px solid #E2EBF4", margin: "16px 0" };
+function feriadosUteisNoMes(refDate) {
+  // Feriados que caem em dia útil (nesses não se trabalha, logo não há subsídio)
+  var ano = refDate.getFullYear(), mes = refDate.getMonth();
+  return FERIADOS_NACIONAIS.filter(function(f) {
+    var d = new Date(f + "T12:00:00");
+    if (d.getFullYear() !== ano || d.getMonth() !== mes) return false;
+    var dow = d.getDay();
+    return dow !== 0 && dow !== 6;
+  }).length;
+}
+function diasComSubsidioAlim(emp, absData, refDate) {
+  // Subsídio de alimentação = só dias efectivamente trabalhados.
+  // Descontam-se feriados e TODAS as ausências (férias, faltas, dispensas, baixa).
+  var diasUteis = calcDiasUteisMes(refDate);
+  var feriados = feriadosUteisNoMes(refDate);
+  var ausencias = 0;
+  var mStart = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
+  var mEnd = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0);
+  (absData || []).forEach(function(a) {
+    if (a.funcionario_id !== emp.id || !a.data_inicio) return;
+    var ini = new Date(a.data_inicio + "T12:00:00");
+    var fim = new Date((a.data_fim || a.data_inicio) + "T12:00:00");
+    if (ini < mStart) ini = new Date(mStart);
+    if (fim > mEnd) fim = new Date(mEnd);
+    var d = new Date(ini);
+    while (d <= fim) {
+      var dow = d.getDay();
+      var ds = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+      if (dow !== 0 && dow !== 6 && FERIADOS_NACIONAIS.indexOf(ds) === -1) ausencias++;
+      d.setDate(d.getDate() + 1);
+    }
+  });
+  return Math.max(0, diasUteis - feriados - ausencias);
+}
 function calcDiasUteisMes(refDate) {
   var count = 0;
   var d = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
@@ -289,7 +323,7 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
   } else {
     var salario = parseFloat(rh.salario_base) || 0;
     var diasEfectivos = Math.max(0, diasUteisDoMes - diasBaixa);
-    var diasAlim = Math.max(0, diasUteisDoMes - diasFerias - diasBaixa);
+    var diasAlim = diasComSubsidioAlim(emp, absData, refDate);
     var subAlim = diasAlim * 6;
     var salarioEfectivo = diasBaixa > 0 ? salario * (diasEfectivos / Math.max(1, diasUteisDoMes)) : salario;
     // Verifica se o subsídio de férias já foi pago a s\xE9rio este ano
@@ -316,7 +350,7 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
     var ss = (salarioEfectivo + subNatal + subFeriasParaSS) * 0.2375;
     var seguro = salarioEfectivo * 0.015;
     detalhe.push({ l: "Salário base" + (diasBaixa > 0 ? " (prop. " + diasEfectivos + "/" + diasUteisDoMes + " dias)" : ""), v: salarioEfectivo });
-    detalhe.push({ l: "Sub. alimentação (" + diasAlim + " dias × 6€)" + (diasFerias > 0 || diasBaixa > 0 ? " *" : ""), v: subAlim });
+    detalhe.push({ l: "Sub. alimentação (" + diasAlim + " dias trabalhados × 6€)", v: subAlim });
     detalhe.push({ l: "Sub. férias" + notaSubFerias, v: subFerias });
     detalhe.push({ l: "Sub. Natal (8,33%)" + (diasBaixa > 0 ? " (prop. baixa)" : ""), v: subNatal });
     detalhe.push({ l: "Seg. Social patronal (23,75%)" + (subFeriasParaSS > 0 ? " — inclui subs. férias real" : ""), v: ss });
@@ -327,7 +361,7 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
   total += premio;
   return { total: total, detalhe: detalhe, tipo: tipo };
 }
-function calcCustoHoraReal(emp, rhData, refDate) {
+function calcCustoHoraReal(emp, rhData, refDate, absData) {
   var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
   if (!rh) return 0;
   var tipo = rh.tipo_contrato || "Contrato";
@@ -337,7 +371,9 @@ function calcCustoHoraReal(emp, rhData, refDate) {
   } else {
     var salario = parseFloat(rh.salario_base) || 0;
     var diasUteis = calcDiasUteisMes(refDate) || 22;
-    var custoMensal = salario + diasUteis * 6 + salario * 0.0833 + salario * 0.0833 + salario * 0.2375 + salario * 0.015;
+    // Subsídio de alimentação só nos dias efectivamente trabalhados
+    var diasAlim = absData ? diasComSubsidioAlim(emp, absData, refDate) : Math.max(0, diasUteis - feriadosUteisNoMes(refDate));
+    var custoMensal = salario + diasAlim * 6 + salario * 0.0833 + salario * 0.0833 + salario * 0.2375 + salario * 0.015;
     return custoMensal / diasUteis / horasDia;
   }
 }
@@ -1129,7 +1165,7 @@ function Finance() {
   }
 
   function custoHoraReal(emp) {
-    return calcCustoHoraReal(emp, rhData, now);
+    return calcCustoHoraReal(emp, rhData, now, absData);
   }
 
   async function setupCash() {
