@@ -7888,7 +7888,18 @@ function Avaliacoes() {
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 16 } }, emailModal.contacto.email),
         (function() {
           var assunto = "Avalia\xE7\xE3o do servi\xE7o \u2014 SamorClean";
-          var corpo = "Ol\xE1 " + (emailModal.contacto.name || "").split(" ")[0] + ",\n\nA sua avalia\xE7\xE3o sobre o(s) \xFAltimo(s) servi\xE7o(s) da SamorClean ajuda-nos a manter o padr\xE3o de qualidade que a nossa equipa trabalha para entregar todos os dias \u2014 e conta directamente para o pr\xE9mio de produtividade dos colaboradores que o realizaram.\n\nPode avaliar em menos de 1 minuto, atrav\xE9s do QR code ou do link do portal que j\xE1 conhece.\n\nObrigado pelo seu tempo.\n\nEquipa SamorClean";
+          var svcsCliente = (porAvaliar || []).filter(function(j) { return j.client_id === emailModal.cliente.id; })
+            .filter(function(j) { return Math.floor((new Date() - new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3)) <= 30; })
+            .sort(function(a, b) { return a.date < b.date ? 1 : -1; });
+          var baseUrl = "https://samorcleangeral-app.github.io/SamorClean?cliente=" + emailModal.cliente.id;
+          var linhasLinks = svcsCliente.slice(0, 5).map(function(j) {
+            return "\u2022 Servi\xE7o de " + new Date(j.date + "T12:00:00").toLocaleDateString("pt-PT") + ":\n  " + baseUrl + "&avaliar=" + j.id;
+          }).join("\n\n");
+          var corpo = "Ol\xE1 " + (emailModal.contacto.name || "").split(" ")[0] + ",\n\nA sua avalia\xE7\xE3o sobre o(s) \xFAltimo(s) servi\xE7o(s) da SamorClean ajuda-nos a manter o padr\xE3o de qualidade que a nossa equipa trabalha para entregar todos os dias \u2014 e conta directamente para o pr\xE9mio de produtividade dos colaboradores que o realizaram.\n\n"
+            + (svcsCliente.length > 0
+                ? "Basta clicar no link do servi\xE7o e introduzir o seu PIN:\n\n" + linhasLinks + "\n\n(Os links s\xE3o v\xE1lidos durante 30 dias.)"
+                : "Pode avaliar atrav\xE9s do QR code no local ou do portal do cliente:\n" + baseUrl)
+            + "\n\nDemora menos de 1 minuto.\n\nObrigado pelo seu tempo.\n\nEquipa SamorClean";
           return /* @__PURE__ */ React.createElement("div", null,
             /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } },
               /* @__PURE__ */ React.createElement("label", { style: lbl }, "Assunto"),
@@ -9591,6 +9602,16 @@ function ClientPortal(props) {
       setLoadingTeam(false);
     });
   }
+  // Link directo de avaliação: abre logo o ecrã do serviço indicado (válido 30 dias)
+  useEffect(function() {
+    if (!props.avaliarId || !history || history.length === 0) return;
+    var alvo = history.find(function(j) { return j.id === props.avaliarId; });
+    if (!alvo) { return; }
+    if (alvo.rated) { alert("Este servi\xE7o j\xE1 foi avaliado. Obrigado!"); return; }
+    var dias = Math.floor((new Date() - new Date(alvo.date + "T12:00:00")) / (24 * 3600 * 1e3));
+    if (dias > 30) { alert("O prazo para avaliar este servi\xE7o (30 dias) j\xE1 terminou."); return; }
+    setShowRate(alvo);
+  }, [props.avaliarId, history]);
   function loadPortalData() {
     if (!clientId) return;
     const todayStr = localDateStr();
@@ -10246,6 +10267,7 @@ function PortalArmazem() {
 function App() {
   const params = new URLSearchParams(window.location.search);
   const clienteParam = params.get("cliente");
+  const avaliarParam = params.get("avaliar");
   const ocasionalParam = params.get("ocasional");
   const funcionarioParam = params.get("funcion\xE1rio");
   const armazemParam = params.get("armazem");
@@ -10269,7 +10291,7 @@ function App() {
   if (mod === "employee") return /* @__PURE__ */ React.createElement(Employee, { onExit: funcionarioParam ? null : function() {
     setMod("sel");
   } });
-  if (mod === "client") return /* @__PURE__ */ React.createElement(ClientPortal, { clientId: clienteParam || ocasionalParam, isOcasional: !!ocasionalParam, onExit: null });
+  if (mod === "client") return /* @__PURE__ */ React.createElement(ClientPortal, { clientId: clienteParam || ocasionalParam, isOcasional: !!ocasionalParam, onExit: null , avaliarId: avaliarParam});
   return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 48, textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 22, padding: 14, width: 112, height: 112, margin: "0 auto 20px", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" } }, /* @__PURE__ */ React.createElement("img", { src: "https://dtydrnezzaykiaglwxfv.supabase.co/storage/v1/object/public/formacao/samorclean_icon_hq.png", onError: function(e) {
     e.target.style.display = "none";
   }, style: { width: 92, height: 92, objectFit: "contain", borderRadius: 10 } })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 36, fontWeight: 900, color: "#fff", letterSpacing: -1 } }, "SamorClean"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#38B6D8", fontWeight: 700, letterSpacing: 2.5, marginTop: 6 } }, "GEST\xC3O OPERACIONAL"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.35)", marginTop: 10 } }, "Seleciona a \xE1rea de acesso")), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, width: "100%", maxWidth: 480, marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { onClick: function() {
