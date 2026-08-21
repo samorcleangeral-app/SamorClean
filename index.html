@@ -6541,6 +6541,13 @@ function Fornecedores() {
   const [empsSS, setEmpsSS] = useState([]);
   const [rhDataSS, setRhDataSS] = useState([]);
   const [absDataSS, setAbsDataSS] = useState([]);
+  const [ordGerSS, setOrdGerSS] = useState(null);
+  useEffect(function() {
+    var n = new Date();
+    db.list("ordenado_gerencia", "?select=*&ano=eq." + n.getFullYear() + "&mes=eq." + (n.getMonth() + 1)).then(function(r) {
+      setOrdGerSS(r && r[0] ? r[0] : null);
+    });
+  }, []);
   const [showDespGeral, setShowDespGeral] = useState(false);
   const [despGeralForm, setDespGeralForm] = useState({ descricao: "", fornecedor_nome: "", categoria: "Manuten\xE7\xE3o de Viaturas", valor: "", iva_percentagem: 23, iva_dedutivel: true, iva_percentagem_dedutivel: 100, data: localDateStr(), pago: false });
   const CATS = ["Combust\xEDvel", "Produtos de Limpeza", "Contabilidade", "Seguros", "Rendas", "Telecomunica\xE7\xF5es", "Manuten\xE7\xE3o", "Fardamento", "Manuten\xE7\xE3o de Viaturas", "Alimenta\xE7\xE3o", "Empr\xE9stimos/Financiamento", "Portagens", "Outro"];
@@ -6796,17 +6803,21 @@ function Fornecedores() {
       var rh = rhDataSS.find(function(r) { return r.funcionario_id === e.id; });
       return rh && (rh.tipo_contrato || "Contrato") !== "Recibo Verde";
     });
-    if (contratoEmps.length === 0) return null;
-    var totalSS = contratoEmps.reduce(function(s, e) {
+    var ssGerencia = ordGerSS ? (parseFloat(ordGerSS.valor) || 0) * 0.2375 : 0;
+    if (contratoEmps.length === 0 && ssGerencia === 0) return null;
+    var ssColabs = contratoEmps.reduce(function(s, e) {
       return s + calcCustoColaboradorMes(e, rhDataSS, absDataSS, [], now2).detalhe.reduce(function(s2, d) {
         return s2 + (d.l.indexOf("Seg. Social") !== -1 ? d.v : 0);
       }, 0);
     }, 0);
+    var totalSS = ssColabs + ssGerencia;
     return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, background: "#EFF6FF", border: "1.5px solid #2E6DA4" }) },
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "\uD83D\uDCCB Seguran\xE7a Social patronal a pagar este m\xEAs"),
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 10 } }, "Apenas informativo \u2014 j\xE1 est\xE1 inclu\xEDdo no custo de m\xE3o-de-obra, n\xE3o precisas de o lan\xE7ar aqui como despesa. Serve s\xF3 para preparares o pagamento."),
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 26, fontWeight: 900, color: "#2E6DA4" } }, fmt(totalSS)),
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 4 } }, contratoEmps.length, " colaborador", contratoEmps.length !== 1 ? "es" : "", " a contrato (23,75% sobre o sal\xE1rio efectivo de cada um)")
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 4 } }, contratoEmps.length, " colaborador", contratoEmps.length !== 1 ? "es" : "", " a contrato: ", fmt(ssColabs)),
+      ssGerencia > 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, "Ordenado da ger\xEAncia: ", fmt(ssGerencia)) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#DC2626", marginTop: 4 } }, "\u26A0 Ordenado da ger\xEAncia deste m\xEAs ainda n\xE3o foi definido \u2014 a Seg. Social est\xE1 incompleta. Define-o no Financeiro."),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#CBD5E1", marginTop: 4 } }, "23,75% sobre o sal\xE1rio efectivo de cada um")
     );
   })(),
   (function() {
@@ -7969,6 +7980,7 @@ function PedidosExtra() {
   const [taskOut, setTaskOut] = useState("");
   const [taskIn, setTaskIn] = useState("");
   const [peSearch, setPeSearch] = useState("");
+  const [peHistorico, setPeHistorico] = useState(false);
   useEffect(function() {
     Promise.all([
       db.list("pedidos_extra", "?select=*&order=created_at.desc"),
@@ -8102,7 +8114,33 @@ function PedidosExtra() {
         /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, color: "#92400E", fontSize: 13 } }, totalPendentes, " pedido", totalPendentes !== 1 ? "s" : "", " por resolver")
       )
     ),
-    /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar cliente...", value: peSearch, onChange: function(e) { setPeSearch(e.target.value); } }),
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center", marginBottom: 14, flexWrap: "wrap" } },
+      /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 0 }), placeholder: "Pesquisar cliente...", value: peSearch, onChange: function(e) { setPeSearch(e.target.value); } }),
+      (function() {
+        var nResolvidos = pedidos.filter(function(p) { return p.status && p.status !== "pendente"; }).length;
+        return nResolvidos > 0 ? /* @__PURE__ */ React.createElement("button", { onClick: function() { setPeHistorico(!peHistorico); }, style: { padding: "8px 14px", borderRadius: 8, border: "1.5px solid " + (peHistorico ? "#7C3AED" : "#CBD5E1"), background: peHistorico ? "#F5F3FF" : "#fff", color: peHistorico ? "#7C3AED" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, peHistorico ? "\u2713 A ver hist\xF3rico" : "\uD83D\uDCCB Hist\xF3rico (" + nResolvidos + ")") : null;
+      })()
+    ),
+    peHistorico && (function() {
+      var resolvidos = pedidos.filter(function(p) { return p.status && p.status !== "pendente"; })
+        .filter(function(p) { var cn = clientsMap[p.client_id] ? clientsMap[p.client_id].name : ""; return !peSearch || cn.toLowerCase().indexOf(peSearch.toLowerCase()) !== -1; })
+        .sort(function(a, b) { return (b.created_at || "") < (a.created_at || "") ? -1 : 1; });
+      return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "\uD83D\uDCCB Hist\xF3rico de pedidos extra"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 12 } }, "Todos os pedidos j\xE1 resolvidos (aprovados ou recusados)."),
+        /* @__PURE__ */ React.createElement("div", { style: { maxHeight: 420, overflowY: "auto" } }, resolvidos.map(function(p) {
+          var aprovado = p.status === "aprovado";
+          return /* @__PURE__ */ React.createElement("div", { key: p.id, style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "9px 0", borderBottom: "1px solid #F1F5F9", gap: 10 } },
+            /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#1A3A5C" } }, clientsMap[p.client_id] ? clientsMap[p.client_id].name : p.client_id),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 2 } }, p.descricao || p.tipo || "\u2014"),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 2 } }, p.created_at ? new Date(p.created_at).toLocaleDateString("pt-PT", { day: "2-digit", month: "short", year: "numeric" }) : "")
+            ),
+            /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 800, borderRadius: 7, padding: "3px 9px", whiteSpace: "nowrap", background: aprovado ? "#DCFCE7" : "#FEE2E2", color: aprovado ? "#15803D" : "#DC2626" } }, aprovado ? "Aprovado" : "Recusado")
+          );
+        }))
+      );
+    })(),
     clientList.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) },
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 16, marginBottom: 8 } }, "Sem pedidos extra"),
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13 } }, "Quando um cliente fizer um pedido pelo portal, aparece aqui.")
