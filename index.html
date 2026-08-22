@@ -2667,7 +2667,7 @@ function Routes() {
     setReforcoSel(null);
     return { bloqueado: false };
   }
-  const [nj, setNj] = useState({ cn: "", addr: "", svc: "", date: "", date_end: "", t1: "08:00", t2: "10:00", team: [], val: "", obra_ref: "" });
+  const [nj, setNj] = useState({ cn: "", addr: "", svc: "", date: "", date_end: "", t1: "08:00", t2: "10:00", team: [], val: "", obra_ref: "", valEditado: false });
   useEffect(function() {
     var c = clients.find(function(x) { return x.name === nj.cn; });
     if (!c) return;
@@ -2684,7 +2684,8 @@ function Routes() {
       var preco = c.price_per_hour || PRICE_PER_HOUR;
       sugestao = Math.round(teamSize * horas * preco * 100) / 100;
     }
-    setNj(function(p) { return Object.assign({}, p, { val: sugestao }); });
+    // Nao sobrepor um valor escrito pelo utilizador (0 e um valor valido)
+    setNj(function(p) { return p.valEditado ? p : Object.assign({}, p, { val: sugestao }); });
   }, [nj.cn, nj.t1, nj.t2, nj.team.length, nj.svc]);
   const [clientSearch, setClientSearch] = useState("");
   const [showClientDropdown, setShowClientDropdown] = useState(false);
@@ -2997,7 +2998,7 @@ function Routes() {
     if (newJobs.length > 0) {
       setJobs(function(p) { return p.concat(newJobs); });
       setShowNew(false);
-      setNj({ cn: "", addr: "", svc: "", date: "", date_end: "", t1: "08:00", t2: "10:00", team: [], val: "", obra_ref: "" });
+      setNj({ cn: "", addr: "", svc: "", date: "", date_end: "", t1: "08:00", t2: "10:00", team: [], val: "", obra_ref: "", valEditado: false });
       setClientSearch("");
       if (avisos.length > 0) alert("\u26A0 Aten\xE7\xE3o:\n\n" + avisos.join("\n"));
     }
@@ -3546,7 +3547,7 @@ function Routes() {
   } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C", marginBottom: 16 } }, "Novo Servi\xE7o"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1", position: "relative" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Cliente"), /* @__PURE__ */ React.createElement("input", { style: inp, value: clientSearch, placeholder: "Pesquisar cliente...", onChange: function(e) { setClientSearch(e.target.value); setShowClientDropdown(true); }, onFocus: function() { setShowClientDropdown(true); } }), showClientDropdown && clientSearch.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1.5px solid #E2EBF4", borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 100, maxHeight: 200, overflowY: "auto" } },
     clients.filter(function(c) { return c.name.toLowerCase().indexOf(clientSearch.toLowerCase()) !== -1; }).map(function(c) {
       return /* @__PURE__ */ React.createElement("div", { key: c.id, onClick: function() {
-        setNj(Object.assign({}, nj, { cn: c.name, addr: c.address || "", client_id: c.id, team: c.equipa_habitual || [], svc: c.service, val: (function() {
+        setNj(Object.assign({}, nj, { valEditado: false, cn: c.name, addr: c.address || "", client_id: c.id, team: c.equipa_habitual || [], svc: c.service, val: (function() {
           var t1parts = (nj.t1 || "08:00").split(":"); var t2parts = (nj.t2 || "10:00").split(":");
           var hrs = (parseInt(t2parts[0])*60+parseInt(t2parts[1]) - parseInt(t1parts[0])*60-parseInt(t1parts[1])) / 60;
           var teamSize = (c.equipa_habitual || []).length || 1;
@@ -3578,17 +3579,17 @@ function Routes() {
           setNj(Object.assign({}, nj, { obra_ref: e.target.value }));
         } }),
         /* @__PURE__ */ React.createElement("label", { style: lbl }, "Valor desta obra (\u20AC, sem IVA)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: nj.val, placeholder: "Ex: 713.29", onFocus: function(e) { e.target.select(); }, onChange: function(e) {
-        setNj(Object.assign({}, nj, { val: e.target.value }));
+        setNj(Object.assign({}, nj, { val: e.target.value, valEditado: true }));
       } }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#F59E0B", fontWeight: 700, marginTop: 4 } }, "Cada obra tem o seu pr\xF3prio valor \u2014 escreve o valor orçamentado para esta obra espec\xEDfica. Se usares \"Data fim\" para v\xE1rios dias, este valor \xE9 aplicado uma \xFAnica vez (no 1\xBA dia) \u2014 os outros dias ficam a 0\u20AC, para o total n\xE3o duplicar.")); 
     }
     var isServicoDiferente = nj.svc && c && nj.svc !== c.service;
     if (isServicoDiferente) {
       return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Valor (\u20AC, sem IVA) \u2014 servi\xE7o extra, escreve o valor orçamentado"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: nj.val, placeholder: "Ex: 50", onFocus: function(e) { e.target.select(); }, onChange: function(e) {
-        setNj(Object.assign({}, nj, { val: e.target.value }));
+        setNj(Object.assign({}, nj, { val: e.target.value, valEditado: true }));
       } }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#F59E0B", fontWeight: 700, marginTop: 4 } }, "Como \xE9 um servi\xE7o diferente do habitual, n\xE3o calculamos automaticamente \u2014 escreve o valor combinado/orçamentado para este trabalho."));
     }
     return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Valor (\u20AC, sem IVA)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", value: nj.val, placeholder: "0", onFocus: function(e) { e.target.select(); }, onChange: function(e) {
-      setNj(Object.assign({}, nj, { val: e.target.value }));
+      setNj(Object.assign({}, nj, { val: e.target.value, valEditado: true }));
     } }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 4 } }, "Sugest\xE3o calculada automaticamente ao mudar cliente/horas/equipa \u2014 podes editar ou p\xF4r a 0\u20AC livremente."));
   })(), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Hora in\xEDcio"), /* @__PURE__ */ React.createElement("select", { style: inp, value: nj.t1, onChange: function(e) {
     setNj(Object.assign({}, nj, { t1: e.target.value }));
@@ -3598,7 +3599,7 @@ function Routes() {
     setNj(Object.assign({}, nj, { t2: e.target.value }));
   } }, TIME_SLOTS.map(function(t) {
     return /* @__PURE__ */ React.createElement("option", { key: t }, t);
-  }))), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Equipa"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, emps.map(function(e) {
+  }))), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Equipa"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, emps.filter(function(e) { return e.ativo !== false; }).map(function(e) {
     const checked = nj.team.indexOf(e.id) !== -1;
     const ausenteHoje = nj.date ? isEmpAusente(e.id, nj.date, nj.t1, nj.t2) : false;
     const outrosServicos = nj.date ? jobs.filter(function(j) {
@@ -7953,10 +7954,11 @@ function Avaliacoes() {
   }
   const [showPendentes, setShowPendentes] = useState(true);
   const [avSearch, setAvSearch] = useState("");
+  const [servicoDatas, setServicoDatas] = useState({});
   useEffect(function() {
     Promise.all([
       db.list("avaliacoes", "?select=*&order=created_at.desc"),
-      db.list("clientes", "?select=id,name,email,contact,phone"),
+      db.list("clientes", "?select=id,name,email,contact,phone,ativo"),
       db.list("funcionarios", "?select=id,name,av"),
       db.list("servicos", "?select=id,client_id,date,rated&status=eq.completed"),
       db.list("client_contacts", "?select=client_id,name,email,phone")
@@ -7968,13 +7970,19 @@ function Avaliacoes() {
       const em = {};
       (results[2] || []).forEach(function(e) { em[e.id] = e; });
       setEmpsMap(em);
+      var svcDatas = {};
+      (results[3] || []).forEach(function(sv) { svcDatas[sv.id] = sv.date; });
+      setServicoDatas(svcDatas);
       var byCliente = {};
       (results[3] || []).filter(function(s) { return !s.rated; }).forEach(function(s) {
         if (!byCliente[s.client_id]) byCliente[s.client_id] = { count: 0, ultima: s.date };
         byCliente[s.client_id].count++;
         if (s.date > byCliente[s.client_id].ultima) byCliente[s.client_id].ultima = s.date;
       });
-      var lista = Object.keys(byCliente).map(function(cid) {
+      var lista = Object.keys(byCliente).filter(function(cid) {
+        // Clientes inactivos saem da lista de serviços a avaliar
+        return cm[cid] && cm[cid].ativo !== false;
+      }).map(function(cid) {
         return { id: cid, name: cm[cid] ? cm[cid].name : cid, count: byCliente[cid].count, ultima: byCliente[cid].ultima };
       }).sort(function(a, b) { return b.count - a.count; });
       setPorAvaliar(lista);
@@ -8008,7 +8016,16 @@ function Avaliacoes() {
     var avg = clientAvs.reduce(function(s, a) { return s + (a.stars || 0); }, 0) / clientAvs.length;
     var novas = clientAvs.filter(function(a) { return !a.vista; }).length;
     return { id: cid, name: clientsMap[cid] ? clientsMap[cid].name : cid, avs: clientAvs, avg: avg, novas: novas };
-  }).sort(function(a, b) { return b.novas - a.novas || b.avs.length - a.avs.length; }).filter(function(c) { return !avSearch || c.name.toLowerCase().indexOf(avSearch.toLowerCase()) !== -1; });
+  }).sort(function(a, b) { return b.novas - a.novas || b.avs.length - a.avs.length; }).filter(function(c) {
+    if (!avSearch) return true;
+    var q2 = avSearch.toLowerCase();
+    if (c.name.toLowerCase().indexOf(q2) !== -1) return true;
+    // procurar tambem pelo nome do colaborador avaliado
+    return (c.avs || []).some(function(a) {
+      var e = empsMap[a.funcionario_id];
+      return e && e.name.toLowerCase().indexOf(q2) !== -1;
+    });
+  });
   var totalNovas = avs.filter(function(a) { return !a.vista; }).length;
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar avalia\xE7\xF5es...");
   if (selCliente) {
@@ -8031,7 +8048,9 @@ function Avaliacoes() {
               ),
               /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 3, marginBottom: 4 } }, [1,2,3,4,5].map(function(i) { return /* @__PURE__ */ React.createElement("span", { key: i, style: { fontSize: 18, color: i <= a.stars ? "#F59E0B" : "#E2EBF4" } }, "\u2605"); })),
               a.contact_name && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, "por ", a.contact_name),
-              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } }, new Date(a.created_at).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" }))
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } },
+                servicoDatas[a.servico_id] ? "Servi\xE7o de " + new Date(servicoDatas[a.servico_id] + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "long" }) + " \u00B7 " : "",
+                "avaliado a ", new Date(a.created_at).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" }))
             ),
             /* @__PURE__ */ React.createElement("button", { onClick: function() { deleteAv(a.id); }, style: { background: "transparent", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 16 } }, "\uD83D\uDDD1")
           ),
@@ -8136,7 +8155,39 @@ function Avaliacoes() {
         })()
       )
     ),
-    /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar cliente...", value: avSearch, onChange: function(e) { setAvSearch(e.target.value); } }),
+    /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar cliente ou colaborador...", value: avSearch, onChange: function(e) { setAvSearch(e.target.value); } }),
+    (function() {
+      var mesA = localDateStr().slice(0, 7);
+      var doMes = avs.filter(function(a) { return (a.created_at || "").slice(0, 7) === mesA; });
+      var porColab = {};
+      Object.keys(empsMap).forEach(function(eid) {
+        var e = empsMap[eid];
+        if (!e || e.ativo === false) return;
+        porColab[eid] = { nome: e.name, stars: [] };
+      });
+      doMes.forEach(function(a) {
+        if (!porColab[a.funcionario_id]) return;
+        porColab[a.funcionario_id].stars.push(parseFloat(a.stars) || 0);
+      });
+      var lista = Object.keys(porColab).map(function(k) {
+        var c = porColab[k];
+        var media = c.stars.length > 0 ? c.stars.reduce(function(x, y) { return x + y; }, 0) / c.stars.length : null;
+        return { nome: c.nome, n: c.stars.length, media: media };
+      }).sort(function(a, b) { return (b.media || -1) - (a.media || -1) || b.n - a.n; });
+      if (lista.length === 0) return null;
+      return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 2 } }, "\u2B50 M\xE9dia por colaborador \u2014 ", new Date(mesA + "-01T12:00:00").toLocaleDateString("pt-PT", { month: "long", year: "numeric" })),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 12 } }, "M\xE9dia deste m\xEAs (a que conta para o pr\xE9mio). O n\xFAmero de avalia\xE7\xF5es indica a fiabilidade da m\xE9dia."),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 10 } }, lista.map(function(c) {
+          var cor = c.media === null ? "#94A3B8" : c.media >= 4.5 ? "#16A34A" : c.media >= 3.5 ? "#F59E0B" : "#DC2626";
+          return /* @__PURE__ */ React.createElement("div", { key: c.nome, style: { border: "1.5px solid #E2EBF4", borderRadius: 10, padding: "10px 12px" } },
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#1A3A5C" } }, c.nome),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 900, color: cor, marginTop: 3 } }, c.media === null ? "\u2014" : c.media.toFixed(1) + " \u2605"),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: c.n < 3 ? "#DC2626" : "#94A3B8", marginTop: 2 } }, c.n === 0 ? "sem avalia\xE7\xF5es" : c.n + " avalia\xE7\xE3o" + (c.n !== 1 ? "es" : ""), c.n > 0 && c.n < 3 ? " (abaixo do m\xEDnimo)" : "")
+          );
+        }))
+      );
+    })(),
     clientList.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, "Sem avalia\xE7\xF5es ainda.") :
     /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 14 } },
       clientList.map(function(c) {
@@ -9262,7 +9313,7 @@ function Employee(props) {
     }, style: Object.assign({}, btnR, { flex: 1 }) }, "Confirmar sa\xEDda")))));
   }
   if (phase === "login") {
-    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 32, textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, fontWeight: 900, color: "#fff", letterSpacing: -1 } }, "SamorClean"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#38B6D8", fontWeight: 700, letterSpacing: 2, marginTop: 4 } }, "\xC1REA DOS COLABORADORES")), !sEmp ? /* @__PURE__ */ React.createElement("div", { style: { width: "100%", maxWidth: 360 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.5)", textAlign: "center", marginBottom: 18, fontWeight: 600 } }, "Quem \xE9s tu?"), emps.map(function(e) {
+    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 32, textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, fontWeight: 900, color: "#fff", letterSpacing: -1 } }, "SamorClean"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#38B6D8", fontWeight: 700, letterSpacing: 2, marginTop: 4 } }, "\xC1REA DOS COLABORADORES")), !sEmp ? /* @__PURE__ */ React.createElement("div", { style: { width: "100%", maxWidth: 360 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.5)", textAlign: "center", marginBottom: 18, fontWeight: 600 } }, "Quem \xE9s tu?"), emps.filter(function(e) { return e.ativo !== false; }).map(function(e) {
       return /* @__PURE__ */ React.createElement("div", { key: e.id, onClick: function() {
         setSEmp(e);
         setPin("");
