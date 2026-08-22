@@ -6547,6 +6547,42 @@ function Stock() {
         );
       }))
     ),
+    showAnalise && (function() {
+      var mesA = localDateStr().slice(0, 7);
+      var saidas = (movimentos || []).filter(function(m) { return m.tipo === "saida" && (m.created_at || "").slice(0, 7) === mesA; });
+      var porColab = {};
+      saidas.forEach(function(m) {
+        var k = m.funcionario_nome || "Sem colaborador";
+        if (!porColab[k]) porColab[k] = { custo: 0, n: 0, produtos: {} };
+        var v = (parseFloat(m.quantidade) || 0) * (parseFloat(m.valor_unitario) || 0);
+        porColab[k].custo += v;
+        porColab[k].n++;
+        if (!porColab[k].produtos[m.produto_nome]) porColab[k].produtos[m.produto_nome] = { q: 0, v: 0 };
+        porColab[k].produtos[m.produto_nome].q += parseFloat(m.quantidade) || 0;
+        porColab[k].produtos[m.produto_nome].v += v;
+      });
+      var lista = Object.keys(porColab).map(function(k) { return Object.assign({ nome: k }, porColab[k]); }).sort(function(a, b) { return b.custo - a.custo; });
+      var totalMes = lista.reduce(function(a, x) { return a + x.custo; }, 0);
+      if (lista.length === 0) return null;
+      return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 2 } }, "\uD83D\uDC64 Custo de material por colaborador \u2014 ", new Date(mesA + "-01T12:00:00").toLocaleDateString("pt-PT", { month: "long", year: "numeric" })),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 12 } }, "S\xF3 pedidos aprovados que sa\xEDram do armaz\xE9m. Total do m\xEAs: ", /* @__PURE__ */ React.createElement("strong", null, fmt(totalMes))),
+        lista.map(function(c) {
+          var pct = totalMes > 0 ? Math.round(c.custo / totalMes * 100) : 0;
+          var prods = Object.keys(c.produtos).map(function(k) { return { nome: k, q: c.produtos[k].q, v: c.produtos[k].v }; }).sort(function(a, b) { return b.v - a.v; });
+          return /* @__PURE__ */ React.createElement("div", { key: c.nome, style: { borderBottom: "1px solid #F1F5F9", padding: "10px 0" } },
+            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 } },
+              /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, c.nome),
+              /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14, fontWeight: 900, color: "#DC2626" } }, fmt(c.custo))
+            ),
+            /* @__PURE__ */ React.createElement("div", { style: { background: "#F1F5F9", borderRadius: 4, height: 6, marginBottom: 6 } },
+              /* @__PURE__ */ React.createElement("div", { style: { width: pct + "%", height: "100%", background: "#2E6DA4", borderRadius: 4 } })
+            ),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, prods.map(function(x) { return x.nome + " (" + x.q + " \u2014 " + fmt(x.v) + ")"; }).join(" \u00B7 "))
+          );
+        })
+      );
+    })(),
     showAnalise && /* @__PURE__ */ React.createElement(StockAnalise, { consumos, empsList, produtos, analiseTipo, setAnaliseTipo, filtroColabs, setFiltroColabs, filtroProdutos, setFiltroProdutos, dataInicio, setDataInicio, dataFim, setDataFim }),
     emBaixo.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#FEF2F2", border: "1.5px solid #EF4444" }) },
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#991B1B", marginBottom: 6 } }, "\u26A0 ", emBaixo.length, " produto", emBaixo.length !== 1 ? "s" : "", " em baixo de stock:"),
