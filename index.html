@@ -590,6 +590,7 @@ function Finance() {
   const [verTudoCobrar, setVerTudoCobrar] = useState(false);
   const [clientsMap, setClientsMap] = useState({});
   const [despesas, setDespesas] = useState([]);
+  const [stockSaidas, setStockSaidas] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [avencaParcialEdit, setAvencaParcialEdit] = useState({});
   const [pagMovimentos, setPagMovimentos] = useState([]);
@@ -639,7 +640,8 @@ function Finance() {
       db.list("ordenado_gerencia", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
       db.list("ajuste_dias_recibo_verde", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
       db.list("premio_assiduidade_opcional", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
-      db.list("historico_financeiro", "?select=ano,mes,despesas,faturado&ano=eq." + now.getFullYear() + "&order=mes.desc")
+      db.list("historico_financeiro", "?select=ano,mes,despesas,faturado&ano=eq." + now.getFullYear() + "&order=mes.desc"),
+      db.list("stock_movimentos", "?select=*&tipo=eq.saida")
     ]).then(function(results) {
       const cm = {};
       (results[2] || []).forEach(function(c) { cm[c.id] = c; });
@@ -665,6 +667,7 @@ function Finance() {
       setReceitaMediaMensal(mediaFat);
       setClientsMap(cm);
       setClientes(results[2] || []);
+      setStockSaidas(results[18] || []);
       db.list("pagamentos_movimentos", "?select=*&order=data_pagamento.desc").then(function(mv) { setPagMovimentos(mv || []); });
       setDespesas(results[3] || []);
       setRhData(results[5] || []);
@@ -1397,7 +1400,11 @@ function Finance() {
     setDadosAnuais({ atual: mergeAtual.fat, anterior: mergeAnterior.fat, despesasAtual: mergeAtual.desp, despesasAnterior: mergeAnterior.desp, ano: ano });
     setLoadingAnual(false);
   }
-  var totalDespesas = despesas.reduce(function(s, d) { return s + (parseFloat(d.valor) || 0); }, 0);
+  // Compras de material são EXISTÊNCIAS, não custo. O custo é o que se consome.
+  var totalDespesasCorrentes = despesas.reduce(function(s, d) { return d.is_stock ? s : s + (parseFloat(d.valor) || 0); }, 0);
+  var consumoStockMes = stockSaidas.filter(function(m) { return (m.created_at || "").slice(0, 7) === localDateStr().slice(0, 7); })
+    .reduce(function(s, m) { return s + (parseFloat(m.quantidade) || 0) * (parseFloat(m.valor_unitario) || 0); }, 0);
+  var totalDespesas = totalDespesasCorrentes + consumoStockMes;
 
   // Clientes de valor fixo (Pós-Obra/Profunda) ficam fora do rateio de custos operacionais
   var clientesOrcamento = {};
@@ -6586,6 +6593,37 @@ function Fornecedores() {
   const [showAddDesp, setShowAddDesp] = useState(false);
   const [form, setForm] = useState({ nome: "", nif: "", categoria: "Combust\xEDvel", contacto: "", email: "", iban: "", notas: "" });
   const [despForm, setDespForm] = useState({ descricao: "", valor: "", iva_percentagem: 23, iva_dedutivel: true, iva_percentagem_dedutivel: 100, data: localDateStr(), pago: false });
+  const [isStockCompra, setIsStockCompra] = useState(false);
+  const [linhasStock, setLinhasStock] = useState([]);
+  const [prodStock, setProdStock] = useState([]);
+  const [buscaProd, setBuscaProd] = useState("");
+  function carregarProdStock() {
+    db.list("stock_produtos", "?select=*&order=nome").then(function(r) { setProdStock(r || []); });
+  }
+  useEffect(function() { carregarProdStock(); }, []);
+  function addLinhaStock(prod) {
+    if (linhasStock.some(function(l) { return l.produto_id === prod.id; })) return;
+    setLinhasStock(function(p) { return p.concat([{ produto_id: prod.id, nome: prod.nome, unidade: prod.unidade, qtd: "", preco: prod.preco_unitario || "", precoRef: prod.preco_unitario || 0 }]); });
+    setBuscaProd("");
+  }
+  async function processarEntradaStock() {
+    for (var i = 0; i < linhasStock.length; i++) {
+      var l = linhasStock[i];
+      var q = parseFloat(l.qtd) || 0;
+      if (q <= 0) continue;
+      var precoNovo = parseFloat(l.preco) || 0;
+      var prod = prodStock.find(function(x) { return x.id === l.produto_id; });
+      if (!prod) continue;
+      var novaQtd = (parseFloat(prod.quantidade) || 0) + q;
+      var patch = { quantidade: novaQtd };
+      if (precoNovo > 0 && precoNovo !== (parseFloat(prod.preco_unitario) || 0)) patch.preco_unitario = precoNovo;
+      await fetch(SUPABASE_URL + "/rest/v1/stock_produtos?id=eq." + prod.id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify(patch) });
+      await fetch(SUPABASE_URL + "/rest/v1/stock_movimentos", { method: "POST", headers: dbHeaders(), body: JSON.stringify({ produto_id: prod.id, produto_nome: prod.nome, tipo: "entrada", quantidade: q, valor_unitario: precoNovo, motivo: "Entrada por factura de fornecedor" }) });
+    }
+    carregarProdStock();
+    setLinhasStock([]);
+    setIsStockCompra(false);
+  }
   const [saving, setSaving] = useState(false);
   const [fornSearch, setFornSearch] = useState("");
   const [empsSS, setEmpsSS] = useState([]);
@@ -6645,7 +6683,14 @@ function Fornecedores() {
   async function addDespesa() {
     if (!despForm.valor || !despForm.data) return;
     setSaving(true);
-    const data = Object.assign({}, despForm, { fornecedor_id: sel.id, fornecedor_nome: sel.nome, categoria: sel.categoria, valor: parseFloat(despForm.valor) });
+    const data = Object.assign({}, despForm, { fornecedor_id: sel.id, fornecedor_nome: sel.nome, categoria: sel.categoria, valor: parseFloat(despForm.valor), is_stock: isStockCompra });
+    if (isStockCompra) {
+      var somaLinhas = linhasStock.reduce(function(a, l) { return a + (parseFloat(l.qtd) || 0) * (parseFloat(l.preco) || 0); }, 0);
+      var totalFact = parseFloat(despForm.valor) || 0;
+      var semIva = despForm.iva_percentagem ? totalFact / (1 + despForm.iva_percentagem / 100) : totalFact;
+      if (Math.abs(somaLinhas - semIva) > 1 && !window.confirm("As linhas somam " + fmt(somaLinhas) + " mas a factura (sem IVA) \xE9 " + fmt(semIva) + ".\n\nDiferen\xE7a: " + fmt(Math.abs(somaLinhas - semIva)) + " (portes? artigo fora do cat\xE1logo?)\n\nGuardar assim mesmo?")) { setSaving(false); return; }
+      await processarEntradaStock();
+    }
     const res = await fetch(SUPABASE_URL + "/rest/v1/despesas", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }), body: JSON.stringify(data) });
     if (res.ok) {
       const d = await res.json();
@@ -6753,7 +6798,34 @@ function Fornecedores() {
       setDespForm(Object.assign({}, despForm, { pago: e.target.checked }));
     } }), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#64748B" } }, "J\xE1 pago"))), despForm.valor && parseFloat(despForm.valor) > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#F0FDF4", borderRadius: 8, padding: "8px 12px", marginTop: 10, fontSize: 12, color: "#15803D" } }, "IVA dedut\xEDvel estimado: ", /* @__PURE__ */ React.createElement("strong", null, fmt(parseFloat(despForm.valor) * (despForm.iva_percentagem / 100) / (1 + despForm.iva_percentagem / 100) * (despForm.iva_percentagem_dedutivel / 100)))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 12 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
       setShowAddDesp(false);
-    }, style: Object.assign({}, btnX, { flex: 1, textAlign: "center" }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: addDespesa, disabled: saving || !despForm.valor, style: Object.assign({}, btnG, { flex: 2, textAlign: "center" }) }, saving ? "A guardar..." : "Guardar"))), selDespesas.map(function(d) {
+    }, style: Object.assign({}, btnX, { flex: 1, textAlign: "center" }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: addDespesa, disabled: saving || !despForm.valor, style: Object.assign({}, btnG, { flex: 2, textAlign: "center" }) }, saving ? "A guardar..." : "Guardar")),
+      /* @__PURE__ */ React.createElement("div", { style: { borderTop: "1px solid #E2E8F0", marginTop: 14, paddingTop: 12 } },
+        /* @__PURE__ */ React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#1A3A5C" } },
+          /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: isStockCompra, onChange: function(e) { setIsStockCompra(e.target.checked); if (!e.target.checked) setLinhasStock([]); } }),
+          "\uD83D\uDCE6 Esta compra \xE9 material de stock"
+        ),
+        isStockCompra && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10 } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 8 } }, "Indica o que entrou. O pre\xE7o de refer\xEAncia vem do produto \u2014 se a factura tiver outro, escreve por cima e o pre\xE7o \xE9 actualizado."),
+          /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { marginBottom: 8 }), placeholder: "Procurar produto para adicionar...", value: buscaProd, onChange: function(e) { setBuscaProd(e.target.value); } }),
+          buscaProd.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { border: "1px solid #E2E8F0", borderRadius: 8, marginBottom: 10, maxHeight: 150, overflowY: "auto" } },
+            prodStock.filter(function(pr) { return pr.nome.toLowerCase().indexOf(buscaProd.toLowerCase()) !== -1; }).slice(0, 8).map(function(pr) {
+              return /* @__PURE__ */ React.createElement("div", { key: pr.id, onClick: function() { addLinhaStock(pr); }, style: { padding: "7px 10px", cursor: "pointer", fontSize: 12, borderBottom: "1px solid #F1F5F9", display: "flex", justifyContent: "space-between" } },
+                /* @__PURE__ */ React.createElement("span", null, pr.nome),
+                /* @__PURE__ */ React.createElement("span", { style: { color: "#94A3B8" } }, fmt(parseFloat(pr.preco_unitario) || 0), "/", pr.unidade)
+              );
+            })
+          ),
+          linhasStock.map(function(l, idx) {
+            return /* @__PURE__ */ React.createElement("div", { key: l.produto_id, style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 6 } },
+              /* @__PURE__ */ React.createElement("span", { style: { flex: 1, fontSize: 12, fontWeight: 600, color: "#1A3A5C" } }, l.nome),
+              /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { width: 70, padding: "5px 8px", fontSize: 12 }), type: "number", step: "0.01", placeholder: "Qtd", value: l.qtd, onChange: function(e) { var v = e.target.value; setLinhasStock(function(p) { return p.map(function(x, i) { return i === idx ? Object.assign({}, x, { qtd: v }) : x; }); }); } }),
+              /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { width: 85, padding: "5px 8px", fontSize: 12, borderColor: (parseFloat(l.preco) || 0) !== (parseFloat(l.precoRef) || 0) ? "#F59E0B" : "#CBD5E1" }), type: "number", step: "0.01", placeholder: "Preço", value: l.preco, onChange: function(e) { var v = e.target.value; setLinhasStock(function(p) { return p.map(function(x, i) { return i === idx ? Object.assign({}, x, { preco: v }) : x; }); }); } }),
+              /* @__PURE__ */ React.createElement("button", { onClick: function() { setLinhasStock(function(p) { return p.filter(function(x, i) { return i !== idx; }); }); }, style: { background: "none", border: "none", color: "#CBD5E1", cursor: "pointer", fontSize: 14 } }, "\u2715")
+            );
+          }),
+          linhasStock.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 6, textAlign: "right" } }, "Linhas: ", fmt(linhasStock.reduce(function(a, l) { return a + (parseFloat(l.qtd) || 0) * (parseFloat(l.preco) || 0); }, 0)), " (sem IVA)")
+        )
+      )), selDespesas.map(function(d) {
       const iva = calcIVA(d);
       return /* @__PURE__ */ React.createElement("div", { key: d.id, style: Object.assign({}, card, { marginBottom: 8, padding: 14, display: "flex", alignItems: "center", gap: 12 }) }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C" } }, d.descricao || "Lan\xE7amento"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 2 } }, (/* @__PURE__ */ new Date(d.data + "T12:00:00")).toLocaleDateString("pt-PT", { day: "numeric", month: "short", year: "numeric" })), iva > 0 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#16A34A", marginTop: 1 } }, "IVA dedut\xEDvel: ", fmt(iva))), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right", flexShrink: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: "#EF4444" } }, fmt(d.valor)), /* @__PURE__ */ React.createElement("span", { style: { background: d.pago ? "#DCFCE7" : "#FEE2E2", color: d.pago ? "#15803D" : "#DC2626", borderRadius: 5, padding: "1px 8px", fontSize: 10, fontWeight: 700 } }, d.pago ? "Pago" : "Por pagar")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, flexShrink: 0 } }, /* @__PURE__ */ React.createElement("button", { onClick: function() {
         togglePago(d);
