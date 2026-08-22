@@ -2573,23 +2573,43 @@ function Routes() {
   const [reforcoSel, setReforcoSel] = useState(null);
   // Calcula equipas livres de UM dia (agrupadas por quem anda junto)
   function calcularEquipasLivres(dataAlvo) {
-    var doDia = jobs.filter(function(j) { return j.date === dataAlvo && j.status !== "completed"; });
+    var doDia = jobs.filter(function(j) { return j.date === dataAlvo && j.status !== "completed" && j.status !== "cancelado"; });
+    // Agrupar por conjunto de equipa (quem anda junto nesse dia)
     var grupos = {};
     doDia.forEach(function(j) {
       var team = (j.team || []).filter(function(eid) { var e = emps.find(function(x) { return x.id === eid; }); return e && e.ativo !== false; });
       if (team.length === 0) return;
       var chave = team.slice().sort().join("+");
-      if (!grupos[chave]) grupos[chave] = { membros: team.slice().sort(), ultimaHora: j.t2, servicos: 0 };
-      grupos[chave].servicos++;
-      if (j.t2 > grupos[chave].ultimaHora) grupos[chave].ultimaHora = j.t2;
+      if (!grupos[chave]) grupos[chave] = { membros: team.slice().sort(), servicos: [] };
+      grupos[chave].servicos.push(j);
     });
-    var lista = Object.keys(grupos).map(function(k) { return grupos[k]; }).filter(function(g) {
-      var temMaisTarde = doDia.some(function(j) {
-        return j.t1 >= g.ultimaHora && (j.team || []).some(function(eid) { return g.membros.indexOf(eid) !== -1; }) && g.membros.join("+") !== (j.team || []).slice().sort().join("+");
-      });
-      return !temMaisTarde;
-    }).sort(function(a, b) { return a.ultimaHora.localeCompare(b.ultimaHora); });
-    return lista;
+    var FIM_DIA = "18:00";
+    var MIN_JANELA = 60; // minutos: só vale a pena se houver pelo menos 1 hora
+    var lista = [];
+    Object.keys(grupos).forEach(function(k) {
+      var g = grupos[k];
+      var svcs = g.servicos.slice().sort(function(a, b) { return timeToMin(a.t1) - timeToMin(b.t1); });
+      // Ocupação de CADA membro nesse dia (não só desta equipa) — evita sugerir quem está noutro serviço
+      function livreEntre(ini2, fim2) {
+        return !doDia.some(function(j) {
+          if (!(j.team || []).some(function(eid) { return g.membros.indexOf(eid) !== -1; })) return false;
+          return timeToMin(ini2) < timeToMin(j.t2) && timeToMin(fim2) > timeToMin(j.t1);
+        });
+      }
+      // Janelas ENTRE serviços (buracos a meio do dia)
+      for (var i = 0; i < svcs.length - 1; i++) {
+        var fimA = svcs[i].t2, iniB = svcs[i + 1].t1;
+        if (timeToMin(iniB) - timeToMin(fimA) >= MIN_JANELA && livreEntre(fimA, iniB)) {
+          lista.push({ membros: g.membros, ultimaHora: fimA, ateHora: iniB, tipo: "janela", servicos: svcs.length });
+        }
+      }
+      // Janela FINAL (depois do último serviço)
+      var ultimo = svcs[svcs.length - 1];
+      if (timeToMin(ultimo.t2) < timeToMin(FIM_DIA) - MIN_JANELA + 1 && livreEntre(ultimo.t2, FIM_DIA)) {
+        lista.push({ membros: g.membros, ultimaHora: ultimo.t2, ateHora: null, tipo: "fim", servicos: svcs.length });
+      }
+    });
+    return lista.sort(function(a, b) { return timeToMin(a.ultimaHora) - timeToMin(b.ultimaHora); });
   }
   // Constrói a visão da SEMANA inteira: por cada dia, equipas livres + serviços que podem receber reforço
   function calcularSemanaLivres() {
@@ -2625,7 +2645,7 @@ function Routes() {
   async function alocarEquipaAServico(membros, horaInicio, servicoAlvo, forcar) {
     // Turno novo: cria um SERVIÇO SEPARADO no mesmo dia/cliente, com o seu horário próprio.
     // Assim os custos somam certo e cada colaborador vê a sua hora real. Valor = 0 (não duplica faturação).
-    var horaFim = window.prompt("Hora de fim deste turno (HH:MM):", servicoAlvo.t2 || "18:00");
+    var horaFim = window.prompt("Hora de fim deste turno (HH:MM):", (reforcoSel && reforcoSel.ateHora) || servicoAlvo.t2 || "18:00");
     if (!horaFim) return { bloqueado: false };
     horaFim = horaFim.trim();
     if (!/^\d{1,2}:\d{2}$/.test(horaFim)) { alert("Hora inv\xE1lida. Usa o formato HH:MM (ex: 17:00)."); return { bloqueado: false }; }
@@ -2655,13 +2675,19 @@ function Routes() {
         body: JSON.stringify(novo)
       });
       var criado = await res.json();
-      if (criado && criado[0]) {
-        setJobs(function(p) { return p.concat([criado[0]]); });
-        registarAlertaRota(criado[0], "novo", "Novo turno em " + servicoAlvo.cn + " (" + horaInicio + "\u2013" + horaFim + ")", membros);
+      if (!res.ok || !criado || !criado[0]) {
+        alert("\u26A0 N\xE3o foi poss\xEDvel criar o turno.\n\nErro: " + (criado && criado.message ? criado.message : "resposta inesperada do servidor") + "\n\nNada foi alterado.");
+        setEquipasLivresDia(null);
+        setReforcoSel(null);
+        return { bloqueado: false };
       }
+      registarAlertaRota(criado[0], "novo", "Novo turno em " + servicoAlvo.cn + " (" + horaInicio + "\u2013" + horaFim + ")", membros);
+      // Recarregar da base de dados para garantir que ficou mesmo gravado
+      var fresh = await db.list("servicos", "?select=*&order=date");
+      setJobs(fresh || []);
       alert("\u2713 Turno criado em " + servicoAlvo.cn + ": " + horaInicio + "\u2013" + horaFim + " (sem valor acrescido).");
     } catch (e) {
-      alert("\u26A0 Erro ao criar o turno.");
+      alert("\u26A0 Erro ao criar o turno: " + (e && e.message ? e.message : e));
     }
     setEquipasLivresDia(null);
     setReforcoSel(null);
@@ -3635,8 +3661,8 @@ function Routes() {
             var estaAberto = reforcoSel && reforcoSel.key === selKey;
             return /* @__PURE__ */ React.createElement("div", { key: idx, style: { border: "1.5px solid #E2EBF4", borderRadius: 10, padding: "10px 12px", marginBottom: 8 } },
               /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: estaAberto ? 10 : 0 } },
-                /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C" } }, nomes), /* @__PURE__ */ React.createElement("span", { style: { background: "#DCFCE7", color: "#15803D", borderRadius: 8, padding: "2px 8px", fontSize: 11, fontWeight: 800, marginLeft: 8 } }, "livre \xE0s ", eq.ultimaHora)),
-                /* @__PURE__ */ React.createElement("button", { onClick: function() { setReforcoSel(estaAberto ? null : { key: selKey, membros: eq.membros, hora: eq.ultimaHora, data: dia.data, conflitoJob: null }); }, style: Object.assign({}, btnO, { fontSize: 11, padding: "5px 10px" }) }, estaAberto ? "Fechar" : "Alocar")
+                /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C" } }, nomes), /* @__PURE__ */ React.createElement("span", { style: { background: "#DCFCE7", color: "#15803D", borderRadius: 8, padding: "2px 8px", fontSize: 11, fontWeight: 800, marginLeft: 8 } }, eq.ateHora ? "livre " + eq.ultimaHora + "\u2013" + eq.ateHora : "livre a partir das " + eq.ultimaHora)),
+                /* @__PURE__ */ React.createElement("button", { onClick: function() { setReforcoSel(estaAberto ? null : { key: selKey, membros: eq.membros, hora: eq.ultimaHora, ateHora: eq.ateHora || null, data: dia.data, conflitoJob: null }); }, style: Object.assign({}, btnO, { fontSize: 11, padding: "5px 10px" }) }, estaAberto ? "Fechar" : "Alocar")
               ),
               estaAberto && /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 8, padding: 10 } },
                 /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", marginBottom: 6 } }, "Criar turno neste servi\xE7o (equipa entra depois):"),
