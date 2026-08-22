@@ -5826,6 +5826,7 @@ function PedidosColab(props) {
         var novaQtd = atual - qtdPedida;
         var okMov = await registarMovimentoStock({
           produto_id: prod.id, produto_nome: prod.nome, tipo: "saida", quantidade: qtdPedida,
+          valor_unitario: parseFloat(prod.preco_unitario) || 0,
           motivo: "Pedido de material aprovado", funcionario_id: selPedido.funcionario_id,
           funcionario_nome: selPedido.funcionario_nome, pedido_id: id
         });
@@ -6410,12 +6411,27 @@ function Stock() {
     setEditId(null);
     setForm({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade", preco_unitario: "" });
   }
+  async function apagarMovimentoStock(mov) {
+    var sinal = mov.tipo === "saida" ? 1 : -1;
+    if (!window.confirm("Apagar este movimento?\n\n" + mov.produto_nome + ": " + (mov.tipo === "saida" ? "saída" : "entrada") + " de " + mov.quantidade + "\n\nO stock será " + (sinal > 0 ? "reposto (+" : "corrigido (-") + Math.abs(mov.quantidade) + ").")) return;
+    try {
+      var prod = (produtos || []).find(function(x) { return x.id === mov.produto_id; });
+      if (prod) {
+        var nova = (parseFloat(prod.quantidade) || 0) + sinal * (parseFloat(mov.quantidade) || 0);
+        await fetch(SUPABASE_URL + "/rest/v1/stock_produtos?id=eq." + prod.id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ quantidade: nova }) });
+        setProdutos(function(pp) { return pp.map(function(x) { return x.id === prod.id ? Object.assign({}, x, { quantidade: nova }) : x; }); });
+      }
+      await fetch(SUPABASE_URL + "/rest/v1/stock_movimentos?id=eq." + mov.id, { method: "DELETE", headers: dbHeaders() });
+      setMovimentos(function(pp) { return pp.filter(function(x) { return x.id !== mov.id; }); });
+    } catch (e) { alert("\u26A0 Erro ao apagar o movimento."); }
+  }
   async function ajustarQtd(prod, delta) {
     var nova = (parseFloat(prod.quantidade) || 0) + delta;
     if (nova < 0) { alert("\u26A0 N\xE3o d\xE1 para ficar abaixo de zero. Se saiu mais do que havia, corrige a contagem real no produto."); return; }
     await registarMovimentoStock({
       produto_id: prod.id, produto_nome: prod.nome,
       tipo: delta > 0 ? "entrada" : "saida", quantidade: Math.abs(delta),
+      valor_unitario: parseFloat(prod.preco_unitario) || 0,
       motivo: delta > 0 ? "Ajuste manual (+)" : "Ajuste manual (-)"
     });
     carregarMovimentos();
@@ -6446,6 +6462,34 @@ function Stock() {
         /* @__PURE__ */ React.createElement("button", { onClick: function() { setVerHistorico(!verHistorico); }, style: Object.assign({}, btnO, { marginLeft: 8 }) }, verHistorico ? "Fechar hist\xF3rico" : "\uD83D\uDCCB Hist\xF3rico de movimentos")
       )
     ),
+    (function() {
+      var valorTotal = (produtos || []).reduce(function(a, p2) { return a + (parseFloat(p2.quantidade) || 0) * (parseFloat(p2.preco_unitario) || 0); }, 0);
+      var semPreco = (produtos || []).filter(function(p2) { return !(parseFloat(p2.preco_unitario) > 0); });
+      var mesAct = localDateStr().slice(0, 7);
+      var custoMes = (movimentos || []).filter(function(m) { return m.tipo === "saida" && (m.created_at || "").slice(0, 7) === mesAct; })
+        .reduce(function(a, m) { return a + (parseFloat(m.quantidade) || 0) * (parseFloat(m.valor_unitario) || 0); }, 0);
+      return /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } },
+        /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 } },
+          /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 0, padding: 14, borderTop: "3px solid #2E6DA4" }) },
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 6 } }, "Valor em stock"),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 900, color: "#2E6DA4" } }, fmt(valorTotal)),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 4 } }, (produtos || []).length, " produtos")
+          ),
+          /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 0, padding: 14, borderTop: "3px solid #DC2626" }) },
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 6 } }, "Consumido este mês"),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 900, color: "#DC2626" } }, fmt(custoMes)),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 4 } }, "ao preço da data de saída")
+          )
+        ),
+        semPreco.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF3C7", border: "2px solid #F59E0B", borderRadius: 10, padding: "12px 16px", marginTop: 12, display: "flex", gap: 10, alignItems: "flex-start" } },
+          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 18 } }, "\u26A0"),
+          /* @__PURE__ */ React.createElement("div", null,
+            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 13, color: "#92400E" } }, semPreco.length === 1 ? "1 produto sem pre\xE7o definido" : semPreco.length + " produtos sem pre\xE7o definido"),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#78350F", marginTop: 2 } }, "Contam como 0\u20AC no valor do stock e no consumo: ", semPreco.map(function(p2) { return p2.nome; }).join(", "), ". Edita cada um para corrigir.")
+          )
+        )
+      );
+    })(),
     verHistorico && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "\uD83D\uDCCB Hist\xF3rico de movimentos"),
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 12 } }, "Todas as entradas e sa\xEDdas registadas (\xFAltimas 200)."),
@@ -6457,7 +6501,13 @@ function Stock() {
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#1A3A5C" } }, m.produto_nome || "\u2014"),
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8" } }, new Date(m.created_at).toLocaleDateString("pt-PT", { day: "2-digit", month: "short", year: "numeric" }), " \u00B7 ", m.motivo || "", m.funcionario_nome ? " \u00B7 " + m.funcionario_nome : "")
           ),
-          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 800, color: ent ? "#16A34A" : "#DC2626", whiteSpace: "nowrap" } }, ent ? "+" : "\u2212", fmt(parseFloat(m.quantidade) || 0))
+          /* @__PURE__ */ React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 10, whiteSpace: "nowrap" } },
+            /* @__PURE__ */ React.createElement("span", { style: { textAlign: "right" } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 800, color: ent ? "#16A34A" : "#DC2626" } }, ent ? "+" : "\u2212", (parseFloat(m.quantidade) || 0)),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8" } }, fmt((parseFloat(m.quantidade) || 0) * (parseFloat(m.valor_unitario) || 0)))
+            ),
+            /* @__PURE__ */ React.createElement("button", { onClick: function() { apagarMovimentoStock(m); }, style: { background: "none", border: "none", color: "#CBD5E1", cursor: "pointer", fontSize: 14, padding: 0 }, title: "Apagar e repor stock" }, "\u2715")
+          )
         );
       }))
     ),
