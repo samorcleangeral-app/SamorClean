@@ -3248,15 +3248,7 @@ function Routes() {
     setNj({ cn: "", addr: "", svc: "", date: localDateStr(), date_end: "", t1: "08:00", t2: "10:00", team: [], val: "", obra_ref: "" });
     setClientSearch("");
     setShowNew(true);
-  }, style: btn }, "+ Servi\xE7o"), /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowVoltasFixas(true); }, style: Object.assign({}, btnO, { fontSize: 13, background: "#F5F3FF", border: "1.5px solid #7C3AED", color: "#7C3AED" }) }, "\u2699 Voltas Fixas"), /* @__PURE__ */ React.createElement("button", { onClick: recalcularValoresEmLote, style: Object.assign({}, btnO, { fontSize: 13 }) }, "\uD83D\uDD04 Recalcular valores"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: alocarEquipaSemana, style: Object.assign({}, btnG, { fontSize: 13, whiteSpace: "nowrap" }) }, "\u26A1 Gerar Semana (equipa)"), (function() {
-      var comFotos = jobs.filter(function(j) { return (j.fotos || []).length > 0 && !j.fotos_vistas; });
-      if (comFotos.length === 0) return null;
-      return /* @__PURE__ */ React.createElement("button", { onClick: function() {
-        var msg = comFotos.length + " servi\xE7o(s) com fotos por ver:\n\n";
-        comFotos.slice(0, 10).forEach(function(j) { msg += "\u2022 " + j.date + " \u2014 " + j.cn + " (" + (j.fotos || []).length + ")\n"; });
-        alert(msg + "\nAbre o servi\xE7o na rota para as veres.");
-      }, style: { padding: "8px 14px", borderRadius: 8, border: "1.5px solid #EF4444", background: "#FEF2F2", color: "#DC2626", fontSize: 13, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" } }, "\uD83D\uDCF7 ", comFotos.length, " com fotos novas");
-    })(), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: function() { abrirEquipasLivres(); }, style: Object.assign({}, btnO, { fontSize: 13, whiteSpace: "nowrap", background: "#FFF7ED", border: "1.5px solid #F59E0B", color: "#B45309" }) }, "\uD83D\uDCA1 Equipas a definir"), calView === "week" && wJobs.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: function() {
+  }, style: btn }, "+ Servi\xE7o"), /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowVoltasFixas(true); }, style: Object.assign({}, btnO, { fontSize: 13, background: "#F5F3FF", border: "1.5px solid #7C3AED", color: "#7C3AED" }) }, "\u2699 Voltas Fixas"), /* @__PURE__ */ React.createElement("button", { onClick: recalcularValoresEmLote, style: Object.assign({}, btnO, { fontSize: 13 }) }, "\uD83D\uDD04 Recalcular valores"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: alocarEquipaSemana, style: Object.assign({}, btnG, { fontSize: 13, whiteSpace: "nowrap" }) }, "\u26A1 Gerar Semana (equipa)"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: function() { abrirEquipasLivres(); }, style: Object.assign({}, btnO, { fontSize: 13, whiteSpace: "nowrap", background: "#FFF7ED", border: "1.5px solid #F59E0B", color: "#B45309" }) }, "\uD83D\uDCA1 Equipas a definir"), calView === "week" && wJobs.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: function() {
     const win = window.open("", "_blank");
     const byEmp = {};
     emps.forEach(function(e) {
@@ -3521,10 +3513,7 @@ function Routes() {
     fmt(selJob.val || 0),
     selJob.val_manual ? /* @__PURE__ */ React.createElement("span", { style: { background: "#F5F3FF", color: "#7C3AED", borderRadius: 5, padding: "1px 6px", fontSize: 9, fontWeight: 800 }, title: selJob.val_nota || "" }, "AJUSTADO", selJob.val_nota ? ": " + selJob.val_nota : "") : null,
     /* @__PURE__ */ React.createElement("span", { style: { color: "#CBD5E1", fontSize: 11 } }, "\u270E editar")
-  ), (selJob.fotos || []).length > 0 && !selJob.fotos_vistas && /* @__PURE__ */ React.createElement("button", { onClick: function() {
-    updateJob(selJob.id, { fotos_vistas: true });
-    setSelJob(Object.assign({}, selJob, { fotos_vistas: true }));
-  }, style: { background: "#FEF2F2", border: "1.5px solid #EF4444", color: "#DC2626", borderRadius: 8, padding: "6px 12px", fontSize: 11, fontWeight: 800, cursor: "pointer", marginBottom: 8 } }, "\uD83D\uDCF7 Fotos novas \u2014 marcar como vistas"), (selJob.fotos || []).length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", marginBottom: 6 } }, "Fotos (", (selJob.fotos || []).length, ")"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 5, flexWrap: "wrap" } }, (selJob.fotos || []).map(function(url, i) {
+  ), (selJob.fotos || []).length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", marginBottom: 6 } }, "Fotos (", (selJob.fotos || []).length, ")"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 5, flexWrap: "wrap" } }, (selJob.fotos || []).map(function(url, i) {
     var partilhada = (selJob.fotos_partilhadas || []).indexOf(url) !== -1;
     return /* @__PURE__ */ React.createElement("div", { key: i, style: { position: "relative" } },
       /* @__PURE__ */ React.createElement("img", { src: url, onClick: function() { window.open(url, "_blank"); }, style: { width: 52, height: 52, objectFit: "cover", borderRadius: 6, cursor: "pointer", border: partilhada ? "2px solid #16A34A" : "2px solid transparent" } }),
@@ -3960,6 +3949,37 @@ function NotasCliente(props) {
     })
   );
 }
+function AlarmeFotosCliente(props) {
+  const [novos, setNovos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  function carregar() {
+    db.list("servicos", "?select=id,date,cn,fotos,fotos_vistas&client_id=eq." + encodeURIComponent(props.clientId) + "&order=date.desc").then(function(r) {
+      setNovos((r || []).filter(function(j) { return (j.fotos || []).length > 0 && !j.fotos_vistas; }));
+      setLoading(false);
+    });
+  }
+  useEffect(function() { carregar(); }, [props.clientId]);
+  async function marcarVisto(jobId) {
+    await db.update("servicos", jobId, { fotos_vistas: true });
+    setNovos(function(p) { return p.filter(function(j) { return j.id !== jobId; }); });
+  }
+  if (loading || novos.length === 0) return null;
+  var total = novos.reduce(function(a, j) { return a + (j.fotos || []).length; }, 0);
+  return /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF2F2", border: "2px solid #EF4444", borderRadius: 10, padding: "12px 14px", marginBottom: 14 } },
+    /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 13, color: "#991B1B", marginBottom: 8 } }, "\uD83D\uDCF7 ", total, " foto", total !== 1 ? "s" : "", " nova", total !== 1 ? "s" : "", " por ver"),
+    novos.map(function(j) {
+      return /* @__PURE__ */ React.createElement("div", { key: j.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderTop: "1px solid #FECACA", gap: 10 } },
+        /* @__PURE__ */ React.createElement("div", null,
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#1A3A5C" } }, new Date(j.date + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "long" }), " \u2014 ", (j.fotos || []).length, " ficheiro(s)"),
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginTop: 5, flexWrap: "wrap" } }, (j.fotos || []).slice(0, 6).map(function(u, i2) {
+            return /* @__PURE__ */ React.createElement("img", { key: i2, src: u, onClick: function() { window.open(u, "_blank"); }, style: { width: 46, height: 46, objectFit: "cover", borderRadius: 6, cursor: "pointer" } });
+          }))
+        ),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { marcarVisto(j.id); }, style: { background: "#fff", border: "1.5px solid #EF4444", color: "#DC2626", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" } }, "\u2713 Vi")
+      );
+    })
+  );
+}
 function FotosCliente(props) {
   const clientId = props.clientId;
   const [fotosColab, setFotosColab] = useState([]);
@@ -4018,6 +4038,16 @@ function Clients() {
   const [sel, setSel] = useState(null);
   const [q, setQ] = useState("");
   const [ft, setFt] = useState("Todos");
+  const [fotosPorVer, setFotosPorVer] = useState({});
+  useEffect(function() {
+    db.list("servicos", "?select=client_id,fotos,fotos_vistas").then(function(r) {
+      var m = {};
+      (r || []).forEach(function(j) {
+        if ((j.fotos || []).length > 0 && !j.fotos_vistas) m[j.client_id] = (m[j.client_id] || 0) + (j.fotos || []).length;
+      });
+      setFotosPorVer(m);
+    });
+  }, []);
   const [form, setForm] = useState({ name: "", type: "Empresa", contact: "", phone: "", email: "", address: "", service: SVCS[0], freq: FREQS[0], notes: "", checklist: [""], schedule: [], hours_contracted: 0, price_per_hour: PRICE_PER_HOUR, iva_type: "normal", tipo_faturacao: "hora", valor_visita: 0, ativo: true });
   const [newContacts, setNewContacts] = useState([{ name: "", cargo: "", phone: "", email: "", pin: "" }]);
   const [saved, setSaved] = useState(false);
@@ -4252,14 +4282,15 @@ function Clients() {
       const rec = horasPessoaSemanaEsperadas(c) * (c.price_per_hour || PRICE_PER_HOUR);
       const freqCor = (c.freq || "").toLowerCase() === "semanal" ? "#16A34A" : (c.freq || "").toLowerCase() === "quinzenal" ? "#F59E0B" : (c.freq || "").toLowerCase() === "mensal" ? "#2E6DA4" : "#94A3B8";
       const inativo = c.ativo === false;
+      const nFotos = fotosPorVer[c.id] || 0;
       const temNotaNova = !!clientesComNotaNova[c.id];
-      return /* @__PURE__ */ React.createElement("div", { key: c.id, onClick: function() { setSel(c); setView("detail"); }, style: Object.assign({}, card, { cursor: "pointer", padding: "14px 18px", marginBottom: 8, display: "flex", alignItems: "center", gap: 16, borderLeft: "4px solid " + (temNotaNova ? "#F59E0B" : inativo ? "#CBD5E1" : freqCor), opacity: inativo ? 0.6 : 1, position: "relative" }) },
+      return /* @__PURE__ */ React.createElement("div", { key: c.id, onClick: function() { setSel(c); setView("detail"); }, style: Object.assign({}, card, { cursor: "pointer", padding: "14px 18px", marginBottom: 8, display: "flex", alignItems: "center", gap: 16, borderLeft: "4px solid " + (nFotos > 0 ? "#EF4444" : temNotaNova ? "#F59E0B" : inativo ? "#CBD5E1" : freqCor), opacity: inativo ? 0.6 : 1, position: "relative" }) },
         /* @__PURE__ */ React.createElement("div", { style: { width: 40, height: 40, borderRadius: 10, background: freqCor + "20", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, position: "relative" } },
           /* @__PURE__ */ React.createElement("span", { style: { fontSize: 18 } }, c.type === "Particular" ? "\uD83D\uDC64" : "\uD83C\uDFE2"),
           temNotaNova && /* @__PURE__ */ React.createElement("span", { style: { position: "absolute", top: -3, right: -3, width: 12, height: 12, borderRadius: "50%", background: "#F59E0B", border: "2px solid #fff" } })
         ),
         /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } },
-          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.name),
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.name, nFotos > 0 ? /* @__PURE__ */ React.createElement("span", { style: { background: "#FEE2E2", color: "#DC2626", borderRadius: 8, padding: "1px 7px", fontSize: 10, fontWeight: 800, marginLeft: 6 } }, "\uD83D\uDCF7 ", nFotos) : null),
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, c.service, c.address ? " \u2022 " + c.address : "")
         ),
         /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 } },
@@ -4329,7 +4360,7 @@ function Clients() {
           return c.id === sel.id ? Object.assign({}, c, { nota_interna: n }) : c;
         });
       });
-    } })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Notas do cliente"), /* @__PURE__ */ React.createElement(NotasCliente, { clientId: sel.id })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Hist\xF3rico de visitas e picagens"), /* @__PURE__ */ React.createElement(HistoricoVisitas, { cliente: sel, emps })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "\uD83D\uDDBC\uFE0F Galeria de Fotos"), /* @__PURE__ */ React.createElement(FotosCliente, { clientId: sel.id }))));
+    } })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Notas do cliente"), /* @__PURE__ */ React.createElement(NotasCliente, { clientId: sel.id })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Hist\xF3rico de visitas e picagens"), /* @__PURE__ */ React.createElement(HistoricoVisitas, { cliente: sel, emps })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { gridColumn: "1 / -1" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "\uD83D\uDDBC\uFE0F Galeria de Fotos"), /* @__PURE__ */ React.createElement(AlarmeFotosCliente, { clientId: sel.id }), /* @__PURE__ */ React.createElement(FotosCliente, { clientId: sel.id }))));
   }
   if (view === "qr" && sel) {
     let printQR = function() {
