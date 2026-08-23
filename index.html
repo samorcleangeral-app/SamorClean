@@ -845,7 +845,15 @@ function Finance() {
     return aplicaIva(valorMesSemIva(cid, mes), c ? c.iva_type : "normal");
   }
   function pagoMesComIva(cid, mes) {
-    return Math.min(totalPagoMovimentos(cid, mes), valorMesComIva(cid, mes));
+    // Movimentos de pagamento (modelo novo) + serviços marcados como pagos no modelo antigo
+    var c = clientsMap[cid];
+    var isAuto = c && c.iva_type === "autoliquida\xE7\xE3o";
+    var pagosAntigos = jobsClienteMes(cid, mes).reduce(function(acc, j) {
+      if (!j.paid) return acc;
+      var base = j.val_manual ? (parseFloat(j.val) || 0) : (parseFloat(c ? c.valor_visita : 0) || 0);
+      return acc + (isAuto ? base : base * 1.23);
+    }, 0);
+    return Math.min(totalPagoMovimentos(cid, mes) + pagosAntigos, valorMesComIva(cid, mes));
   }
   function pendenteMesComIva(cid, mes) {
     return Math.max(0, valorMesComIva(cid, mes) - pagoMesComIva(cid, mes));
@@ -3012,7 +3020,7 @@ function Routes() {
         var preco = c.price_per_hour || PRICE_PER_HOUR;
         return teamSize * visitHoursVal * preco;
       })();
-      var base = { client_id: c ? c.id : "", cn: nj.cn, addr: nj.addr, svc: nj.svc || (c ? c.service : ""), t1: nj.t1, t2: nj.t2, team: teamDisponivel, status: "pending", cl: c ? c.checklist || [] : [], prods: [], val: valCalculado, val_manual: (parseFloat(nj.val) || 0) !== (parseFloat(valCalculado) || 0), iva_override: c ? c.iva_type || "normal" : "normal", paid: false, date: dataAtual, obra_ref: nj.obra_ref || null };
+      var base = { client_id: c ? c.id : "", cn: nj.cn, addr: nj.addr, svc: nj.svc || (c ? c.service : ""), t1: nj.t1, t2: nj.t2, team: teamDisponivel, status: "pending", cl: c ? c.checklist || [] : [], prods: [], val: (nj.valEditado && nj.val !== "" && nj.val !== null) ? (parseFloat(nj.val) || 0) : valCalculado, val_manual: !!(nj.valEditado && nj.val !== "" && nj.val !== null && (parseFloat(nj.val) || 0) !== (parseFloat(valCalculado) || 0)), iva_override: c ? c.iva_type || "normal" : "normal", paid: false, date: dataAtual, obra_ref: nj.obra_ref || null };
       var ins = await db.insert("servicos", base);
       if (ins) {
         newJobs.push(ins);
