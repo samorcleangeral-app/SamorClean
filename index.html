@@ -9502,16 +9502,16 @@ function Employee(props) {
           const newFotos = (fotosJob.fotos || []).concat(novas);
           await db.update("servicos", fotosJob.id, { fotos: newFotos, fotos_vistas: false });
           setFotosJob(Object.assign({}, fotosJob, { fotos: newFotos }));
-          setTeamJobs(function(p) {
-            return { current: p.current.map(function(j) {
+          setJobs(function(p) {
+            return (p || []).map(function(j) {
               return j.id === fotosJob.id ? Object.assign({}, j, { fotos: newFotos }) : j;
-            }), next: p.next, completed: p.completed };
+            });
           });
         }
         setAEnviarFotos(false);
         e.target.value = "";
         if (falhas > 0) alert("\u26A0 " + falhas + " ficheiro(s) n\xE3o foram enviados. Tenta outra vez.");
-      } })), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 6 } }, "\uD83D\uDCDD Nota do servi\xE7o (para a gest\xE3o)"), /* @__PURE__ */ React.createElement("textarea", { style: Object.assign({}, inp, { minHeight: 60, resize: "vertical" }), placeholder: "Ex: faltava material, cliente reclamou de X, port\xE3o estava fechado...", value: notaColabEdits[fotosJob.id] !== undefined ? notaColabEdits[fotosJob.id] : (job.nota_colaborador || ""), onChange: function(e) { setNotaColabEdits(Object.assign({}, notaColabEdits, { [fotosJob.id]: e.target.value })); } }), /* @__PURE__ */ React.createElement("button", { onClick: function() { salvarNotaColab(fotosJob); }, disabled: notaColabSaving === fotosJob.id, style: Object.assign({}, btnO, { marginTop: 6, fontSize: 12, padding: "6px 14px" }) }, notaColabSaving === fotosJob.id ? "A guardar..." : "Guardar nota")))
+      } })))
     )
   );
   }
