@@ -2784,7 +2784,7 @@ function Routes() {
     const day = d.getDay() || 7;
     const mon = new Date(d);
     mon.setDate(d.getDate() - day + 1 + offset * 7);
-    return Array.from({ length: 6 }, function(_, i) {
+    return Array.from({ length: 7 }, function(_, i) {
       const dt = new Date(mon);
       dt.setDate(mon.getDate() + i);
       return localDateStr(dt);
@@ -2802,12 +2802,12 @@ function Routes() {
       return d.toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
     }
     const d0 = /* @__PURE__ */ new Date(dates[0] + "T12:00:00");
-    const d5 = /* @__PURE__ */ new Date(dates[5] + "T12:00:00");
+    const d5 = /* @__PURE__ */ new Date(dates[6] + "T12:00:00");
     return d0.toLocaleDateString("pt-PT", { day: "numeric", month: "long" }) + " \u2014 " + d5.toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" });
   }
   function getLabelCurta() {
     const d0 = /* @__PURE__ */ new Date(dates[0] + "T12:00:00");
-    const d5 = /* @__PURE__ */ new Date(dates[5] + "T12:00:00");
+    const d5 = /* @__PURE__ */ new Date(dates[6] + "T12:00:00");
     return d0.getDate() + "\u2013" + d5.getDate() + " " + d5.toLocaleDateString("pt-PT", { month: "short" }).replace(".", "");
   }
   function layoutDay(dayJobs) {
@@ -3081,7 +3081,7 @@ function Routes() {
     }).slice().sort(function(a, b) {
       return a.date < b.date ? -1 : 1;
     });
-    const label = (/* @__PURE__ */ new Date(dates[0] + "T12:00:00")).toLocaleDateString("pt-PT", { day: "numeric", month: "long" }) + " a " + (/* @__PURE__ */ new Date(dates[5] + "T12:00:00")).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" });
+    const label = (/* @__PURE__ */ new Date(dates[0] + "T12:00:00")).toLocaleDateString("pt-PT", { day: "numeric", month: "long" }) + " a " + (/* @__PURE__ */ new Date(dates[6] + "T12:00:00")).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" });
     const rows = myJobs.map(function(job) {
       const day = (/* @__PURE__ */ new Date(job.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long" });
       const col = (job.team || []).filter(function(id) {
@@ -3285,14 +3285,14 @@ function Routes() {
     }, style: { display: "flex", alignItems: "center", gap: 5, background: "#F8FAFC", border: "1.5px solid #E2EBF4", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600, color: "#1A3A5C" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 16, height: 16, borderRadius: "50%", background: empColor(e.id), flexShrink: 0 } }), e.name.split(" ")[0]);
   }))), empsWithJobs.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 8 } }, empsWithJobs.map(function(e) {
     return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#64748B" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: empColor(e.id) } }), e.name.split(" ")[0]);
-  })), calView === "week" && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { padding: 0, overflow: "hidden" }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "48px repeat(6,1fr)", borderBottom: "2px solid #E2EBF4", position: "sticky", top: 0, background: "#fff", zIndex: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", height: 52, borderRight: "1px solid #E2EBF4" } }), dates.map(function(d, i) {
+  })), calView === "week" && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { padding: 0, overflow: "hidden" }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "48px repeat(7,1fr)", borderBottom: "2px solid #E2EBF4", position: "sticky", top: 0, background: "#fff", zIndex: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", height: 52, borderRight: "1px solid #E2EBF4" } }), dates.map(function(d, i) {
     const isToday = d === todayStr;
     const dt = /* @__PURE__ */ new Date(d + "T12:00:00");
     const dayCount = wJobs.filter(function(j) {
       return j.date === d;
     }).length;
     return /* @__PURE__ */ React.createElement("div", { key: d, style: { background: isToday ? "#EFF6FF" : "#F8FAFC", borderLeft: "1px solid #E2EBF4", padding: "6px 0", textAlign: "center", height: 52 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: isToday ? "#2E6DA4" : "#94A3B8", textTransform: "uppercase" } }, DIAS_SHORT[i]), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 4 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 17, fontWeight: 800, color: isToday ? "#fff" : "#1A3A5C", background: isToday ? "#2E6DA4" : "transparent", width: 26, height: 26, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" } }, dt.getDate()), dayCount > 0 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8" } }, dayCount)));
-  })), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "48px repeat(6,1fr)", overflowY: "auto", maxHeight: "calc(100vh - 300px)" } }, /* @__PURE__ */ React.createElement("div", { style: { position: "relative", height: totalPx, background: "#F8FAFC", borderRight: "1px solid #E2EBF4" } }, Array.from({ length: END_H - START_H }, function(_, i) {
+  })), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "48px repeat(7,1fr)", overflowY: "auto", maxHeight: "calc(100vh - 300px)" } }, /* @__PURE__ */ React.createElement("div", { style: { position: "relative", height: totalPx, background: "#F8FAFC", borderRight: "1px solid #E2EBF4" } }, Array.from({ length: END_H - START_H }, function(_, i) {
     return /* @__PURE__ */ React.createElement("div", { key: i, style: { position: "absolute", top: i * HOUR_PX - 8, right: 6, fontSize: 9, color: "#94A3B8", fontWeight: 600, whiteSpace: "nowrap" } }, String(START_H + i).padStart(2, "0"), "h");
   })), dates.map(function(d) {
     const dayJobs = wJobs.filter(function(j) {
