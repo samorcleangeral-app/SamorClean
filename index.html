@@ -747,6 +747,19 @@ function Finance() {
     } catch (e) { alert("\u26A0 Erro ao apagar."); }
   }
   var mesActualStr = localDateStr().slice(0, 7);
+  async function desmarcarPagamentosAntigos(cid, mes) {
+    var svcs = jobsClienteMes(cid, mes).filter(function(j) { return j.paid; });
+    if (svcs.length === 0) return;
+    if (!window.confirm("Este m\xEAs foi marcado como pago no sistema antigo (servi\xE7o a servi\xE7o).\n\nDesmarcar " + svcs.length + " servi\xE7o(s) e voltar a p\xF4-lo em d\xEDvida?\n\nDepois podes registar os pagamentos com a data real, \xE0 medida que forem entrando.")) return;
+    try {
+      for (var i = 0; i < svcs.length; i++) {
+        await fetch(SUPABASE_URL + "/rest/v1/servicos?id=eq." + svcs[i].id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ paid: false, valor_pago_parcial: 0 }) });
+      }
+      setContaCorrenteAllJobs(function(p) { return p.map(function(j) { return svcs.some(function(x) { return x.id === j.id; }) ? Object.assign({}, j, { paid: false, valor_pago_parcial: 0 }) : j; }); });
+      setAllPendingJobs(function(p) { return p.concat(svcs.map(function(j) { return Object.assign({}, j, { paid: false }); })); });
+      alert("\u2713 " + svcs.length + " servi\xE7o(s) desmarcados. O m\xEAs voltou a ficar em d\xEDvida.");
+    } catch (e) { alert("\u26A0 Erro ao desmarcar."); }
+  }
   function renderPagamentoBloco(cid, mes, totalComIva, pagoComIva) {
     var movs = movimentosDoMes(cid, mes);
     var falta = Math.max(0, totalComIva - pagoComIva);
@@ -754,7 +767,12 @@ function Finance() {
     var aberto = pagFormAberto === chave;
     var valorEdit = avencaParcialEdit[chave] !== undefined ? avencaParcialEdit[chave] : (falta > 0.01 ? falta.toFixed(2) : "");
     var dataEdit = pagDataEdit[chave] !== undefined ? pagDataEdit[chave] : localDateStr();
+    var pagosAntigosMes = jobsClienteMes(cid, mes).filter(function(j) { return j.paid; });
     return /* @__PURE__ */ React.createElement("div", null,
+      pagosAntigosMes.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10, background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 8, padding: "8px 12px" } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, "\u2713 ", pagosAntigosMes.length, " servi\xE7o(s) marcados como pagos no sistema antigo (sem data registada)"),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { desmarcarPagamentosAntigos(cid, mes); }, style: { background: "none", border: "none", color: "#DC2626", fontSize: 11, fontWeight: 700, cursor: "pointer", padding: "4px 0 0 0", textDecoration: "underline" } }, "Desmarcar e voltar a p\xF4r em d\xEDvida")
+      ),
       movs.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10, marginBottom: 10, borderTop: "1px solid #E2E8F0", paddingTop: 8 } },
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 800, color: "#64748B", textTransform: "uppercase", marginBottom: 6 } }, "Hist\xF3rico de pagamentos"),
         movs.map(function(m) {
