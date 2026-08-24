@@ -2600,9 +2600,15 @@ function Routes() {
   // Calcula equipas livres de UM dia (agrupadas por quem anda junto)
   function calcularEquipasLivres(dataAlvo) {
     var doDia = jobs.filter(function(j) { return j.date === dataAlvo && j.status !== "completed" && j.status !== "cancelado"; });
+    // As obras/limpezas profundas são o DESTINO do reforço — não geram "equipas livres"
+    function ehObra(j) {
+      var c = clients.find(function(x) { return x.id === j.client_id; });
+      return c && (c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda");
+    }
+    var fonteEquipas = doDia.filter(function(j) { return !ehObra(j); });
     // Agrupar por conjunto de equipa (quem anda junto nesse dia)
     var grupos = {};
-    doDia.forEach(function(j) {
+    fonteEquipas.forEach(function(j) {
       var team = (j.team || []).filter(function(eid) { var e = emps.find(function(x) { return x.id === eid; }); return e && e.ativo !== false; });
       if (team.length === 0) return;
       var chave = team.slice().sort().join("+");
@@ -3704,7 +3710,11 @@ function Routes() {
                 /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 800, color: "#2E6DA4", marginBottom: 6 } }, "Equipa seleccionada: ", nomes),
                 /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", marginBottom: 2 } }, "Escolhe ONDE esta equipa vai trabalhar:"),
                 /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginBottom: 6 } }, "Cada clique cria UM turno para a equipa acima. Para alocar outra equipa, fecha e escolhe essa equipa."),
-                dia.servicos.filter(function(s) { return s.team.slice().sort().join("+") !== eq.membros.join("+"); }).map(function(s) {
+                dia.servicos.filter(function(s) {
+                  if (s.team.slice().sort().join("+") === eq.membros.join("+")) return false;
+                  // nem a serviços onde algum membro já está alocado
+                  return !(s.team || []).some(function(eid) { return eq.membros.indexOf(eid) !== -1; });
+                }).map(function(s) {
                   var conf = detectarConflito(eq.membros, dia.data, s.t1, s.t2, s.id);
                   var temConf = conf.length > 0;
                   var desbloqueado = reforcoSel.conflitoJob === s.id;
