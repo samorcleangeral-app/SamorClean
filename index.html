@@ -6471,6 +6471,10 @@ function Stock() {
   const [vista, setVista] = useState("stock");
   // Filtro do gráfico de níveis (Fase 3): abaixo do mínimo por defeito — é o que interessa para encomendar.
   const [filtroNivel, setFiltroNivel] = useState("abaixo");
+  // Consulta de histórico por colaborador (Fase 4): período e colaborador expandido.
+  const hojeHist = /* @__PURE__ */ new Date();
+  const [histMes, setHistMes] = useState(localDateStr(new Date(hojeHist.getFullYear(), hojeHist.getMonth(), 1)).slice(0, 7));
+  const [colabExpandido, setColabExpandido] = useState(null);
   // agregadosProd: por produto_id, custo médio ponderado das entradas e soma real das quantidades.
   // Lê TODOS os movimentos (sem limit) para o cálculo nunca ficar incompleto à medida que o histórico cresce.
   const [agregadosProd, setAgregadosProd] = useState({});
@@ -6695,59 +6699,78 @@ function Stock() {
         )
       );
     })(),
-    verHistorico && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
-      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "\uD83D\uDCCB Hist\xF3rico de movimentos"),
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 12 } }, "Todas as entradas e sa\xEDdas registadas (\xFAltimas 200)."),
-      movimentos.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 16, color: "#94A3B8", fontSize: 12 } }, "Ainda sem movimentos registados.") :
-      /* @__PURE__ */ React.createElement("div", { style: { maxHeight: 380, overflowY: "auto" } }, movimentos.map(function(m) {
-        var ent = m.tipo === "entrada";
-        return /* @__PURE__ */ React.createElement("div", { key: m.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F1F5F9", gap: 10 } },
-          /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } },
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#1A3A5C" } }, m.produto_nome || "\u2014"),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8" } }, new Date(m.created_at).toLocaleDateString("pt-PT", { day: "2-digit", month: "short", year: "numeric" }), " \u00B7 ", m.motivo || "", m.funcionario_nome ? " \u00B7 " + m.funcionario_nome : "")
-          ),
-          /* @__PURE__ */ React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 10, whiteSpace: "nowrap" } },
-            /* @__PURE__ */ React.createElement("span", { style: { textAlign: "right" } },
-              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 800, color: ent ? "#16A34A" : "#DC2626" } }, ent ? "+" : "\u2212", (parseFloat(m.quantidade) || 0)),
-              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8" } }, fmt((parseFloat(m.quantidade) || 0) * (parseFloat(m.valor_unitario) || 0)))
-            ),
-            /* @__PURE__ */ React.createElement("button", { onClick: function() { apagarMovimentoStock(m); }, style: { background: "none", border: "none", color: "#CBD5E1", cursor: "pointer", fontSize: 14, padding: 0 }, title: "Apagar e repor stock" }, "\u2715")
-          )
-        );
-      }))
-    ),
-    showAnalise && (function() {
-      var mesA = localDateStr().slice(0, 7);
-      var saidas = (movimentos || []).filter(function(m) { return m.tipo === "saida" && (m.created_at || "").slice(0, 7) === mesA; });
+    verHistorico && (function() {
+      var saidas = (movimentos || []).filter(function(m) { return m.tipo === "saida" && (m.created_at || "").slice(0, 7) === histMes; });
       var porColab = {};
       saidas.forEach(function(m) {
         var k = m.funcionario_nome || "Sem colaborador";
-        if (!porColab[k]) porColab[k] = { custo: 0, n: 0, produtos: {} };
+        if (!porColab[k]) porColab[k] = { custo: 0, n: 0, produtos: {}, movs: [] };
         var v = (parseFloat(m.quantidade) || 0) * (parseFloat(m.valor_unitario) || 0);
         porColab[k].custo += v;
         porColab[k].n++;
-        if (!porColab[k].produtos[m.produto_nome]) porColab[k].produtos[m.produto_nome] = { q: 0, v: 0 };
+        porColab[k].movs.push(m);
+        if (!porColab[k].produtos[m.produto_nome]) porColab[k].produtos[m.produto_nome] = { q: 0, v: 0, unidade: "" };
         porColab[k].produtos[m.produto_nome].q += parseFloat(m.quantidade) || 0;
         porColab[k].produtos[m.produto_nome].v += v;
       });
       var lista = Object.keys(porColab).map(function(k) { return Object.assign({ nome: k }, porColab[k]); }).sort(function(a, b) { return b.custo - a.custo; });
       var totalMes = lista.reduce(function(a, x) { return a + x.custo; }, 0);
-      if (lista.length === 0) return null;
+      var labelMes = new Date(histMes + "-01T12:00:00").toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
+      function mudarMes(delta) {
+        var d = new Date(histMes + "-01T12:00:00");
+        d.setMonth(d.getMonth() + delta);
+        setHistMes(localDateStr(new Date(d.getFullYear(), d.getMonth(), 1)).slice(0, 7));
+        setColabExpandido(null);
+      }
+      function exportarHistPDF() {
+        var linhas = lista.map(function(c) {
+          var prods = Object.keys(c.produtos).map(function(k) { return k + ": " + c.produtos[k].q + " (" + fmt(c.produtos[k].v) + "\u20AC)"; }).join(", ");
+          return "<tr><td style='font-weight:600;padding:6px 10px'>" + c.nome + "</td><td style='padding:6px 10px'>" + prods + "</td><td style='text-align:right;padding:6px 10px;font-weight:700'>" + fmt(c.custo) + "\u20AC</td></tr>";
+        }).join("");
+        var win = window.open("", "_blank");
+        win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Consumo por Colaborador</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C}h1{margin-bottom:2px}h2{color:#64748B;font-weight:normal;margin-top:0;margin-bottom:24px}table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;padding:6px 10px;background:#1A3A5C;color:#fff;font-size:10px;text-transform:uppercase}tr{border-bottom:1px solid #E2EBF4}@media print{body{padding:15px}}</style></head><body><h1>SamorClean</h1><h2>Consumo de material por colaborador \u2014 " + labelMes + " \u2014 Total: " + fmt(totalMes) + "\u20AC</h2><table><thead><tr><th>Colaborador</th><th>Produtos</th><th style='text-align:right'>Custo</th></tr></thead><tbody>" + linhas + "</tbody></table><script>window.onload=function(){window.print();}<\/script></body></html>");
+        win.document.close();
+      }
       return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
-        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 2 } }, "\uD83D\uDC64 Custo de material por colaborador \u2014 ", new Date(mesA + "-01T12:00:00").toLocaleDateString("pt-PT", { month: "long", year: "numeric" })),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 12 } }, "S\xF3 pedidos aprovados que sa\xEDram do armaz\xE9m. Total do m\xEAs: ", /* @__PURE__ */ React.createElement("strong", null, fmt(totalMes))),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 4 } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "\uD83D\uDC64 Consumo por colaborador"),
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+            /* @__PURE__ */ React.createElement("button", { onClick: function() { mudarMes(-1); }, style: Object.assign({}, btnO, { padding: "4px 10px", fontSize: 14 }) }, "\u2039"),
+            /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: "#334155", minWidth: 110, textAlign: "center", textTransform: "capitalize" } }, labelMes),
+            /* @__PURE__ */ React.createElement("button", { onClick: function() { mudarMes(1); }, style: Object.assign({}, btnO, { padding: "4px 10px", fontSize: 14 }) }, "\u203A"),
+            lista.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: exportarHistPDF, style: Object.assign({}, btnO, { padding: "4px 12px", fontSize: 11, marginLeft: 4 }) }, "\uD83D\uDCC4 PDF")
+          )
+        ),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 14 } }, "S\xF3 pedidos aprovados que sa\xEDram do armaz\xE9m. Total do m\xEAs: ", /* @__PURE__ */ React.createElement("strong", null, fmt(totalMes), "\u20AC")),
+        lista.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 20, color: "#94A3B8", fontSize: 13 } }, "Sem consumo registado neste m\xEAs.") :
         lista.map(function(c) {
           var pct = totalMes > 0 ? Math.round(c.custo / totalMes * 100) : 0;
           var prods = Object.keys(c.produtos).map(function(k) { return { nome: k, q: c.produtos[k].q, v: c.produtos[k].v }; }).sort(function(a, b) { return b.v - a.v; });
+          var aberto = colabExpandido === c.nome;
           return /* @__PURE__ */ React.createElement("div", { key: c.nome, style: { borderBottom: "1px solid #F1F5F9", padding: "10px 0" } },
-            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 } },
-              /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, c.nome),
-              /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14, fontWeight: 900, color: "#DC2626" } }, fmt(c.custo))
+            /* @__PURE__ */ React.createElement("div", { onClick: function() { setColabExpandido(aberto ? null : c.nome); }, style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5, cursor: "pointer" } },
+              /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, aberto ? "\u25BE " : "\u25B8 ", c.nome),
+              /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14, fontWeight: 900, color: "#DC2626" } }, fmt(c.custo), "\u20AC")
             ),
             /* @__PURE__ */ React.createElement("div", { style: { background: "#F1F5F9", borderRadius: 4, height: 6, marginBottom: 6 } },
               /* @__PURE__ */ React.createElement("div", { style: { width: pct + "%", height: "100%", background: "#2E6DA4", borderRadius: 4 } })
             ),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, prods.map(function(x) { return x.nome + " (" + x.q + " \u2014 " + fmt(x.v) + ")"; }).join(" \u00B7 "))
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, prods.map(function(x) { return x.nome + " (" + x.q + " \u2014 " + fmt(x.v) + "\u20AC)"; }).join(" \u00B7 ")),
+            aberto && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10, background: "#F8FAFC", borderRadius: 8, padding: "8px 10px" } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", marginBottom: 6 } }, "Movimentos individuais"),
+              c.movs.slice().sort(function(a, b) { return new Date(b.created_at) - new Date(a.created_at); }).map(function(m) {
+                return /* @__PURE__ */ React.createElement("div", { key: m.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: "1px solid #EEF2F7", gap: 10 } },
+                  /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } },
+                    /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: "#334155" } }, m.produto_nome || "\u2014"),
+                    /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: "#94A3B8", marginLeft: 6 } }, new Date(m.created_at).toLocaleDateString("pt-PT", { day: "2-digit", month: "short" }))
+                  ),
+                  /* @__PURE__ */ React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 10, whiteSpace: "nowrap" } },
+                    /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: "#DC2626" } }, "\u2212", (parseFloat(m.quantidade) || 0), " \xB7 ", fmt((parseFloat(m.quantidade) || 0) * (parseFloat(m.valor_unitario) || 0)), "\u20AC"),
+                    /* @__PURE__ */ React.createElement("button", { onClick: function() { apagarMovimentoStock(m); }, style: { background: "none", border: "none", color: "#CBD5E1", cursor: "pointer", fontSize: 14, padding: 0 }, title: "Apagar e repor stock" }, "\u2715")
+                  )
+                );
+              })
+            )
           );
         })
       );
