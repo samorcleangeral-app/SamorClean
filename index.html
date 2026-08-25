@@ -6758,8 +6758,8 @@ function Stock() {
         /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Unidade"), /* @__PURE__ */ React.createElement("select", { style: inp, value: form.unidade, onChange: function(e) { setForm(Object.assign({}, form, { unidade: e.target.value })); } }, ["unidade", "litro", "kg", "caixa", "pack"].map(function(u) { return /* @__PURE__ */ React.createElement("option", { key: u, value: u }, u); }))),
         /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Quantidade", editId ? " (n\xE3o edit\xE1vel aqui)" : ""), /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, editId ? { background: "#F1F5F9", color: "#94A3B8" } : {}), type: "number", disabled: !!editId, value: form.quantidade, onFocus: function(e) { e.target.select(); }, onChange: function(e) { setForm(Object.assign({}, form, { quantidade: e.target.value })); } }), editId && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 3 } }, "Usa os bot\xF5es +/- na lista \u2014 assim fica registado no hist\xF3rico.")),
         /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "M\xEDnimo (avisa abaixo disto)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", value: form.quantidade_minima, onFocus: function(e) { e.target.select(); }, onChange: function(e) { setForm(Object.assign({}, form, { quantidade_minima: e.target.value })); } })),
-        /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Pre\xE7o da embalagem (\u20AC)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", placeholder: "Ex: 13.90", value: form.preco_embalagem, onFocus: function(e) { e.target.select(); }, onChange: function(e) { setForm(Object.assign({}, form, { preco_embalagem: e.target.value })); } })),
-        /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Conte\xFAdo da embalagem"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } },
+        /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Pre\xE7o por unidade de compra (\u20AC)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", step: "0.01", placeholder: "Ex: 12.80", value: form.preco_embalagem, onFocus: function(e) { e.target.select(); }, onChange: function(e) { setForm(Object.assign({}, form, { preco_embalagem: e.target.value })); } })),
+        /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Cada unidade traz"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } },
           /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { flex: 1 }), type: "number", step: "0.01", placeholder: "Ex: 5", value: form.conteudo_embalagem, onFocus: function(e) { e.target.select(); }, onChange: function(e) { setForm(Object.assign({}, form, { conteudo_embalagem: e.target.value })); } }),
           /* @__PURE__ */ React.createElement("select", { style: Object.assign({}, inp, { width: 90 }), value: form.unidade_consumo || "unidade", onChange: function(e) { setForm(Object.assign({}, form, { unidade_consumo: e.target.value })); } },
             ["unidade", "litro", "ml", "kg", "g"].map(function(u) { return /* @__PURE__ */ React.createElement("option", { key: u, value: u }, u); })
@@ -6769,9 +6769,9 @@ function Stock() {
           var pe = parseFloat(form.preco_embalagem) || 0;
           var ct = parseFloat(form.conteudo_embalagem) || 1;
           var uc = form.unidade_consumo || "unidade";
-          if (pe <= 0) return "Preenche o pre\xE7o da embalagem.";
-          if (uc === "unidade" || ct <= 1) return "A equipa pede \xE0 unidade \u2014 custo por pedido: " + fmt(pe);
-          return "Embalagem de " + ct + " " + uc + " \u2192 custo por " + uc + ": " + fmt(pe / ct) + " (\xE9 este que conta no consumo)";
+          if (pe <= 0) return "Preenche o pre\xE7o por unidade de compra.";
+          if (uc === "unidade" || ct <= 1) return "Consome-se \xE0 unidade \u2014 custo por pedido: " + fmt(pe);
+          return "1 unidade de compra a " + fmt(pe) + "\u20AC traz " + ct + " " + uc + " \u2192 custo por " + uc + ": " + fmt(pe / ct) + "\u20AC (\xE9 este que conta no consumo)";
         })())
       ),
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10 } },
