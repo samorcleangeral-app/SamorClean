@@ -6164,7 +6164,8 @@ function StockAnalise(props) {
   consumosFiltrados.forEach(function(c) {
     var chave = analiseTipo === "colaborador" ? (c.funcionario_nome || c.funcionario_id) : c.item;
     if (!seriesMap[chave]) seriesMap[chave] = {};
-    var valor = unidadeExibicao === "custo" ? c.quantidade * precoDe(c.item) : c.quantidade;
+    var custoU = (c.custoUnit != null && c.custoUnit > 0) ? c.custoUnit : precoDe(c.item);
+    var valor = unidadeExibicao === "custo" ? c.quantidade * custoU : c.quantidade;
     seriesMap[chave][c.data] = (seriesMap[chave][c.data] || 0) + valor;
   });
   var datasRange = [];
@@ -6467,10 +6468,35 @@ function Stock() {
   const [form, setForm] = useState({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade", preco_unitario: "", preco_embalagem: "", conteudo_embalagem: 1, unidade_consumo: "" });
   const [movimentos, setMovimentos] = useState([]);
   const [verHistorico, setVerHistorico] = useState(false);
+  // agregadosProd: por produto_id, custo médio ponderado das entradas e soma real das quantidades.
+  // Lê TODOS os movimentos (sem limit) para o cálculo nunca ficar incompleto à medida que o histórico cresce.
+  const [agregadosProd, setAgregadosProd] = useState({});
   function carregarMovimentos() {
     db.list("stock_movimentos", "?select=*&order=created_at.desc&limit=200").then(function(r) { setMovimentos(r || []); });
   }
-  useEffect(function() { carregarMovimentos(); }, []);
+  function carregarAgregados() {
+    db.list("stock_movimentos", "?select=produto_id,produto_nome,tipo,quantidade,valor_unitario,funcionario_id,funcionario_nome,created_at&order=created_at.desc").then(function(r) {
+      var rows = r || [];
+      var ag = {};
+      rows.forEach(function(m) {
+        var pid = m.produto_id;
+        if (!pid) return;
+        if (!ag[pid]) ag[pid] = { entradaQtd: 0, entradaCusto: 0, saidaQtd: 0, saidaCusto: 0 };
+        var qtd = parseFloat(m.quantidade) || 0;
+        var val = parseFloat(m.valor_unitario) || 0;
+        if (m.tipo === "entrada") { ag[pid].entradaQtd += qtd; ag[pid].entradaCusto += qtd * val; }
+        else if (m.tipo === "saida") { ag[pid].saidaQtd += qtd; ag[pid].saidaCusto += qtd * val; }
+      });
+      // custoMedio = custo médio ponderado de TODAS as entradas do produto (Opção 1)
+      Object.keys(ag).forEach(function(pid) {
+        var a = ag[pid];
+        a.custoMedio = a.entradaQtd > 0 ? a.entradaCusto / a.entradaQtd : 0;
+        a.somaMovimentos = a.entradaQtd - a.saidaQtd;
+      });
+      setAgregadosProd(ag);
+    });
+  }
+  useEffect(function() { carregarMovimentos(); carregarAgregados(); }, []);
   const [q, setQ] = useState("");
   const [showAnalise, setShowAnalise] = useState(false);
   const [consumos, setConsumos] = useState([]);
@@ -6483,22 +6509,22 @@ function Stock() {
   const [dataFim, setDataFim] = useState(localDateStr(hoje0));
   useEffect(function() {
     if (!showAnalise) return;
+    // Fonte única: consumo por colaborador vem dos MOVIMENTOS de saída, não dos pedidos em texto.
+    // O item é o produto_nome canónico do catálogo; o custo é o valor_unitario congelado no movimento.
+    // Pedidos antigos escritos à mão que nunca geraram movimento ficam de fora (obsoletos, por decisão).
     Promise.all([
-      db.list("pedidos_colaboradores", "?select=funcionario_id,funcionario_nome,detalhes,created_at&tipo=eq.material&estado=eq.aprovado&order=created_at.desc"),
+      db.list("stock_movimentos", "?select=funcionario_id,funcionario_nome,produto_nome,quantidade,valor_unitario,tipo,created_at&tipo=eq.saida&order=created_at.desc"),
       db.list("funcionarios", "?select=id,name")
     ]).then(function(res) {
-      var rows = (res[0] || []).filter(function(p) { return p.detalhes && p.detalhes.item; }).map(function(p) {
-        return { funcionario_id: p.funcionario_id, funcionario_nome: p.funcionario_nome, item: p.detalhes.item, itemRaw: p.detalhes.item, chave: normalizarItemStock(p.detalhes.item), quantidade: parseFloat(p.detalhes.quantidade) || 0, data: (p.created_at || "").slice(0, 10) };
-      });
-      // Unificar grafias diferentes do mesmo produto (versão antiga era texto livre)
-      var rotulo = {};
-      rows.forEach(function(r) {
-        var k = r.chave || (r.itemRaw || "").toLowerCase();
-        if (!rotulo[k] || (r.itemRaw || "").length > rotulo[k].length) rotulo[k] = r.itemRaw || "?";
-      });
-      rows.forEach(function(r) {
-        var k = r.chave || (r.itemRaw || "").toLowerCase();
-        r.item = rotulo[k] || r.itemRaw;
+      var rows = (res[0] || []).filter(function(m) { return m.funcionario_id && m.produto_nome; }).map(function(m) {
+        return {
+          funcionario_id: m.funcionario_id,
+          funcionario_nome: m.funcionario_nome,
+          item: m.produto_nome,
+          quantidade: parseFloat(m.quantidade) || 0,
+          custoUnit: parseFloat(m.valor_unitario) || 0,
+          data: (m.created_at || "").slice(0, 10)
+        };
       });
       setConsumos(rows);
       setEmpsList(res[1] || []);
@@ -6548,6 +6574,7 @@ function Stock() {
             motivo: "Stock inicial (produto criado)"
           });
           carregarMovimentos();
+          carregarAgregados();
         }
         setProdutos(function(p) { return p.concat(d2).sort(function(a, b) { return a.nome.localeCompare(b.nome); }); });
       }
@@ -6580,6 +6607,7 @@ function Stock() {
       motivo: delta > 0 ? "Ajuste manual (+)" : "Ajuste manual (-)"
     });
     carregarMovimentos();
+    carregarAgregados();
     var res = await fetch(SUPABASE_URL + "/rest/v1/stock_produtos?id=eq." + prod.id, {
       method: "PATCH",
       headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }),
@@ -6601,6 +6629,7 @@ function Stock() {
         motivo: "Produto eliminado do cat\xE1logo"
       });
       carregarMovimentos();
+      carregarAgregados();
     }
     await fetch(SUPABASE_URL + "/rest/v1/stock_produtos?id=eq." + id, { method: "DELETE", headers: dbHeaders() });
     setProdutos(function(p) { return p.filter(function(x) { return x.id !== id; }); });
@@ -6618,8 +6647,14 @@ function Stock() {
       )
     ),
     (function() {
-      var valorTotal = (produtos || []).reduce(function(a, p2) { return a + (parseFloat(p2.quantidade) || 0) * (parseFloat(p2.preco_unitario) || 0); }, 0);
-      var semPreco = (produtos || []).filter(function(p2) { return !(parseFloat(p2.preco_unitario) > 0); });
+      // Custo médio ponderado das entradas (Opção 1). Fallback ao preço do catálogo se o produto
+      // ainda não tem entradas registadas em movimentos (produtos antigos criados antes do histórico).
+      function custoUnitProd(p2) {
+        var ag = agregadosProd[p2.id];
+        return (ag && ag.entradaQtd > 0) ? ag.custoMedio : (parseFloat(p2.preco_unitario) || 0);
+      }
+      var valorTotal = (produtos || []).reduce(function(a, p2) { return a + (parseFloat(p2.quantidade) || 0) * custoUnitProd(p2); }, 0);
+      var semPreco = (produtos || []).filter(function(p2) { return !(custoUnitProd(p2) > 0); });
       var mesAct = localDateStr().slice(0, 7);
       var custoMes = (movimentos || []).filter(function(m) { return m.tipo === "saida" && (m.created_at || "").slice(0, 7) === mesAct; })
         .reduce(function(a, m) { return a + (parseFloat(m.quantidade) || 0) * (parseFloat(m.valor_unitario) || 0); }, 0);
@@ -6744,14 +6779,6 @@ function Stock() {
         /* @__PURE__ */ React.createElement("button", { onClick: salvar, disabled: !form.nome.trim(), style: Object.assign({}, btnG, { flex: 1, textAlign: "center", opacity: !form.nome.trim() ? 0.5 : 1 }) }, "Guardar")
       )
     ),
-    produtos.length > 0 && (function() {
-      var valorTotal = produtos.reduce(function(s, p) { return s + (parseFloat(p.quantidade) || 0) * (parseFloat(p.preco_unitario) || 0); }, 0);
-      if (valorTotal === 0) return null;
-      return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, padding: 16, background: "#F0FDF4", border: "1.5px solid #16A34A" }) },
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#15803D", textTransform: "uppercase", marginBottom: 4 } }, "\uD83D\uDCB0 Valor total em Stock"),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#16A34A" } }, fmt(valorTotal))
-      );
-    })(),
     produtos.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, padding: 16 }) },
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 14 } }, "\uD83D\uDCCA N\xEDvel de Stock (actual vs m\xEDnimo)"),
       produtos.slice().sort(function(a, b) { return a.quantidade - b.quantidade; }).map(function(p) {
