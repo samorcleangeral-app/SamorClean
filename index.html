@@ -6296,12 +6296,16 @@ function StockAnalise(props) {
           );
         }),
         seriesArr.map(function(s, si) {
-          var pts = s.pontos.map(function(v, i) {
+          var coords = s.pontos.map(function(v, i) {
             var x = 30 + (datasRange.length > 1 ? i / (datasRange.length - 1) * 560 : 0);
             var y = 20 + 160 - v / maxValLinha * 160;
-            return x + "," + y;
-          }).join(" ");
-          return /* @__PURE__ */ React.createElement("polyline", { key: si, points: pts, fill: "none", stroke: s.cor, strokeWidth: 1.5, strokeLinejoin: "round", strokeLinecap: "round" });
+            return { x: x, y: y };
+          });
+          var pts = coords.map(function(c) { return c.x + "," + c.y; }).join(" ");
+          return /* @__PURE__ */ React.createElement("g", { key: si },
+            /* @__PURE__ */ React.createElement("polyline", { points: pts, fill: "none", stroke: s.cor, strokeWidth: 2.5, strokeLinejoin: "round", strokeLinecap: "round" }),
+            coords.map(function(c, ci) { return /* @__PURE__ */ React.createElement("circle", { key: ci, cx: c.x, cy: c.y, r: ci === coords.length - 1 ? 4 : 2.5, fill: s.cor }); })
+          );
         }),
         datasRange.map(function(d, i) {
           if (datasRange.length > 1 && i !== 0 && i !== datasRange.length - 1 && i !== Math.floor(datasRange.length / 2)) return null;
@@ -6309,12 +6313,19 @@ function StockAnalise(props) {
           return /* @__PURE__ */ React.createElement("text", { key: i, x: x, y: 210, fontSize: 9, fill: "#94A3B8", textAnchor: i === 0 ? "start" : i === datasRange.length - 1 ? "end" : "middle" }, new Date(d + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit" }));
         })
       ),
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 10, marginBottom: 4 } }, "Cada linha abaixo corresponde a uma linha do gr\xE1fico acima \u2014 o n\xFAmero \xE9 o total consumido no per\xEDodo escolhido:"),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 10, marginBottom: 8 } }, "Tend\xEAncia = 2\xAA metade do per\xEDodo vs 1\xAA metade. Total = consumido no per\xEDodo escolhido."),
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 12 } }, seriesArr.map(function(s, i) {
         var total = s.pontos.reduce(function(a, b) { return a + b; }, 0);
-        return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#334155" } },
-          /* @__PURE__ */ React.createElement("div", { style: { width: 10, height: 10, borderRadius: 2, background: s.cor } }),
-          /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700 } }, s.nome), /* @__PURE__ */ React.createElement("span", { style: { color: "#94A3B8" } }, "\u2014 Total: ", unidadeExibicao === "custo" ? fmt(total) : total)
+        var meio = Math.floor(s.pontos.length / 2);
+        var somaP1 = s.pontos.slice(0, meio).reduce(function(a, b) { return a + b; }, 0);
+        var somaP2 = s.pontos.slice(meio).reduce(function(a, b) { return a + b; }, 0);
+        var varPct = somaP1 > 0 ? Math.round((somaP2 - somaP1) / somaP1 * 100) : (somaP2 > 0 ? 100 : 0);
+        var tend = varPct >= 10 ? { seta: "\u2191", cor: "#DC2626", txt: "+" + varPct + "%" } : varPct <= -10 ? { seta: "\u2193", cor: "#16A34A", txt: varPct + "%" } : { seta: "\u2192", cor: "#94A3B8", txt: "est\xE1vel" };
+        return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#334155", background: "#F8FAFC", borderRadius: 8, padding: "5px 10px" } },
+          /* @__PURE__ */ React.createElement("div", { style: { width: 10, height: 10, borderRadius: "50%", background: s.cor } }),
+          /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700 } }, s.nome),
+          /* @__PURE__ */ React.createElement("span", { style: { color: "#94A3B8" } }, unidadeExibicao === "custo" ? fmt(total) : total),
+          /* @__PURE__ */ React.createElement("span", { style: { color: tend.cor, fontWeight: 700 } }, tend.seta, " ", tend.txt)
         );
       }))
     )
