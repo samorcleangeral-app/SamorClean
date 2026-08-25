@@ -6830,41 +6830,47 @@ function Stock() {
           var corMsg = filtroNivel === "abaixo" ? "#16A34A" : "#94A3B8";
           return /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 20, color: corMsg, fontSize: 13, fontWeight: 600 } }, msg);
         }
-        return lista.map(function(p) {
+        return /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 12 } }, lista.map(function(p) {
           var teto = Math.max(p.quantidade, p.quantidade_minima * 2, 1);
-          var pctAtual = Math.min(100, p.quantidade / teto * 100);
-          var pctMinimo = Math.min(100, p.quantidade_minima / teto * 100);
+          var frac = Math.max(0, Math.min(1, p.quantidade / teto));
           var emBaixoP = p.quantidade <= p.quantidade_minima;
-          var cor = emBaixoP ? "#EF4444" : "#16A34A";
-          return /* @__PURE__ */ React.createElement("div", { key: p.id, style: { marginBottom: 12 } },
-            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 } },
-              /* @__PURE__ */ React.createElement("span", { style: { color: "#334155", fontWeight: 600 } }, p.nome),
-              /* @__PURE__ */ React.createElement("span", { style: { color: cor, fontWeight: 700 } }, p.quantidade, " ", p.unidade || "unidade", " (m\xEDn. ", p.quantidade_minima, ")")
+          var perto = !emBaixoP && p.quantidade <= p.quantidade_minima * 1.5;
+          var cor = emBaixoP ? "#EF4444" : perto ? "#EF9F27" : "#16A34A";
+          var estado = emBaixoP ? "Encomendar" : perto ? "Perto do m\xEDnimo" : "Confort\xE1vel";
+          var circ = 201;
+          var off = circ * (1 - frac);
+          return /* @__PURE__ */ React.createElement("div", { key: p.id, style: Object.assign({}, card, { padding: 14, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }) },
+            /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 80 80", width: 68, height: 68, style: { marginBottom: 6 } },
+              /* @__PURE__ */ React.createElement("circle", { cx: 40, cy: 40, r: 32, fill: "none", stroke: "#F1F5F9", strokeWidth: 8 }),
+              /* @__PURE__ */ React.createElement("circle", { cx: 40, cy: 40, r: 32, fill: "none", stroke: cor, strokeWidth: 8, strokeDasharray: circ, strokeDashoffset: off, strokeLinecap: "round", transform: "rotate(-90 40 40)" }),
+              /* @__PURE__ */ React.createElement("text", { x: 40, y: 38, textAnchor: "middle", fontSize: 17, fontWeight: 700, fill: "#1A3A5C" }, p.quantidade),
+              /* @__PURE__ */ React.createElement("text", { x: 40, y: 52, textAnchor: "middle", fontSize: 9, fill: "#94A3B8" }, "m\xEDn. ", p.quantidade_minima)
             ),
-            /* @__PURE__ */ React.createElement("div", { style: { position: "relative", height: 14, background: "#F1F5F9", borderRadius: 4 } },
-              /* @__PURE__ */ React.createElement("div", { style: { width: pctAtual + "%", height: "100%", background: cor, borderRadius: 4 } }),
-              /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", left: pctMinimo + "%", top: -2, bottom: -2, width: 2, background: "#1A3A5C" } })
-            )
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, p.nome),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: cor, fontWeight: 600 } }, estado)
           );
-        });
+        }));
       })()
     ),
     vista === "stock" && /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar produto...", value: q, onChange: function(e) { setQ(e.target.value); } }),
     vista === "stock" && (filtrados.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Nenhum produto encontrado.") :
-    filtrados.map(function(p) {
+    /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 } }, filtrados.map(function(p) {
       var emBaixoP = p.quantidade <= p.quantidade_minima;
-      return /* @__PURE__ */ React.createElement("div", { key: p.id, style: Object.assign({}, card, { marginBottom: 10, display: "flex", alignItems: "center", gap: 14, padding: 14, borderLeft: "4px solid " + (emBaixoP ? "#EF4444" : "#16A34A") }) },
-        /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } },
-          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C" } }, p.nome),
-          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, "M\xEDnimo: ", p.quantidade_minima, p.preco_unitario > 0 && " \u2022 " + fmt(p.preco_unitario) + "\u20AC/" + (p.unidade || "unidade"), emBaixoP && /* @__PURE__ */ React.createElement("span", { style: { color: "#EF4444", fontWeight: 700, marginLeft: 8 } }, "\u26A0 Em baixo"))
+      var cor = emBaixoP ? "#EF4444" : "#16A34A";
+      return /* @__PURE__ */ React.createElement("div", { key: p.id, style: Object.assign({}, card, { padding: 14, borderLeft: "3px solid " + cor }) },
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C", marginBottom: 2 } }, p.nome),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: emBaixoP ? "#EF4444" : "#1A3A5C" } }, p.quantidade, " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#94A3B8", fontWeight: 400 } }, p.unidade || "unidade")),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", margin: "4px 0 10px" } }, p.preco_unitario > 0 ? fmt(p.preco_unitario) + "\u20AC/" + (p.unidade_consumo || p.unidade || "unidade") + " \u00B7 " : "", "m\xEDn. ", p.quantidade_minima, emBaixoP && /* @__PURE__ */ React.createElement("span", { style: { color: "#EF4444", fontWeight: 700, display: "block", marginTop: 2 } }, "\u26A0 Em baixo")),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 6 } },
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { ajustarQtd(p, -1); }, style: Object.assign({}, btnO, { flex: 1, padding: "5px 0", fontSize: 15 }) }, "\u2212"),
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { ajustarQtd(p, 1); }, style: Object.assign({}, btnO, { flex: 1, padding: "5px 0", fontSize: 15 }) }, "+")
         ),
-        /* @__PURE__ */ React.createElement("button", { onClick: function() { ajustarQtd(p, -1); }, style: Object.assign({}, btnO, { padding: "4px 12px", fontSize: 16 }) }, "\u2212"),
-        /* @__PURE__ */ React.createElement("div", { style: { minWidth: 70, textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 900, fontSize: 18, color: emBaixoP ? "#EF4444" : "#1A3A5C" } }, p.quantidade), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", textTransform: "uppercase" } }, p.unidade || "unidade")),
-        /* @__PURE__ */ React.createElement("button", { onClick: function() { ajustarQtd(p, 1); }, style: Object.assign({}, btnO, { padding: "4px 12px", fontSize: 16 }) }, "+"),
-        /* @__PURE__ */ React.createElement("button", { onClick: function() { setForm({ preco_embalagem: p.preco_embalagem || p.preco_unitario, conteudo_embalagem: p.conteudo_embalagem || 1, unidade_consumo: p.unidade_consumo || p.unidade, nome: p.nome, quantidade: p.quantidade, quantidade_minima: p.quantidade_minima, unidade: p.unidade || "unidade", preco_unitario: p.preco_unitario || "" }); setEditId(p.id); setShowForm(true); window.scrollTo({ top: 0, behavior: "smooth" }); }, style: Object.assign({}, btnO, { fontSize: 11, padding: "6px 10px" }) }, "Editar"),
-        /* @__PURE__ */ React.createElement("button", { onClick: function() { apagar(p.id); }, style: Object.assign({}, btnR, { fontSize: 11, padding: "6px 10px" }) }, "Del")
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } },
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { setForm({ preco_embalagem: p.preco_embalagem || p.preco_unitario, conteudo_embalagem: p.conteudo_embalagem || 1, unidade_consumo: p.unidade_consumo || p.unidade, nome: p.nome, quantidade: p.quantidade, quantidade_minima: p.quantidade_minima, unidade: p.unidade || "unidade", preco_unitario: p.preco_unitario || "" }); setEditId(p.id); setShowForm(true); window.scrollTo({ top: 0, behavior: "smooth" }); }, style: Object.assign({}, btnO, { flex: 1, fontSize: 11, padding: "6px 0" }) }, "Editar"),
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { apagar(p.id); }, style: Object.assign({}, btnR, { fontSize: 11, padding: "6px 10px" }) }, "Del")
+        )
       );
-    }))
+    })))
   );
 }
 function Fornecedores() {
