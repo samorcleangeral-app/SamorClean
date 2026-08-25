@@ -6467,12 +6467,14 @@ function AuditoriaQR() {
     )
   );
 }
-function Stock() {
+function Stock(props) {
+  var onIrParaFornecedores = props.onIrParaFornecedores;
   const [produtos, setProdutos] = useState([]);
+  const [fornecedoresStock, setFornecedoresStock] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade", preco_unitario: "", preco_embalagem: "", conteudo_embalagem: 1, unidade_consumo: "" });
+  const [form, setForm] = useState({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade", preco_unitario: "", preco_embalagem: "", conteudo_embalagem: 1, unidade_consumo: "", fornecedor_id: "" });
   const [movimentos, setMovimentos] = useState([]);
   // Vista única do módulo: só uma de stock/analise/historico visível de cada vez (Fase 2).
   const [vista, setVista] = useState("stock");
@@ -6544,6 +6546,9 @@ function Stock() {
       setProdutos(rows || []);
       setLoading(false);
     });
+    db.list("fornecedores", "?select=id,nome,activo&order=nome").then(function(rows) {
+      setFornecedoresStock((rows || []).filter(function(f) { return f.activo !== false; }));
+    });
   }, []);
   async function salvar() {
     if (!form.nome.trim()) return;
@@ -6552,7 +6557,7 @@ function Stock() {
     // Se a equipa pede ao litro/ml, o custo unitário é o preço da embalagem a dividir pelo conteúdo
     var pedeAoConteudo = !!form.unidade_consumo && form.unidade_consumo !== "unidade";
     var precoUnit = pedeAoConteudo && conteudo > 0 ? Math.round(precoEmb / conteudo * 10000) / 10000 : precoEmb;
-    var payload = { nome: form.nome.trim(), quantidade: parseFloat(form.quantidade) || 0, quantidade_minima: parseFloat(form.quantidade_minima) || 0, unidade: form.unidade || "unidade", preco_unitario: precoUnit, preco_embalagem: precoEmb, conteudo_embalagem: conteudo, unidade_consumo: form.unidade_consumo || form.unidade || "unidade" };
+    var payload = { nome: form.nome.trim(), quantidade: parseFloat(form.quantidade) || 0, quantidade_minima: parseFloat(form.quantidade_minima) || 0, unidade: form.unidade || "unidade", preco_unitario: precoUnit, preco_embalagem: precoEmb, conteudo_embalagem: conteudo, unidade_consumo: form.unidade_consumo || form.unidade || "unidade", fornecedor_id: form.fornecedor_id || null };
     // Ao EDITAR, a quantidade não é tocada (evita sobrepor saídas entretanto registadas).
     // A quantidade altera-se pelos botões +/- (que geram movimento) ou pelo ajuste de contagem.
     if (editId) delete payload.quantidade;
@@ -6590,7 +6595,7 @@ function Stock() {
     }
     setShowForm(false);
     setEditId(null);
-    setForm({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade", preco_unitario: "", preco_embalagem: "", conteudo_embalagem: 1, unidade_consumo: "" });
+    setForm({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade", preco_unitario: "", preco_embalagem: "", conteudo_embalagem: 1, unidade_consumo: "", fornecedor_id: "" });
   }
   async function apagarMovimentoStock(mov) {
     var sinal = mov.tipo === "saida" ? 1 : -1;
@@ -6649,7 +6654,10 @@ function Stock() {
   return /* @__PURE__ */ React.createElement("div", null,
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 } },
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 900, fontSize: 20, color: "#1A3A5C" } }, "\uD83D\uDCCB Stock"),
-      /* @__PURE__ */ React.createElement("button", { onClick: function() { setForm({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade", preco_unitario: "", preco_embalagem: "", conteudo_embalagem: 1, unidade_consumo: "" }); setEditId(null); setShowForm(true); }, style: btn }, "+ Novo Produto")
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+        onIrParaFornecedores && /* @__PURE__ */ React.createElement("button", { onClick: function() { onIrParaFornecedores(); }, style: btnO }, "\uD83D\uDCE5 Dar entrada de encomenda"),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setForm({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade", preco_unitario: "", preco_embalagem: "", conteudo_embalagem: 1, unidade_consumo: "", fornecedor_id: "" }); setEditId(null); setShowForm(true); }, style: btn }, "+ Novo Produto")
+      )
     ),
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 18, borderBottom: "1.5px solid #E2EBF4" } },
       [["stock", "\uD83D\uDCE6 Stock", "#2E6DA4"], ["analise", "\uD83D\uDCCA An\xE1lise de Consumo", "#7C3AED"], ["historico", "\uD83D\uDCCB Hist\xF3rico", "#64748B"]].map(function(t) {
@@ -6783,6 +6791,13 @@ function Stock() {
     ),
     vista === "stock" && showForm && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, background: "#F8FAFC" }) },
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, editId ? "Editar produto" : "Novo produto"),
+      /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } },
+        /* @__PURE__ */ React.createElement("label", { style: lbl }, "Fornecedor"),
+        /* @__PURE__ */ React.createElement("select", { style: Object.assign({}, inp, { maxWidth: 300 }), value: form.fornecedor_id || "", onChange: function(e) { setForm(Object.assign({}, form, { fornecedor_id: e.target.value })); } },
+          /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014 Escolher fornecedor \u2014"),
+          fornecedoresStock.map(function(f) { return /* @__PURE__ */ React.createElement("option", { key: f.id, value: f.id }, f.nome); })
+        )
+      ),
       /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr", gap: 10, marginBottom: 14 } },
         /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Nome"), /* @__PURE__ */ React.createElement("input", { style: inp, value: form.nome, onChange: function(e) { setForm(Object.assign({}, form, { nome: e.target.value })); } })),
         /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Unidade"), /* @__PURE__ */ React.createElement("select", { style: inp, value: form.unidade, onChange: function(e) { setForm(Object.assign({}, form, { unidade: e.target.value })); } }, ["unidade", "litro", "kg", "caixa", "pack"].map(function(u) { return /* @__PURE__ */ React.createElement("option", { key: u, value: u }, u); }))),
@@ -6867,7 +6882,7 @@ function Stock() {
           /* @__PURE__ */ React.createElement("button", { onClick: function() { ajustarQtd(p, 1); }, style: Object.assign({}, btnO, { flex: 1, padding: "5px 0", fontSize: 15 }) }, "+")
         ),
         /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } },
-          /* @__PURE__ */ React.createElement("button", { onClick: function() { setForm({ preco_embalagem: p.preco_embalagem || p.preco_unitario, conteudo_embalagem: p.conteudo_embalagem || 1, unidade_consumo: p.unidade_consumo || p.unidade, nome: p.nome, quantidade: p.quantidade, quantidade_minima: p.quantidade_minima, unidade: p.unidade || "unidade", preco_unitario: p.preco_unitario || "" }); setEditId(p.id); setShowForm(true); window.scrollTo({ top: 0, behavior: "smooth" }); }, style: Object.assign({}, btnO, { flex: 1, fontSize: 11, padding: "6px 0" }) }, "Editar"),
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { setForm({ preco_embalagem: p.preco_embalagem || p.preco_unitario, conteudo_embalagem: p.conteudo_embalagem || 1, unidade_consumo: p.unidade_consumo || p.unidade, nome: p.nome, quantidade: p.quantidade, quantidade_minima: p.quantidade_minima, unidade: p.unidade || "unidade", preco_unitario: p.preco_unitario || "", fornecedor_id: p.fornecedor_id || "" }); setEditId(p.id); setShowForm(true); window.scrollTo({ top: 0, behavior: "smooth" }); }, style: Object.assign({}, btnO, { flex: 1, fontSize: 11, padding: "6px 0" }) }, "Editar"),
           /* @__PURE__ */ React.createElement("button", { onClick: function() { apagar(p.id); }, style: Object.assign({}, btnR, { fontSize: 11, padding: "6px 10px" }) }, "Del")
         )
       );
@@ -6887,6 +6902,7 @@ function Fornecedores() {
   const [linhasStock, setLinhasStock] = useState([]);
   const [prodStock, setProdStock] = useState([]);
   const [buscaProd, setBuscaProd] = useState("");
+  const [verTodosProdEntrada, setVerTodosProdEntrada] = useState(false);
   function carregarProdStock() {
     db.list("stock_produtos", "?select=*&order=nome").then(function(r) { setProdStock(r || []); });
   }
@@ -7102,14 +7118,29 @@ function Fornecedores() {
         ),
         isStockCompra && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10 } },
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 8 } }, "Indica o que entrou. O pre\xE7o de refer\xEAncia vem do produto \u2014 se a factura tiver outro, escreve por cima e o pre\xE7o \xE9 actualizado."),
-          /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { marginBottom: 8 }), placeholder: "Procurar produto para adicionar...", value: buscaProd, onChange: function(e) { setBuscaProd(e.target.value); } }),
-          buscaProd.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { border: "1px solid #E2E8F0", borderRadius: 8, marginBottom: 10, maxHeight: 150, overflowY: "auto" } },
-            prodStock.filter(function(pr) { return pr.nome.toLowerCase().indexOf(buscaProd.toLowerCase()) !== -1; }).slice(0, 8).map(function(pr) {
-              return /* @__PURE__ */ React.createElement("div", { key: pr.id, onClick: function() { addLinhaStock(pr); }, style: { padding: "7px 10px", cursor: "pointer", fontSize: 12, borderBottom: "1px solid #F1F5F9", display: "flex", justifyContent: "space-between" } },
-                /* @__PURE__ */ React.createElement("span", null, pr.nome),
-                /* @__PURE__ */ React.createElement("span", { style: { color: "#94A3B8" } }, fmt(parseFloat(pr.preco_unitario) || 0), "/", pr.unidade)
-              );
-            })
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" } },
+            /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { flex: 1, minWidth: 160, marginBottom: 0 }), placeholder: "Procurar produto para adicionar...", value: buscaProd, onChange: function(e) { setBuscaProd(e.target.value); } }),
+            /* @__PURE__ */ React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#64748B", cursor: "pointer", whiteSpace: "nowrap" } },
+              /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: verTodosProdEntrada, onChange: function(e) { setVerTodosProdEntrada(e.target.checked); } }),
+              "Ver todos os fornecedores"
+            )
+          ),
+          /* @__PURE__ */ React.createElement("div", { style: { border: "1px solid #E2E8F0", borderRadius: 8, marginBottom: 10, maxHeight: 180, overflowY: "auto" } },
+            (function() {
+              var candidatos = prodStock.filter(function(pr) {
+                var okForn = verTodosProdEntrada || !sel || pr.fornecedor_id === sel.id;
+                var okBusca = !buscaProd || pr.nome.toLowerCase().indexOf(buscaProd.toLowerCase()) !== -1;
+                var jaAdd = linhasStock.some(function(l) { return l.produto_id === pr.id; });
+                return okForn && okBusca && !jaAdd;
+              });
+              if (candidatos.length === 0) return /* @__PURE__ */ React.createElement("div", { style: { padding: "10px", fontSize: 11, color: "#94A3B8", textAlign: "center" } }, buscaProd ? "Nenhum produto encontrado." : "Sem produtos deste fornecedor. Marca \"ver todos\" ou associa produtos a este fornecedor no Stock.");
+              return candidatos.slice(0, 20).map(function(pr) {
+                return /* @__PURE__ */ React.createElement("div", { key: pr.id, onClick: function() { addLinhaStock(pr); }, style: { padding: "7px 10px", cursor: "pointer", fontSize: 12, borderBottom: "1px solid #F1F5F9", display: "flex", justifyContent: "space-between" } },
+                  /* @__PURE__ */ React.createElement("span", null, pr.nome),
+                  /* @__PURE__ */ React.createElement("span", { style: { color: "#94A3B8" } }, fmt(parseFloat(pr.preco_unitario) || 0), "/", pr.unidade_consumo || pr.unidade)
+                );
+              });
+            })()
           ),
           linhasStock.map(function(l, idx) {
             return /* @__PURE__ */ React.createElement("div", { key: l.produto_id, style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 6 } },
@@ -8977,7 +9008,7 @@ function Manager(props) {
     return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: i === 0 ? "#F59E0B" : i === 1 ? "#94A3B8" : "#CD7C54", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 11, flexShrink: 0 } }, i + 1), /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 30, color: ["#2E6DA4", "#0F766E", "#7C3AED", "#C2410C"][i] || "#64748B" }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, e.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, e.role)), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right" } }, rMes ? /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end" } }, /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 900, fontSize: 15, color: "#2E6DA4" } }, rMes.media), /* @__PURE__ */ React.createElement("span", { style: { color: "#F59E0B" } }, "\u2605"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: "#94A3B8" } }, "(", rMes.count, ")")) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#CBD5E1", fontWeight: 700 } }, "Sem avalia\xE7\xF5es este m\xEAs"), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 2 } }, /* @__PURE__ */ React.createElement(Stars, { r: e.rating }))));
   })))) : null, view === "quadro_op" ? /* @__PURE__ */ React.createElement(QuadroOperacional, null) : null, view === "notas_op" ? /* @__PURE__ */ React.createElement(NotasOperacionais, null) : null, view === "finance" ? /* @__PURE__ */ React.createElement(Finance, null) : null, view === "routes" ? /* @__PURE__ */ React.createElement(Routes, null) : null, view === "clients" ? /* @__PURE__ */ React.createElement(Clients, null) : null, view === "fornecedores" ? /* @__PURE__ */ React.createElement(Fornecedores, null) : null, view === "pedidos_colab" ? /* @__PURE__ */ React.createElement(PedidosColab, { onUpdate: function(n) {
     setPedidosColabPendentes(n);
-  } }) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "leads" ? /* @__PURE__ */ React.createElement(Leads, null) : null, view === "recrutamento" ? /* @__PURE__ */ React.createElement(Recrutamento, null) : null, view === "avaliacoes" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "formacao" ? /* @__PURE__ */ React.createElement(Formacao, null) : null, view === "relatorio" ? /* @__PURE__ */ React.createElement(RelatorioMensal, null) : null, view === "gestores" ? /* @__PURE__ */ React.createElement(GestoresAdmin, null) : null, view === "armazem_qr" ? /* @__PURE__ */ React.createElement(QRArmazem, null) : null, view === "auditoria_qr" ? /* @__PURE__ */ React.createElement(AuditoriaQR, null) : null, view === "stock" ? /* @__PURE__ */ React.createElement(Stock, null) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, null) : null));
+  } }) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "leads" ? /* @__PURE__ */ React.createElement(Leads, null) : null, view === "recrutamento" ? /* @__PURE__ */ React.createElement(Recrutamento, null) : null, view === "avaliacoes" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "formacao" ? /* @__PURE__ */ React.createElement(Formacao, null) : null, view === "relatorio" ? /* @__PURE__ */ React.createElement(RelatorioMensal, null) : null, view === "gestores" ? /* @__PURE__ */ React.createElement(GestoresAdmin, null) : null, view === "armazem_qr" ? /* @__PURE__ */ React.createElement(QRArmazem, null) : null, view === "auditoria_qr" ? /* @__PURE__ */ React.createElement(AuditoriaQR, null) : null, view === "stock" ? /* @__PURE__ */ React.createElement(Stock, { onIrParaFornecedores: function() { setView("fornecedores"); } }) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, null) : null));
 }
 function EmpPedidos(props) {
   const empId = props.empId;
