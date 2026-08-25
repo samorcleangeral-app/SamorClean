@@ -6145,7 +6145,8 @@ function StockAnalise(props) {
   const [tipoGrafico, setTipoGrafico] = useState("linhas");
   const [unidadeExibicao, setUnidadeExibicao] = useState("quantidade");
   function precoDe(nomeItem) {
-    var pr = produtos.find(function(p) { return p.nome === nomeItem; });
+    var chave = normalizarItemStock(nomeItem);
+    var pr = produtos.find(function(p) { return normalizarItemStock(p.nome) === chave; });
     return pr ? parseFloat(pr.preco_unitario) || 0 : 0;
   }
   const nomesProdutos = produtos.map(function(p) { return p.nome; });
@@ -6827,10 +6828,8 @@ function Fornecedores() {
       var precoUnitNovo = pedeAoConteudo ? Math.round(precoEmbNovo / conteudo * 10000) / 10000 : precoEmbNovo;
       var novaQtd = (parseFloat(prod.quantidade) || 0) + entrada;
       var patch = { quantidade: novaQtd };
-      if (precoEmbNovo > 0 && precoEmbNovo !== (parseFloat(prod.preco_embalagem) || 0)) {
-        patch.preco_embalagem = precoEmbNovo;
-        patch.preco_unitario = precoUnitNovo;
-      }
+      // O preço do catálogo é o do fornecedor principal e só muda por edição manual.
+      // Uma entrada (incl. compra avulsa) regista o seu preço no movimento, não no produto.
       await fetch(SUPABASE_URL + "/rest/v1/stock_produtos?id=eq." + prod.id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify(patch) });
       await fetch(SUPABASE_URL + "/rest/v1/stock_movimentos", { method: "POST", headers: dbHeaders(), body: JSON.stringify({ produto_id: prod.id, produto_nome: prod.nome, tipo: "entrada", quantidade: entrada, valor_unitario: precoUnitNovo, motivo: "Entrada por factura (" + q + " embalagem" + (q !== 1 ? "s" : "") + ")" }) });
     }
