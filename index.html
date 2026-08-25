@@ -6469,6 +6469,8 @@ function Stock() {
   const [movimentos, setMovimentos] = useState([]);
   // Vista única do módulo: só uma de stock/analise/historico visível de cada vez (Fase 2).
   const [vista, setVista] = useState("stock");
+  // Filtro do gráfico de níveis (Fase 3): abaixo do mínimo por defeito — é o que interessa para encomendar.
+  const [filtroNivel, setFiltroNivel] = useState("abaixo");
   // agregadosProd: por produto_id, custo médio ponderado das entradas e soma real das quantidades.
   // Lê TODOS os movimentos (sem limit) para o cálculo nunca ficar incompleto à medida que o histórico cresce.
   const [agregadosProd, setAgregadosProd] = useState({});
@@ -6784,24 +6786,45 @@ function Stock() {
       )
     ),
     vista === "stock" && produtos.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, padding: 16 }) },
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 14 } }, "\uD83D\uDCCA N\xEDvel de Stock (actual vs m\xEDnimo)"),
-      produtos.slice().sort(function(a, b) { return a.quantidade - b.quantidade; }).map(function(p) {
-        var teto = Math.max(p.quantidade, p.quantidade_minima * 2, 1);
-        var pctAtual = Math.min(100, p.quantidade / teto * 100);
-        var pctMinimo = Math.min(100, p.quantidade_minima / teto * 100);
-        var emBaixoP = p.quantidade <= p.quantidade_minima;
-        var cor = emBaixoP ? "#EF4444" : "#16A34A";
-        return /* @__PURE__ */ React.createElement("div", { key: p.id, style: { marginBottom: 12 } },
-          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 } },
-            /* @__PURE__ */ React.createElement("span", { style: { color: "#334155", fontWeight: 600 } }, p.nome),
-            /* @__PURE__ */ React.createElement("span", { style: { color: cor, fontWeight: 700 } }, p.quantidade, " ", p.unidade || "unidade", " (m\xEDn. ", p.quantidade_minima, ")")
-          ),
-          /* @__PURE__ */ React.createElement("div", { style: { position: "relative", height: 14, background: "#F1F5F9", borderRadius: 4 } },
-            /* @__PURE__ */ React.createElement("div", { style: { width: pctAtual + "%", height: "100%", background: cor, borderRadius: 4 } }),
-            /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", left: pctMinimo + "%", top: -2, bottom: -2, width: 2, background: "#1A3A5C" } })
-          )
-        );
-      })
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 14 } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, "\uD83D\uDCCA N\xEDvel de Stock"),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 4 } },
+          [["abaixo", "Abaixo do m\xEDnimo", "#EF4444"], ["acima", "Acima", "#16A34A"], ["todos", "Todos", "#1A3A5C"]].map(function(f) {
+            var isActive = filtroNivel === f[0];
+            return /* @__PURE__ */ React.createElement("button", { key: f[0], onClick: function() { setFiltroNivel(f[0]); }, style: { background: isActive ? f[2] : "#fff", color: isActive ? "#fff" : "#64748B", border: "1.5px solid " + (isActive ? f[2] : "#E2EBF4"), borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, f[1]);
+          })
+        )
+      ),
+      (function() {
+        var abaixoP = function(p) { return p.quantidade <= p.quantidade_minima; };
+        var lista = produtos.slice().filter(function(p) {
+          if (filtroNivel === "abaixo") return abaixoP(p);
+          if (filtroNivel === "acima") return !abaixoP(p);
+          return true;
+        }).sort(function(a, b) { return a.quantidade - b.quantidade; });
+        if (lista.length === 0) {
+          var msg = filtroNivel === "abaixo" ? "\u2713 Tudo acima do m\xEDnimo \u2014 nada a encomendar." : filtroNivel === "acima" ? "Nenhum produto acima do m\xEDnimo." : "Sem produtos.";
+          var corMsg = filtroNivel === "abaixo" ? "#16A34A" : "#94A3B8";
+          return /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 20, color: corMsg, fontSize: 13, fontWeight: 600 } }, msg);
+        }
+        return lista.map(function(p) {
+          var teto = Math.max(p.quantidade, p.quantidade_minima * 2, 1);
+          var pctAtual = Math.min(100, p.quantidade / teto * 100);
+          var pctMinimo = Math.min(100, p.quantidade_minima / teto * 100);
+          var emBaixoP = p.quantidade <= p.quantidade_minima;
+          var cor = emBaixoP ? "#EF4444" : "#16A34A";
+          return /* @__PURE__ */ React.createElement("div", { key: p.id, style: { marginBottom: 12 } },
+            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 } },
+              /* @__PURE__ */ React.createElement("span", { style: { color: "#334155", fontWeight: 600 } }, p.nome),
+              /* @__PURE__ */ React.createElement("span", { style: { color: cor, fontWeight: 700 } }, p.quantidade, " ", p.unidade || "unidade", " (m\xEDn. ", p.quantidade_minima, ")")
+            ),
+            /* @__PURE__ */ React.createElement("div", { style: { position: "relative", height: 14, background: "#F1F5F9", borderRadius: 4 } },
+              /* @__PURE__ */ React.createElement("div", { style: { width: pctAtual + "%", height: "100%", background: cor, borderRadius: 4 } }),
+              /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", left: pctMinimo + "%", top: -2, bottom: -2, width: 2, background: "#1A3A5C" } })
+            )
+          );
+        });
+      })()
     ),
     vista === "stock" && /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar produto...", value: q, onChange: function(e) { setQ(e.target.value); } }),
     vista === "stock" && (filtrados.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Nenhum produto encontrado.") :
