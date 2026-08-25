@@ -6135,202 +6135,198 @@ function PedidosColab(props) {
   );
 }
 function StockAnalise(props) {
-  const [verInativosSA, setVerInativosSA] = useState(false);
-  const consumos = props.consumos, empsList = props.empsList, produtos = props.produtos;
-  const analiseTipo = props.analiseTipo, setAnaliseTipo = props.setAnaliseTipo;
-  const filtroColabs = props.filtroColabs, setFiltroColabs = props.setFiltroColabs;
-  const filtroProdutos = props.filtroProdutos, setFiltroProdutos = props.setFiltroProdutos;
-  const dataInicio = props.dataInicio, setDataInicio = props.setDataInicio;
-  const dataFim = props.dataFim, setDataFim = props.setDataFim;
-  const [tipoGrafico, setTipoGrafico] = useState("linhas");
-  const [unidadeExibicao, setUnidadeExibicao] = useState("quantidade");
+  const consumos = props.consumos, produtos = props.produtos;
+  const [pergunta, setPergunta] = useState("pessoas");
+  const [produtoSel, setProdutoSel] = useState("");
   function precoDe(nomeItem) {
     var chave = normalizarItemStock(nomeItem);
     var pr = produtos.find(function(p) { return normalizarItemStock(p.nome) === chave; });
     return pr ? parseFloat(pr.preco_unitario) || 0 : 0;
   }
-  const nomesProdutos = produtos.map(function(p) { return p.nome; });
-  const consumosFiltrados = consumos.filter(function(c) {
-    if (c.data < dataInicio || c.data > dataFim) return false;
-    if (filtroColabs.length > 0 && filtroColabs.indexOf(c.funcionario_id) === -1) return false;
-    if (filtroProdutos.length > 0 && filtroProdutos.indexOf(c.item) === -1) return false;
-    return true;
-  });
-  function toggleSel(arr, setArr, val) {
-    setArr(arr.indexOf(val) !== -1 ? arr.filter(function(x) { return x !== val; }) : arr.concat([val]));
+  function custoDe(c) {
+    var cu = (c.custoUnit != null && c.custoUnit > 0) ? c.custoUnit : precoDe(c.item);
+    return (parseFloat(c.quantidade) || 0) * cu;
   }
-  var CORES_LINHAS = ["#7C3AED", "#2E6DA4", "#16A34A", "#F59E0B", "#EF4444", "#DB2777", "#0891B2", "#65A30D"];
-  var seriesMap = {};
-  consumosFiltrados.forEach(function(c) {
-    var chave = analiseTipo === "colaborador" ? (c.funcionario_nome || c.funcionario_id) : c.item;
-    if (!seriesMap[chave]) seriesMap[chave] = {};
-    var custoU = (c.custoUnit != null && c.custoUnit > 0) ? c.custoUnit : precoDe(c.item);
-    var valor = unidadeExibicao === "custo" ? c.quantidade * custoU : c.quantidade;
-    seriesMap[chave][c.data] = (seriesMap[chave][c.data] || 0) + valor;
-  });
-  var datasRange = [];
-  (function() {
-    var dIter = new Date(dataInicio + "T12:00:00");
-    var dFim2 = new Date(dataFim + "T12:00:00");
-    var maxDias = 60;
-    var count = 0;
-    while (dIter <= dFim2 && count < maxDias) { datasRange.push(localDateStr(dIter)); dIter.setDate(dIter.getDate() + 1); count++; }
-  })();
-  var seriesArr = Object.keys(seriesMap).map(function(nome, i) {
-    return { nome: nome, cor: CORES_LINHAS[i % CORES_LINHAS.length], pontos: datasRange.map(function(d) { return seriesMap[nome][d] || 0; }) };
-  });
-  var maxValLinha = Math.max.apply(null, seriesArr.reduce(function(acc, s) { return acc.concat(s.pontos); }, []).concat([1]));
-  var dadosGrafico = {};
-  if (analiseTipo === "colaborador") {
-    consumosFiltrados.forEach(function(c) {
-      if (!dadosGrafico[c.item]) dadosGrafico[c.item] = 0;
-      dadosGrafico[c.item] += c.quantidade;
+  var mesAtual = localDateStr().slice(0, 7);
+  function mesDe(c) { return (c.data || "").slice(0, 7); }
+  // Meses presentes nos dados, ordenados
+  var mesesSet = {};
+  consumos.forEach(function(c) { var m = mesDe(c); if (m) mesesSet[m] = true; });
+  var meses = Object.keys(mesesSet).sort();
+
+  // ---- PERGUNTA 1: quem gasta mais (ranking do mês atual) ----
+  function vistaPessoas() {
+    var porColab = {};
+    consumos.filter(function(c) { return mesDe(c) === mesAtual; }).forEach(function(c) {
+      var k = c.funcionario_nome || c.funcionario_id || "\u2014";
+      porColab[k] = (porColab[k] || 0) + custoDe(c);
     });
-  } else {
-    consumosFiltrados.forEach(function(c) {
-      var nome = c.funcionario_nome || c.funcionario_id;
-      if (!dadosGrafico[nome]) dadosGrafico[nome] = 0;
-      dadosGrafico[nome] += c.quantidade;
-    });
-  }
-  var maxVal = Math.max.apply(null, Object.values(dadosGrafico).concat([1]));
-  function exportarPDF() {
-    var monthLabel = dataInicio + " a " + dataFim;
-    var matriz = {};
-    var colabsSet = {}, prodsSet = {};
-    consumosFiltrados.forEach(function(c) {
-      var nome = c.funcionario_nome || c.funcionario_id;
-      colabsSet[nome] = true;
-      prodsSet[c.item] = true;
-      if (!matriz[nome]) matriz[nome] = {};
-      matriz[nome][c.item] = (matriz[nome][c.item] || 0) + c.quantidade;
-    });
-    var colabsArr = Object.keys(colabsSet).sort();
-    var prodsArr = Object.keys(prodsSet).sort();
-    var head = "<th>Colaborador</th>" + prodsArr.map(function(p) { return "<th style='text-align:right'>" + p + "</th>"; }).join("");
-    var linhas = colabsArr.map(function(nome) {
-      return "<tr><td style='font-weight:600;padding:6px 10px'>" + nome + "</td>" + prodsArr.map(function(p) {
-        return "<td style='text-align:right;padding:6px 10px'>" + (matriz[nome][p] || "\u2014") + "</td>";
-      }).join("") + "</tr>";
-    }).join("");
-    const win = window.open("", "_blank");
-    win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Consumo de Stock</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C}h1{margin-bottom:2px}h2{color:#64748B;font-weight:normal;margin-top:0;margin-bottom:24px}table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;padding:6px 10px;background:#1A3A5C;color:#fff;font-size:10px;text-transform:uppercase}tr{border-bottom:1px solid #E2EBF4}@media print{body{padding:15px}}</style></head><body><h1>SamorClean</h1><h2>Consumo de Stock por Colaborador \u2014 " + monthLabel + "</h2><table><thead><tr>" + head + "</tr></thead><tbody>" + linhas + "</tbody></table><script>window.onload=function(){window.print();}<\/script></body></html>");
-    win.document.close();
-  }
-  return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, padding: 18 }) },
-    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 } },
-      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, "\uD83D\uDCCA An\xE1lise de Consumo"),
-      /* @__PURE__ */ React.createElement("button", { onClick: exportarPDF, style: Object.assign({}, btnO, { fontSize: 11, padding: "6px 12px" }) }, "\uD83D\uDCC4 Exportar PDF (tabela mensal)")
-    ),
-    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 6 } }, "Tipo de gr\xE1fico:"),
-    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16 } },
-      /* @__PURE__ */ React.createElement("button", { onClick: function() { setTipoGrafico("linhas"); }, style: { padding: "6px 14px", borderRadius: 8, border: "1.5px solid " + (tipoGrafico === "linhas" ? "#2E6DA4" : "#E2EBF4"), background: tipoGrafico === "linhas" ? "#EFF6FF" : "#fff", color: tipoGrafico === "linhas" ? "#2E6DA4" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "\uD83D\uDCC8 Linhas (evolu\xE7\xE3o)"),
-      /* @__PURE__ */ React.createElement("button", { onClick: function() { setTipoGrafico("colunas"); }, style: { padding: "6px 14px", borderRadius: 8, border: "1.5px solid " + (tipoGrafico === "colunas" ? "#2E6DA4" : "#E2EBF4"), background: tipoGrafico === "colunas" ? "#EFF6FF" : "#fff", color: tipoGrafico === "colunas" ? "#2E6DA4" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "\uD83D\uDCCA Colunas (total)")
-    ),
-    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 6 } }, "Ver em:"),
-    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16 } },
-      /* @__PURE__ */ React.createElement("button", { onClick: function() { setUnidadeExibicao("quantidade"); }, style: { padding: "6px 14px", borderRadius: 8, border: "1.5px solid " + (unidadeExibicao === "quantidade" ? "#16A34A" : "#E2EBF4"), background: unidadeExibicao === "quantidade" ? "#F0FDF4" : "#fff", color: unidadeExibicao === "quantidade" ? "#16A34A" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "\uD83D\uDD22 Quantidade"),
-      /* @__PURE__ */ React.createElement("button", { onClick: function() { setUnidadeExibicao("custo"); }, style: { padding: "6px 14px", borderRadius: 8, border: "1.5px solid " + (unidadeExibicao === "custo" ? "#16A34A" : "#E2EBF4"), background: unidadeExibicao === "custo" ? "#F0FDF4" : "#fff", color: unidadeExibicao === "custo" ? "#16A34A" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "\uD83D\uDCB0 Custo (\u20AC)")
-    ),
-    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 6 } }, "Cada linha do gr\xE1fico representa:"),
-    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16 } },
-      /* @__PURE__ */ React.createElement("button", { onClick: function() { setAnaliseTipo("colaborador"); }, style: { padding: "6px 14px", borderRadius: 8, border: "1.5px solid " + (analiseTipo === "colaborador" ? "#7C3AED" : "#E2EBF4"), background: analiseTipo === "colaborador" ? "#F5F3FF" : "#fff", color: analiseTipo === "colaborador" ? "#7C3AED" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "1 Colaborador"),
-      /* @__PURE__ */ React.createElement("button", { onClick: function() { setAnaliseTipo("produto"); }, style: { padding: "6px 14px", borderRadius: 8, border: "1.5px solid " + (analiseTipo === "produto" ? "#7C3AED" : "#E2EBF4"), background: analiseTipo === "produto" ? "#F5F3FF" : "#fff", color: analiseTipo === "produto" ? "#7C3AED" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "1 Produto")
-    ),
-    /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 } },
-      /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "De"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: dataInicio, onChange: function(e) { setDataInicio(e.target.value); } })),
-      /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "At\xE9"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: dataFim, onChange: function(e) { setDataFim(e.target.value); } }))
-    ),
-    /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } },
-      /* @__PURE__ */ React.createElement("label", { style: lbl }, "Colaborador(es) \u2014 deixa vazio para todos"),
-      (function() { var nI = empsList.filter(function(e) { return e.ativo === false; }).length; return nI > 0 ? /* @__PURE__ */ React.createElement("button", { onClick: function() { setVerInativosSA(!verInativosSA); }, style: { padding: "4px 10px", borderRadius: 7, border: "1.5px solid " + (verInativosSA ? "#7C3AED" : "#CBD5E1"), background: verInativosSA ? "#F5F3FF" : "#fff", color: verInativosSA ? "#7C3AED" : "#64748B", fontSize: 10, fontWeight: 700, cursor: "pointer", marginBottom: 6 } }, verInativosSA ? "\u2713 A mostrar inactivos" : "Incluir inactivos (" + nI + ")") : null; })(),
-      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, empsList.filter(function(e) { return e.ativo !== false || verInativosSA; }).map(function(e) {
-        var sel = filtroColabs.indexOf(e.id) !== -1;
-        return /* @__PURE__ */ React.createElement("button", { key: e.id, onClick: function() { toggleSel(filtroColabs, setFiltroColabs, e.id); }, style: { padding: "5px 10px", borderRadius: 7, border: "1.5px solid " + (sel ? "#7C3AED" : "#E2EBF4"), background: sel ? "#F5F3FF" : "#fff", color: sel ? "#7C3AED" : "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, e.name.split(" ")[0]);
-      }))
-    ),
-    /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } },
-      /* @__PURE__ */ React.createElement("label", { style: lbl }, "Produto(s) \u2014 deixa vazio para todos"),
-      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, nomesProdutos.map(function(n) {
-        var sel = filtroProdutos.indexOf(n) !== -1;
-        return /* @__PURE__ */ React.createElement("button", { key: n, onClick: function() { toggleSel(filtroProdutos, setFiltroProdutos, n); }, style: { padding: "5px 10px", borderRadius: 7, border: "1.5px solid " + (sel ? "#7C3AED" : "#E2EBF4"), background: sel ? "#F5F3FF" : "#fff", color: sel ? "#7C3AED" : "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer" } }, n);
-      }))
-    ),
-    (filtroColabs.length === 0 && filtroProdutos.length === 0) ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24, fontSize: 13 } }, "\uD83D\uDC46 Escolhe pelo menos um colaborador ou um produto acima, para o gr\xE1fico aparecer.") :
-    seriesArr.length === 0 || datasRange.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24, fontSize: 13 } }, "Sem consumo registado neste per\xEDodo/filtro.") :
-    tipoGrafico === "colunas" ? (function() {
-      var totais = seriesArr.map(function(s) { return { nome: s.nome, cor: s.cor, total: s.pontos.reduce(function(a, b) { return a + b; }, 0) }; });
-      var maxTotal = Math.max.apply(null, totais.map(function(t) { return t.total; }).concat([1]));
-      var n = totais.length;
-      var largColuna = Math.min(28, 560 / n - 20);
-      return /* @__PURE__ */ React.createElement("div", null,
-        /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 600 220", style: { width: "100%", height: "auto" } },
-          [0, 0.5, 1].map(function(f, i) {
-            var y = 20 + (1 - f) * 160;
-            return /* @__PURE__ */ React.createElement("g", { key: i },
-              /* @__PURE__ */ React.createElement("line", { x1: 30, y1: y, x2: 590, y2: y, stroke: "#F1F5F9", strokeWidth: 1 }),
-              /* @__PURE__ */ React.createElement("text", { x: 26, y: y + 4, fontSize: 9, fill: "#94A3B8", textAnchor: "end" }, unidadeExibicao === "custo" ? Math.round(maxTotal * f) + "€" : Math.round(maxTotal * f))
-            );
-          }),
-          totais.map(function(t, i) {
-            var espaco = 560 / n;
-            var x = 30 + i * espaco + (espaco - largColuna) / 2;
-            var h = t.total / maxTotal * 160;
-            var y = 20 + 160 - h;
-            return /* @__PURE__ */ React.createElement("g", { key: i },
-              /* @__PURE__ */ React.createElement("rect", { x: x, y: y, width: largColuna, height: h, fill: t.cor, rx: 3 }),
-              /* @__PURE__ */ React.createElement("text", { x: x + largColuna / 2, y: y - 5, fontSize: 10, fill: t.cor, fontWeight: 700, textAnchor: "middle" }, unidadeExibicao === "custo" ? fmt(t.total) : t.total),
-              /* @__PURE__ */ React.createElement("text", { x: x + largColuna / 2, y: 210, fontSize: 9, fill: "#94A3B8", textAnchor: "middle" }, t.nome.length > 10 ? t.nome.slice(0, 9) + "\u2026" : t.nome)
-            );
-          })
+    var lista = Object.keys(porColab).map(function(k) { return { nome: k, custo: porColab[k] }; }).sort(function(a, b) { return b.custo - a.custo; });
+    var CORES = ["#7C3AED", "#2E6DA4", "#16A34A", "#F59E0B", "#EF4444", "#DB2777", "#0891B2", "#65A30D"];
+    var maxC = lista.length > 0 ? lista[0].custo : 1;
+    if (lista.length === 0) return React.createElement("div", { style: { textAlign: "center", padding: 30, color: "#94A3B8", fontSize: 13 } }, "Sem consumo registado este m\xEAs.");
+    return React.createElement("div", null, lista.map(function(c, i) {
+      return React.createElement("div", { key: c.nome, style: { marginBottom: 14 } },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } },
+          React.createElement("span", { style: { fontSize: 13, fontWeight: 600, color: "#1A3A5C" } }, c.nome),
+          React.createElement("span", { style: { fontSize: 13, fontWeight: 800, color: "#1A3A5C" } }, fmt(c.custo), "\u20AC")
+        ),
+        React.createElement("div", { style: { height: 12, background: "#F1F5F9", borderRadius: 6, overflow: "hidden" } },
+          React.createElement("div", { style: { width: (maxC > 0 ? Math.max(3, c.custo / maxC * 100) : 0) + "%", height: "100%", background: CORES[i % CORES.length], borderRadius: 6 } })
         )
       );
-    })() :
-    /* @__PURE__ */ React.createElement("div", null,
-      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 600 220", style: { width: "100%", height: "auto" } },
-        [0, 0.5, 1].map(function(f, i) {
-          var y = 20 + (1 - f) * 160;
-          return /* @__PURE__ */ React.createElement("g", { key: i },
-            /* @__PURE__ */ React.createElement("line", { x1: 30, y1: y, x2: 590, y2: y, stroke: "#F1F5F9", strokeWidth: 1 }),
-            /* @__PURE__ */ React.createElement("text", { x: 26, y: y + 4, fontSize: 9, fill: "#94A3B8", textAnchor: "end" }, unidadeExibicao === "custo" ? Math.round(maxValLinha * f) + "€" : Math.round(maxValLinha * f))
-          );
-        }),
-        seriesArr.map(function(s, si) {
-          var coords = s.pontos.map(function(v, i) {
-            var x = 30 + (datasRange.length > 1 ? i / (datasRange.length - 1) * 560 : 0);
-            var y = 20 + 160 - v / maxValLinha * 160;
-            return { x: x, y: y };
-          });
-          var pts = coords.map(function(c) { return c.x + "," + c.y; }).join(" ");
-          return /* @__PURE__ */ React.createElement("g", { key: si },
-            /* @__PURE__ */ React.createElement("polyline", { points: pts, fill: "none", stroke: s.cor, strokeWidth: 2.5, strokeLinejoin: "round", strokeLinecap: "round" }),
-            coords.map(function(c, ci) { return /* @__PURE__ */ React.createElement("circle", { key: ci, cx: c.x, cy: c.y, r: ci === coords.length - 1 ? 4 : 2.5, fill: s.cor }); })
-          );
-        }),
-        datasRange.map(function(d, i) {
-          if (datasRange.length > 1 && i !== 0 && i !== datasRange.length - 1 && i !== Math.floor(datasRange.length / 2)) return null;
-          var x = 30 + (datasRange.length > 1 ? i / (datasRange.length - 1) * 560 : 0);
-          return /* @__PURE__ */ React.createElement("text", { key: i, x: x, y: 210, fontSize: 9, fill: "#94A3B8", textAnchor: i === 0 ? "start" : i === datasRange.length - 1 ? "end" : "middle" }, new Date(d + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit" }));
-        })
+    }));
+  }
+
+  // ---- PERGUNTA 2: vigiar um produto (linha do produto ao longo dos meses) ----
+  function vistaProduto() {
+    var nomesProd = [];
+    consumos.forEach(function(c) { if (c.item && nomesProd.indexOf(c.item) === -1) nomesProd.push(c.item); });
+    nomesProd.sort();
+    var sel = produtoSel || (nomesProd.length > 0 ? nomesProd[0] : "");
+    var porMes = {};
+    meses.forEach(function(m) { porMes[m] = 0; });
+    consumos.filter(function(c) { return c.item === sel; }).forEach(function(c) { var m = mesDe(c); if (m in porMes) porMes[m] += custoDe(c); });
+    var serie = meses.map(function(m) { return porMes[m]; });
+    var maxV = Math.max.apply(null, serie.concat([1]));
+    var meio = Math.floor(serie.length / 2);
+    var p1 = serie.slice(0, meio).reduce(function(a, b) { return a + b; }, 0);
+    var p2 = serie.slice(meio).reduce(function(a, b) { return a + b; }, 0);
+    var varPct = p1 > 0 ? Math.round((p2 - p1) / p1 * 100) : (p2 > 0 ? 100 : 0);
+    var tend = varPct >= 10 ? { cor: "#DC2626", bg: "rgba(220,38,38,0.1)", txt: "\u2191 +" + varPct + "% nas \xFAltimas semanas" } : varPct <= -10 ? { cor: "#16A34A", bg: "rgba(22,163,74,0.1)", txt: "\u2193 " + varPct + "% nas \xFAltimas semanas" } : { cor: "#94A3B8", bg: "#F1F5F9", txt: "\u2192 est\xE1vel" };
+    var W = 560, H = 150, padL = 30, padB = 24;
+    var pts = serie.map(function(v, i) {
+      var x = padL + (serie.length > 1 ? i / (serie.length - 1) * (W - padL - 10) : 0);
+      var y = 15 + (H - 15 - padB) - (v / maxV) * (H - 15 - padB);
+      return { x: x, y: y };
+    });
+    var polyPts = pts.map(function(p) { return p.x + "," + p.y; }).join(" ");
+    return React.createElement("div", null,
+      React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 14 } },
+        React.createElement("select", { value: sel, onChange: function(e) { setProdutoSel(e.target.value); }, style: { padding: "7px 10px", borderRadius: 8, border: "1.5px solid #E2EBF4", fontSize: 13, fontWeight: 600, color: "#1A3A5C", background: "#fff" } }, nomesProd.map(function(n) { return React.createElement("option", { key: n, value: n }, n); })),
+        serie.some(function(v) { return v > 0; }) && React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: tend.cor, background: tend.bg, padding: "4px 12px", borderRadius: 20 } }, tend.txt)
       ),
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 10, marginBottom: 8 } }, "Tend\xEAncia = 2\xAA metade do per\xEDodo vs 1\xAA metade. Total = consumido no per\xEDodo escolhido."),
-      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 12 } }, seriesArr.map(function(s, i) {
-        var total = s.pontos.reduce(function(a, b) { return a + b; }, 0);
-        var meio = Math.floor(s.pontos.length / 2);
-        var somaP1 = s.pontos.slice(0, meio).reduce(function(a, b) { return a + b; }, 0);
-        var somaP2 = s.pontos.slice(meio).reduce(function(a, b) { return a + b; }, 0);
-        var varPct = somaP1 > 0 ? Math.round((somaP2 - somaP1) / somaP1 * 100) : (somaP2 > 0 ? 100 : 0);
-        var tend = varPct >= 10 ? { seta: "\u2191", cor: "#DC2626", txt: "+" + varPct + "%" } : varPct <= -10 ? { seta: "\u2193", cor: "#16A34A", txt: varPct + "%" } : { seta: "\u2192", cor: "#94A3B8", txt: "est\xE1vel" };
-        return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#334155", background: "#F8FAFC", borderRadius: 8, padding: "5px 10px" } },
-          /* @__PURE__ */ React.createElement("div", { style: { width: 10, height: 10, borderRadius: "50%", background: s.cor } }),
-          /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700 } }, s.nome),
-          /* @__PURE__ */ React.createElement("span", { style: { color: "#94A3B8" } }, unidadeExibicao === "custo" ? fmt(total) : total),
-          /* @__PURE__ */ React.createElement("span", { style: { color: tend.cor, fontWeight: 700 } }, tend.seta, " ", tend.txt)
+      !serie.some(function(v) { return v > 0; }) ? React.createElement("div", { style: { textAlign: "center", padding: 30, color: "#94A3B8", fontSize: 13 } }, "Sem consumo deste produto no per\xEDodo.") :
+      React.createElement("svg", { viewBox: "0 0 " + W + " " + H, width: "100%" },
+        React.createElement("line", { x1: padL, y1: 15, x2: W - 10, y2: 15, stroke: "#F1F5F9", strokeWidth: 0.5, strokeDasharray: "3 3" }),
+        React.createElement("line", { x1: padL, y1: (H - padB), x2: W - 10, y2: (H - padB), stroke: "#E2EBF4", strokeWidth: 1 }),
+        React.createElement("polyline", { points: polyPts, fill: "none", stroke: tend.cor === "#94A3B8" ? "#2E6DA4" : tend.cor, strokeWidth: 2.5, strokeLinejoin: "round", strokeLinecap: "round" }),
+        pts.map(function(p, i) { return React.createElement("circle", { key: i, cx: p.x, cy: p.y, r: i === pts.length - 1 ? 4 : 2.5, fill: tend.cor === "#94A3B8" ? "#2E6DA4" : tend.cor }); }),
+        meses.map(function(m, i) {
+          if (meses.length > 4 && i !== 0 && i !== meses.length - 1 && i !== Math.floor(meses.length / 2)) return null;
+          var x = padL + (serie.length > 1 ? i / (serie.length - 1) * (W - padL - 10) : 0);
+          return React.createElement("text", { key: i, x: x, y: H - 8, fontSize: 9, fill: "#94A3B8", textAnchor: i === 0 ? "start" : i === meses.length - 1 ? "end" : "middle" }, new Date(m + "-01T12:00:00").toLocaleDateString("pt-PT", { month: "short" }));
+        })
+      )
+    );
+  }
+
+  // ---- PERGUNTA 3: tendência da equipa (total por mês) ----
+  function vistaEquipa() {
+    var porMes = {};
+    meses.forEach(function(m) { porMes[m] = 0; });
+    consumos.forEach(function(c) { var m = mesDe(c); if (m in porMes) porMes[m] += custoDe(c); });
+    var serie = meses.map(function(m) { return porMes[m]; });
+    var totalMesAtual = porMes[mesAtual] || 0;
+    var anteriores = meses.filter(function(m) { return m !== mesAtual; });
+    var mediaAnt = anteriores.length > 0 ? anteriores.reduce(function(a, m) { return a + porMes[m]; }, 0) / anteriores.length : 0;
+    var varPct = mediaAnt > 0 ? Math.round((totalMesAtual - mediaAnt) / mediaAnt * 100) : 0;
+    var tend = varPct >= 10 ? { cor: "#DC2626", txt: "\u2191 +" + varPct + "% vs m\xE9dia" } : varPct <= -10 ? { cor: "#16A34A", txt: "\u2193 " + varPct + "% vs m\xE9dia" } : { cor: "#94A3B8", txt: "\u2192 dentro da m\xE9dia" };
+    var maxV = Math.max.apply(null, serie.concat([1]));
+    var W = 560, H = 130, padL = 30, padB = 20;
+    var pts = serie.map(function(v, i) {
+      var x = padL + (serie.length > 1 ? i / (serie.length - 1) * (W - padL - 10) : 0);
+      var y = 12 + (H - 12 - padB) - (v / maxV) * (H - 12 - padB);
+      return { x: x, y: y };
+    });
+    var polyPts = pts.map(function(p) { return p.x + "," + p.y; }).join(" ");
+    if (serie.length === 0 || !serie.some(function(v) { return v > 0; })) return React.createElement("div", { style: { textAlign: "center", padding: 30, color: "#94A3B8", fontSize: 13 } }, "Sem dados de consumo ainda.");
+    return React.createElement("div", null,
+      React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14, flexWrap: "wrap" } },
+        React.createElement("span", { style: { fontSize: 26, fontWeight: 900, color: "#1A3A5C" } }, fmt(totalMesAtual), "\u20AC"),
+        React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: tend.cor } }, tend.txt),
+        React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "este m\xEAs")
+      ),
+      React.createElement("svg", { viewBox: "0 0 " + W + " " + H, width: "100%" },
+        React.createElement("line", { x1: padL, y1: 12, x2: W - 10, y2: 12, stroke: "#F1F5F9", strokeWidth: 0.5, strokeDasharray: "3 3" }),
+        React.createElement("line", { x1: padL, y1: (H - padB), x2: W - 10, y2: (H - padB), stroke: "#E2EBF4", strokeWidth: 1 }),
+        React.createElement("polyline", { points: polyPts, fill: "none", stroke: "#2E6DA4", strokeWidth: 3, strokeLinejoin: "round", strokeLinecap: "round" }),
+        pts.map(function(p, i) { return React.createElement("circle", { key: i, cx: p.x, cy: p.y, r: i === pts.length - 1 ? 4.5 : 3, fill: "#2E6DA4" }); }),
+        meses.map(function(m, i) {
+          var x = padL + (serie.length > 1 ? i / (serie.length - 1) * (W - padL - 10) : 0);
+          return React.createElement("text", { key: i, x: x, y: H - 6, fontSize: 9, fill: "#94A3B8", textAnchor: i === 0 ? "start" : i === meses.length - 1 ? "end" : "middle" }, new Date(m + "-01T12:00:00").toLocaleDateString("pt-PT", { month: "short" }));
+        })
+      )
+    );
+  }
+
+  // ---- PERGUNTA 4: está tudo controlado (mês atual vs média habitual, por colaborador) ----
+  function vistaControlo() {
+    var anteriores = meses.filter(function(m) { return m !== mesAtual; });
+    var colabs = {};
+    consumos.forEach(function(c) {
+      var k = c.funcionario_nome || c.funcionario_id || "\u2014";
+      if (!colabs[k]) colabs[k] = { atual: 0, porMesAnt: {} };
+      var m = mesDe(c);
+      if (m === mesAtual) colabs[k].atual += custoDe(c);
+      else if (m) colabs[k].porMesAnt[m] = (colabs[k].porMesAnt[m] || 0) + custoDe(c);
+    });
+    var fora = [], dentro = 0;
+    Object.keys(colabs).forEach(function(k) {
+      var d = colabs[k];
+      var mesesAntComDados = Object.keys(d.porMesAnt);
+      var media = mesesAntComDados.length > 0 ? mesesAntComDados.reduce(function(a, m) { return a + d.porMesAnt[m]; }, 0) / mesesAntComDados.length : 0;
+      var pct = media > 0 ? Math.round((d.atual - media) / media * 100) : 0;
+      if (media > 0 && pct >= 20 && d.atual > 0) fora.push({ nome: k, atual: d.atual, media: media, pct: pct });
+      else dentro++;
+    });
+    fora.sort(function(a, b) { return b.pct - a.pct; });
+    return React.createElement("div", null,
+      fora.length === 0 ? React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "16px 14px", background: "rgba(22,163,74,0.08)", borderRadius: 10 } },
+        React.createElement("span", { style: { fontSize: 20 } }, "\u2713"),
+        React.createElement("span", { style: { fontSize: 13, color: "#15803D", fontWeight: 600 } }, "Est\xE1 tudo controlado \u2014 ningu\xE9m est\xE1 a gastar acima do habitual este m\xEAs.")
+      ) : React.createElement("div", null,
+        fora.map(function(c) {
+          return React.createElement("div", { key: c.nome, style: { display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "rgba(220,38,38,0.06)", borderRadius: 10, marginBottom: 10 } },
+            React.createElement("span", { style: { fontSize: 18 } }, "\u26A0"),
+            React.createElement("div", { style: { flex: 1 } },
+              React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#1A3A5C" } }, c.nome),
+              React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, fmt(c.atual), "\u20AC este m\xEAs \xB7 m\xE9dia habitual ", fmt(c.media), "\u20AC")
+            ),
+            React.createElement("div", { style: { fontSize: 14, fontWeight: 800, color: "#DC2626" } }, "+", c.pct, "%")
+          );
+        }),
+        dentro > 0 && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "rgba(22,163,74,0.08)", borderRadius: 10 } },
+          React.createElement("span", { style: { fontSize: 16 } }, "\u2713"),
+          React.createElement("span", { style: { fontSize: 12, color: "#15803D", fontWeight: 500 } }, "Os restantes ", dentro, " colaboradores est\xE3o dentro do normal.")
+        )
+      )
+    );
+  }
+
+  var PERGUNTAS = [
+    ["pessoas", "\uD83D\uDC65", "Quem gasta mais?"],
+    ["produto", "\uD83D\uDCE6", "Vigiar um produto"],
+    ["equipa", "\uD83D\uDCC8", "Tend\xEAncia da equipa"],
+    ["controlo", "\u2713", "Est\xE1 tudo controlado?"]
+  ];
+  return React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
+    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 20 } },
+      PERGUNTAS.map(function(p) {
+        var isActive = pergunta === p[0];
+        return React.createElement("button", { key: p[0], onClick: function() { setPergunta(p[0]); }, style: { background: isActive ? "#EFF6FF" : "#fff", border: "1.5px solid " + (isActive ? "#2E6DA4" : "#E2EBF4"), borderRadius: 10, padding: 12, cursor: "pointer", textAlign: "left" } },
+          React.createElement("div", { style: { fontSize: 20, marginBottom: 4 } }, p[1]),
+          React.createElement("div", { style: { fontSize: 12, fontWeight: 600, color: isActive ? "#1A3A5C" : "#64748B", lineHeight: 1.3 } }, p[2])
         );
-      }))
-    )
+      })
+    ),
+    pergunta === "pessoas" && vistaPessoas(),
+    pergunta === "produto" && vistaProduto(),
+    pergunta === "equipa" && vistaEquipa(),
+    pergunta === "controlo" && vistaControlo()
   );
 }
+
 function AuditoriaQR() {
   const [aberturas, setAberturas] = useState([]);
   const [servicosDia, setServicosDia] = useState([]);
@@ -6520,12 +6516,6 @@ function Stock() {
   var verHistorico = vista === "historico";
   const [consumos, setConsumos] = useState([]);
   const [empsList, setEmpsList] = useState([]);
-  const [analiseTipo, setAnaliseTipo] = useState("colaborador");
-  const [filtroColabs, setFiltroColabs] = useState([]);
-  const [filtroProdutos, setFiltroProdutos] = useState([]);
-  const hoje0 = /* @__PURE__ */ new Date();
-  const [dataInicio, setDataInicio] = useState(localDateStr(new Date(hoje0.getFullYear(), hoje0.getMonth(), 1)));
-  const [dataFim, setDataFim] = useState(localDateStr(hoje0));
   useEffect(function() {
     if (!showAnalise) return;
     // Fonte única: consumo por colaborador vem dos MOVIMENTOS de saída, não dos pedidos em texto.
@@ -6786,7 +6776,7 @@ function Stock() {
         })
       );
     })(),
-    showAnalise && /* @__PURE__ */ React.createElement(StockAnalise, { consumos, empsList, produtos, analiseTipo, setAnaliseTipo, filtroColabs, setFiltroColabs, filtroProdutos, setFiltroProdutos, dataInicio, setDataInicio, dataFim, setDataFim }),
+    showAnalise && /* @__PURE__ */ React.createElement(StockAnalise, { consumos, produtos }),
     emBaixo.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#FEF2F2", border: "1.5px solid #EF4444" }) },
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#991B1B", marginBottom: 6 } }, "\u26A0 ", emBaixo.length, " produto", emBaixo.length !== 1 ? "s" : "", " em baixo de stock:"),
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#7F1D1D" } }, emBaixo.map(function(p) { return p.nome + " (" + p.quantidade + " " + (p.unidade || "unidade") + ")"; }).join(", "))
