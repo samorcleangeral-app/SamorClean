@@ -6476,6 +6476,14 @@ function Stock(props) {
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade", preco_unitario: "", preco_embalagem: "", conteudo_embalagem: 1, unidade_consumo: "", fornecedor_id: "" });
   const [movimentos, setMovimentos] = useState([]);
+  // Ficha de entrada de encomenda (substitui o painel antigo em Fornecedores).
+  const [entradaAberta, setEntradaAberta] = useState(false);
+  const [entradaForn, setEntradaForn] = useState("");
+  const [entradaDoc, setEntradaDoc] = useState("");
+  const [entradaData, setEntradaData] = useState(localDateStr());
+  const [entradaPago, setEntradaPago] = useState(false);
+  const [entradaLinhas, setEntradaLinhas] = useState([]);
+  const [entradaSaving, setEntradaSaving] = useState(false);
   // Vista única do módulo: só uma de stock/analise/historico visível de cada vez (Fase 2).
   const [vista, setVista] = useState("stock");
   // Filtro do gráfico de níveis (Fase 3): abaixo do mínimo por defeito — é o que interessa para encomendar.
@@ -6611,6 +6619,72 @@ function Stock(props) {
       setMovimentos(function(pp) { return pp.filter(function(x) { return x.id !== mov.id; }); });
     } catch (e) { alert("\u26A0 Erro ao apagar o movimento."); }
   }
+  function abrirEntrada() {
+    setEntradaAberta(true);
+    setEntradaForn("");
+    setEntradaDoc("");
+    setEntradaData(localDateStr());
+    setEntradaPago(false);
+    setEntradaLinhas([]);
+  }
+  function addLinhaEntrada(prod) {
+    if (entradaLinhas.some(function(l) { return l.produto_id === prod.id; })) return;
+    setEntradaLinhas(function(p) { return p.concat([{ produto_id: prod.id, nome: prod.nome, conteudo: parseFloat(prod.conteudo_embalagem) || 1, unidadeConsumo: prod.unidade_consumo || prod.unidade, qtd: "", preco: prod.preco_embalagem || prod.preco_unitario || "", precoRef: parseFloat(prod.preco_embalagem) || parseFloat(prod.preco_unitario) || 0 }]); });
+  }
+  function ultimoPrecoEntrada(prodId) {
+    var ents = (movimentos || []).filter(function(m) { return m.produto_id === prodId && m.tipo === "entrada"; });
+    if (ents.length === 0) return null;
+    ents.sort(function(a, b) { return new Date(b.created_at) - new Date(a.created_at); });
+    return parseFloat(ents[0].valor_unitario) || 0;
+  }
+  async function processarEntrada() {
+    if (!entradaForn) { window.alert("Escolhe o fornecedor."); return; }
+    if (!(entradaDoc || "").trim()) { window.alert("Indica o n\xBA da factura, talão ou guia \u2014 uma entrada precisa sempre de documento."); return; }
+    var comQtd = entradaLinhas.filter(function(l) { return (parseFloat(l.qtd) || 0) > 0; });
+    if (comQtd.length === 0) { window.alert("Mete a quantidade de pelo menos um produto."); return; }
+    setEntradaSaving(true);
+    var totalSemIva = 0;
+    // 1) Stock: atualizar quantidades + registar movimentos de entrada
+    for (var i = 0; i < comQtd.length; i++) {
+      var l = comQtd[i];
+      var q = parseFloat(l.qtd) || 0;
+      var precoEmbNovo = parseFloat(l.preco) || 0;
+      var prod = produtos.find(function(x) { return x.id === l.produto_id; });
+      if (!prod) continue;
+      var conteudo = parseFloat(prod.conteudo_embalagem) || 1;
+      var pedeAoConteudo = (prod.unidade_consumo || prod.unidade) !== "unidade" && conteudo > 1;
+      var entrada = pedeAoConteudo ? q * conteudo : q;
+      var precoUnitNovo = pedeAoConteudo ? Math.round(precoEmbNovo / conteudo * 10000) / 10000 : precoEmbNovo;
+      var novaQtd = (parseFloat(prod.quantidade) || 0) + entrada;
+      totalSemIva += q * precoEmbNovo;
+      await fetch(SUPABASE_URL + "/rest/v1/stock_produtos?id=eq." + prod.id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ quantidade: novaQtd }) });
+      await fetch(SUPABASE_URL + "/rest/v1/stock_movimentos", { method: "POST", headers: dbHeaders(), body: JSON.stringify({ produto_id: prod.id, produto_nome: prod.nome, tipo: "entrada", quantidade: entrada, valor_unitario: precoUnitNovo, motivo: "Entrada por factura (" + q + " embalagem" + (q !== 1 ? "s" : "") + ")" }) });
+    }
+    // 2) Fornecedores/Financeiro: criar a fatura (despesa is_stock)
+    var forn = fornecedoresStock.find(function(f) { return f.id === entradaForn; });
+    var totalComIva = Math.round(totalSemIva * 1.23 * 100) / 100;
+    await db.insert("despesas", {
+      fornecedor_id: entradaForn,
+      fornecedor_nome: forn ? forn.nome : "",
+      categoria: forn ? forn.categoria : "Produtos de Limpeza",
+      descricao: "Entrada de material",
+      valor: totalComIva,
+      iva_percentagem: 23,
+      iva_dedutivel: true,
+      iva_percentagem_dedutivel: 100,
+      data: entradaData,
+      pago: entradaPago,
+      is_stock: true,
+      nr_documento: entradaDoc.trim()
+    });
+    // 3) Recarregar
+    db.list("stock_produtos", "?select=*&order=nome").then(function(rows) { setProdutos(rows || []); });
+    carregarMovimentos();
+    carregarAgregados();
+    setEntradaSaving(false);
+    setEntradaAberta(false);
+    window.alert("Entrada registada: stock actualizado e factura criada em " + (forn ? forn.nome : "fornecedor") + " (" + (entradaPago ? "paga" : "por pagar") + ").");
+  }
   async function ajustarQtd(prod, delta) {
     var nova = (parseFloat(prod.quantidade) || 0) + delta;
     if (nova < 0) { alert("\u26A0 N\xE3o d\xE1 para ficar abaixo de zero. Se saiu mais do que havia, corrige a contagem real no produto."); return; }
@@ -6651,11 +6725,76 @@ function Stock(props) {
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...");
   var emBaixo = produtos.filter(function(p) { return p.quantidade <= p.quantidade_minima; });
   var filtrados = produtos.filter(function(p) { return p.nome.toLowerCase().indexOf(q.toLowerCase()) !== -1; }).slice().sort(function(a, b) { return a.quantidade - b.quantidade; });
+  if (entradaAberta) {
+    var fornEscolhido = fornecedoresStock.find(function(f) { return f.id === entradaForn; });
+    var prodsDoForn = produtos.filter(function(p) { return p.fornecedor_id === entradaForn && p.activo !== false; });
+    var totalEntrada = entradaLinhas.reduce(function(a, l) { return a + (parseFloat(l.qtd) || 0) * (parseFloat(l.preco) || 0); }, 0);
+    return /* @__PURE__ */ React.createElement("div", null,
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 20 } },
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setEntradaAberta(false); }, style: btnO }, "\u2190 Voltar"),
+        /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 20, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "\uD83D\uDCE5 Dar entrada de encomenda")
+      ),
+      /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, padding: 18 }) },
+        /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 } },
+          /* @__PURE__ */ React.createElement("div", null,
+            /* @__PURE__ */ React.createElement("label", { style: lbl }, "Fornecedor"),
+            /* @__PURE__ */ React.createElement("select", { style: inp, value: entradaForn, onChange: function(e) { setEntradaForn(e.target.value); setEntradaLinhas([]); } },
+              /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014 Escolher \u2014"),
+              fornecedoresStock.map(function(f) { return /* @__PURE__ */ React.createElement("option", { key: f.id, value: f.id }, f.nome); })
+            )
+          ),
+          /* @__PURE__ */ React.createElement("div", null,
+            /* @__PURE__ */ React.createElement("label", { style: lbl }, "N\xBA factura / talão / guia"),
+            /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, !(entradaDoc || "").trim() ? { borderColor: "#F59E0B" } : {}), value: entradaDoc, onChange: function(e) { setEntradaDoc(e.target.value); }, placeholder: "Ex: FT 2026/1234" })
+          )
+        ),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } },
+          /* @__PURE__ */ React.createElement("div", null,
+            /* @__PURE__ */ React.createElement("label", { style: lbl }, "Data"),
+            /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: entradaData, onChange: function(e) { setEntradaData(e.target.value); } })
+          ),
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "flex-end" } },
+            /* @__PURE__ */ React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#334155", cursor: "pointer", paddingBottom: 8 } },
+              /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: entradaPago, onChange: function(e) { setEntradaPago(e.target.checked); } }),
+              "J\xE1 est\xE1 paga (sen\xE3o fica 'por pagar')"
+            )
+          )
+        )
+      ),
+      entradaForn && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, padding: 18 }) },
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "Produtos de ", fornEscolhido ? fornEscolhido.nome : ""),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 12 } }, "Mete as unidades da factura (embalagens/garrafas). O sistema converte e calcula o custo."),
+        prodsDoForn.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 20, color: "#94A3B8", fontSize: 12 } }, "Este fornecedor n\xE3o tem produtos associados.") :
+        /* @__PURE__ */ React.createElement("div", null, prodsDoForn.map(function(p) {
+          var linha = entradaLinhas.find(function(l) { return l.produto_id === p.id; });
+          var ultimo = ultimoPrecoEntrada(p.id);
+          var conteudo = parseFloat(p.conteudo_embalagem) || 1;
+          var pedeConteudo = (p.unidade_consumo || p.unidade) !== "unidade" && conteudo > 1;
+          return /* @__PURE__ */ React.createElement("div", { key: p.id, style: { display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid #F1F5F9", flexWrap: "wrap" } },
+            /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 140 } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#1A3A5C" } }, p.nome, linha && (parseFloat(linha.qtd) || 0) > 0 && pedeConteudo ? /* @__PURE__ */ React.createElement("span", { style: { color: "#16A34A", fontWeight: 700, marginLeft: 6, fontSize: 11 } }, "\u2192 ", (parseFloat(linha.qtd) * conteudo), " ", p.unidade_consumo) : null),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8" } }, "Stock: ", p.quantidade, " ", p.unidade_consumo || p.unidade, ultimo != null ? " \xB7 \xFAltima compra: " + fmt(ultimo) + "\u20AC/" + (p.unidade_consumo || p.unidade) : "")
+            ),
+            /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { width: 70, marginBottom: 0, padding: "5px 8px", fontSize: 12 }), type: "number", step: "0.01", placeholder: "Qtd", value: linha ? linha.qtd : "", onFocus: function() { if (!linha) addLinhaEntrada(p); }, onChange: function(e) { var v = e.target.value; if (!linha) { addLinhaEntrada(p); } setEntradaLinhas(function(pr) { return pr.map(function(x) { return x.produto_id === p.id ? Object.assign({}, x, { qtd: v }) : x; }); }); } }),
+            /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { width: 90, marginBottom: 0, padding: "5px 8px", fontSize: 12, borderColor: linha && (parseFloat(linha.preco) || 0) !== (parseFloat(linha.precoRef) || 0) ? "#F59E0B" : "#CBD5E1" }), type: "number", step: "0.01", placeholder: "\u20AC/emb.", value: linha ? linha.preco : (p.preco_embalagem || p.preco_unitario || ""), onChange: function(e) { var v = e.target.value; if (!linha) { addLinhaEntrada(p); } setEntradaLinhas(function(pr) { return pr.map(function(x) { return x.produto_id === p.id ? Object.assign({}, x, { preco: v }) : x; }); }); } })
+          );
+        }))
+      ),
+      entradaForn && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { padding: 18, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }) },
+        /* @__PURE__ */ React.createElement("div", null,
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, "Total das linhas (sem IVA)"),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#1A3A5C" } }, fmt(totalEntrada), "\u20AC"),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, "Confere com o total da factura em papel antes de validar.")
+        ),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { processarEntrada(); }, disabled: entradaSaving, style: Object.assign({}, btn, { padding: "12px 24px", fontSize: 14, opacity: entradaSaving ? 0.6 : 1 }) }, entradaSaving ? "A registar..." : "\u2713 Validar e dar entrada")
+      )
+    );
+  }
   return /* @__PURE__ */ React.createElement("div", null,
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 } },
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 900, fontSize: 20, color: "#1A3A5C" } }, "\uD83D\uDCCB Stock"),
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
-        onIrParaFornecedores && /* @__PURE__ */ React.createElement("button", { onClick: function() { onIrParaFornecedores(); }, style: btnO }, "\uD83D\uDCE5 Dar entrada de encomenda"),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { abrirEntrada(); }, style: btnO }, "\uD83D\uDCE5 Dar entrada de encomenda"),
         /* @__PURE__ */ React.createElement("button", { onClick: function() { setForm({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade", preco_unitario: "", preco_embalagem: "", conteudo_embalagem: 1, unidade_consumo: "", fornecedor_id: "" }); setEditId(null); setShowForm(true); }, style: btn }, "+ Novo Produto")
       )
     ),
@@ -7162,11 +7301,8 @@ function Fornecedores() {
       setShowAddDesp(false);
     }, style: Object.assign({}, btnX, { flex: 1, textAlign: "center" }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: addDespesa, disabled: saving || !despForm.valor, style: Object.assign({}, btnG, { flex: 2, textAlign: "center" }) }, saving ? "A guardar..." : "Guardar")),
       /* @__PURE__ */ React.createElement("div", { style: { borderTop: "1px solid #E2E8F0", marginTop: 14, paddingTop: 12 } },
-        /* @__PURE__ */ React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#1A3A5C" } },
-          /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: isStockCompra, onChange: function(e) { setIsStockCompra(e.target.checked); if (!e.target.checked) setLinhasStock([]); } }),
-          "\uD83D\uDCE6 Esta compra \xE9 material de stock"
-        ),
-        isStockCompra && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10 } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, "Para dar entrada de material no stock, usa \u201CDar entrada de encomenda\u201D no m\xF3dulo Stock."),
+        false && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10 } },
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 8 } }, "Indica o que entrou. O pre\xE7o de refer\xEAncia vem do produto \u2014 se a factura tiver outro, escreve por cima e o pre\xE7o \xE9 actualizado."),
           /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" } },
             /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { flex: 1, minWidth: 160, marginBottom: 0 }), placeholder: "Procurar produto para adicionar...", value: buscaProd, onChange: function(e) { setBuscaProd(e.target.value); } }),
