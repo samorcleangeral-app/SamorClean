@@ -6484,6 +6484,10 @@ function Stock(props) {
   const [entradaPago, setEntradaPago] = useState(false);
   const [entradaLinhas, setEntradaLinhas] = useState([]);
   const [entradaSaving, setEntradaSaving] = useState(false);
+  const [entradaNovoForn, setEntradaNovoForn] = useState(false);
+  const [entradaNovoFornNome, setEntradaNovoFornNome] = useState("");
+  const [addProdAberto, setAddProdAberto] = useState(false);
+  const [addProdForm, setAddProdForm] = useState({ nome: "", preco_embalagem: "", conteudo_embalagem: 1, unidade_consumo: "unidade", quantidade: "", quantidade_minima: "" });
   // Vista única do módulo: só uma de stock/analise/historico visível de cada vez (Fase 2).
   const [vista, setVista] = useState("stock");
   // Filtro do gráfico de níveis (Fase 3): abaixo do mínimo por defeito — é o que interessa para encomendar.
@@ -6637,6 +6641,53 @@ function Stock(props) {
     ents.sort(function(a, b) { return new Date(b.created_at) - new Date(a.created_at); });
     return parseFloat(ents[0].valor_unitario) || 0;
   }
+  async function adicionarProdutoFornecedor() {
+    var f = addProdForm;
+    var nome = (f.nome || "").trim();
+    if (!nome) { window.alert("Escreve o nome do produto."); return; }
+    // Conflito: nome já existe no stock (qualquer fornecedor)
+    if (produtos.some(function(p) { return p.nome.trim().toLowerCase() === nome.toLowerCase(); })) {
+      window.alert("J\xE1 existe um produto chamado \"" + nome + "\". Para evitar confus\xE3o, acrescenta a marca ou fornecedor ao nome (ex: \"" + nome + " " + (fornecedoresStock.find(function(x){return x.id===entradaForn;})||{nome:"Marca"}).nome + "\").");
+      return;
+    }
+    var precoEmb = parseFloat(f.preco_embalagem) || 0;
+    var conteudo = parseFloat(f.conteudo_embalagem) || 1;
+    var pedeConteudo = f.unidade_consumo && f.unidade_consumo !== "unidade" && conteudo > 1;
+    var precoUnit = pedeConteudo ? Math.round(precoEmb / conteudo * 10000) / 10000 : precoEmb;
+    var novo = await db.insert("stock_produtos", {
+      nome: nome,
+      quantidade: parseFloat(f.quantidade) || 0,
+      quantidade_minima: parseFloat(f.quantidade_minima) || 0,
+      unidade: f.unidade_consumo || "unidade",
+      unidade_consumo: f.unidade_consumo || "unidade",
+      preco_embalagem: precoEmb,
+      preco_unitario: precoUnit,
+      conteudo_embalagem: conteudo,
+      fornecedor_id: entradaForn,
+      activo: true
+    });
+    if (novo) {
+      setProdutos(function(p) { return p.concat([novo]).sort(function(a, b) { return a.nome.localeCompare(b.nome); }); });
+      setAddProdAberto(false);
+      setAddProdForm({ nome: "", preco_embalagem: "", conteudo_embalagem: 1, unidade_consumo: "unidade", quantidade: "", quantidade_minima: "" });
+    } else {
+      window.alert("N\xE3o foi poss\xEDvel gravar o produto.");
+    }
+  }
+  async function criarFornecedorConsumivel() {
+    var nome = (entradaNovoFornNome || "").trim();
+    if (!nome) { window.alert("Escreve o nome do fornecedor."); return; }
+    if (fornecedoresStock.some(function(f) { return f.nome.toLowerCase() === nome.toLowerCase(); })) { window.alert("J\xE1 existe um fornecedor com esse nome."); return; }
+    var novo = await db.insert("fornecedores", { nome: nome, categoria: "Produtos de Limpeza", activo: true });
+    if (novo) {
+      setFornecedoresStock(function(p) { return p.concat([novo]).sort(function(a, b) { return a.nome.localeCompare(b.nome); }); });
+      setEntradaForn(novo.id);
+      setEntradaNovoForn(false);
+      setEntradaNovoFornNome("");
+    } else {
+      window.alert("N\xE3o foi poss\xEDvel criar o fornecedor.");
+    }
+  }
   async function processarEntrada() {
     if (!entradaForn) { window.alert("Escolhe o fornecedor."); return; }
     if (!(entradaDoc || "").trim()) { window.alert("Indica o n\xBA da factura, talão ou guia \u2014 uma entrada precisa sempre de documento."); return; }
@@ -6738,9 +6789,18 @@ function Stock(props) {
         /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 } },
           /* @__PURE__ */ React.createElement("div", null,
             /* @__PURE__ */ React.createElement("label", { style: lbl }, "Fornecedor"),
-            /* @__PURE__ */ React.createElement("select", { style: inp, value: entradaForn, onChange: function(e) { setEntradaForn(e.target.value); setEntradaLinhas([]); } },
+            /* @__PURE__ */ React.createElement("select", { style: inp, value: entradaForn, onChange: function(e) { if (e.target.value === "__novo__") { setEntradaNovoForn(true); setEntradaForn(""); } else { setEntradaNovoForn(false); setEntradaForn(e.target.value); } setEntradaLinhas([]); } },
               /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014 Escolher \u2014"),
-              fornecedoresStock.map(function(f) { return /* @__PURE__ */ React.createElement("option", { key: f.id, value: f.id }, f.nome); })
+              (function() {
+                var comProdutos = {};
+                produtos.forEach(function(p) { if (p.fornecedor_id) comProdutos[p.fornecedor_id] = true; });
+                return fornecedoresStock.filter(function(f) { return comProdutos[f.id]; }).map(function(f) { return /* @__PURE__ */ React.createElement("option", { key: f.id, value: f.id }, f.nome); });
+              })(),
+              /* @__PURE__ */ React.createElement("option", { value: "__novo__" }, "+ Novo fornecedor de consum\xEDveis")
+            ),
+            entradaNovoForn && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginTop: 8 } },
+              /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { flex: 1, marginBottom: 0 }), value: entradaNovoFornNome, onChange: function(e) { setEntradaNovoFornNome(e.target.value); }, placeholder: "Nome do fornecedor (ex: Leroy Merlin)" }),
+              /* @__PURE__ */ React.createElement("button", { onClick: function() { criarFornecedorConsumivel(); }, style: btn }, "Criar")
             )
           ),
           /* @__PURE__ */ React.createElement("div", null,
@@ -6762,7 +6822,23 @@ function Stock(props) {
         )
       ),
       entradaForn && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, padding: 18 }) },
-        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "Produtos de ", fornEscolhido ? fornEscolhido.nome : ""),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, flexWrap: "wrap", gap: 8 } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C" } }, "Produtos de ", fornEscolhido ? fornEscolhido.nome : ""),
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { setAddProdAberto(!addProdAberto); }, style: Object.assign({}, btnO, { fontSize: 12, padding: "5px 12px" }) }, addProdAberto ? "Cancelar" : "+ Adicionar produto")
+        ),
+        addProdAberto && /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 8, padding: 12, marginBottom: 12 } },
+          /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8, marginBottom: 8 } },
+            /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { marginBottom: 0 }), value: addProdForm.nome, onChange: function(e) { setAddProdForm(Object.assign({}, addProdForm, { nome: e.target.value })); }, placeholder: "Nome do produto" }),
+            /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { marginBottom: 0 }), type: "number", step: "0.01", value: addProdForm.preco_embalagem, onChange: function(e) { setAddProdForm(Object.assign({}, addProdForm, { preco_embalagem: e.target.value })); }, placeholder: "Pre\xE7o/unid. compra" })
+          ),
+          /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 8 } },
+            /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { marginBottom: 0 }), type: "number", step: "0.01", value: addProdForm.conteudo_embalagem, onChange: function(e) { setAddProdForm(Object.assign({}, addProdForm, { conteudo_embalagem: e.target.value })); }, placeholder: "Traz (qtd)" }),
+            /* @__PURE__ */ React.createElement("select", { style: Object.assign({}, inp, { marginBottom: 0 }), value: addProdForm.unidade_consumo, onChange: function(e) { setAddProdForm(Object.assign({}, addProdForm, { unidade_consumo: e.target.value })); } }, ["unidade", "litro", "ml", "kg", "g"].map(function(u) { return /* @__PURE__ */ React.createElement("option", { key: u, value: u }, u); })),
+            /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { marginBottom: 0 }), type: "number", value: addProdForm.quantidade, onChange: function(e) { setAddProdForm(Object.assign({}, addProdForm, { quantidade: e.target.value })); }, placeholder: "Stock inicial" }),
+            /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { marginBottom: 0 }), type: "number", value: addProdForm.quantidade_minima, onChange: function(e) { setAddProdForm(Object.assign({}, addProdForm, { quantidade_minima: e.target.value })); }, placeholder: "Stock m\xEDn." })
+          ),
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { adicionarProdutoFornecedor(); }, style: btn }, "Guardar produto")
+        ),
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 12 } }, "Mete as unidades da factura (embalagens/garrafas). O sistema converte e calcula o custo."),
         prodsDoForn.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 20, color: "#94A3B8", fontSize: 12 } }, "Este fornecedor n\xE3o tem produtos associados.") :
         /* @__PURE__ */ React.createElement("div", null, prodsDoForn.map(function(p) {
