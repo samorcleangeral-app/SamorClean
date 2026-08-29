@@ -3921,16 +3921,16 @@ function NotasCliente(props) {
     db.list("client_notes", "?select=*&client_id=eq." + encodeURIComponent(props.clientId) + "&expires_at=gte." + now + "&order=created_at.desc").then(function(rows) {
       setNotas(rows || []);
       setLoading(false);
-      var porVer = (rows || []).filter(function(n) { return !n.vista_gestao; });
-      if (porVer.length > 0) {
-        fetch(SUPABASE_URL + "/rest/v1/client_notes?client_id=eq." + encodeURIComponent(props.clientId) + "&vista_gestao=eq.false", {
-          method: "PATCH", headers: dbHeaders(),
-          body: JSON.stringify({ vista_gestao: true })
-        });
-      }
     });
   }, [props.clientId]);
 
+  async function marcarNotaVista(nota) {
+    await fetch(SUPABASE_URL + "/rest/v1/client_notes?id=eq." + nota.id, {
+      method: "PATCH", headers: dbHeaders(),
+      body: JSON.stringify({ vista_gestao: true })
+    });
+    setNotas(function(p) { return p.map(function(n) { return n.id === nota.id ? Object.assign({}, n, { vista_gestao: true }) : n; }); });
+  }
   async function partilhar(nota) {
     await fetch(SUPABASE_URL + "/rest/v1/client_notes?id=eq." + nota.id, {
       method: "PATCH", headers: dbHeaders(),
@@ -3961,9 +3961,11 @@ function NotasCliente(props) {
     notas.map(function(n) {
       const isPartilhada = n.partilhada && n.servicos_restantes > 0;
       const corBorda = isPartilhada ? "#F59E0B" : n.tipo === "geral" ? "#2E6DA4" : "#10B981";
-      return React.createElement("div", { key: n.id, style: { background: "#F8FAFC", borderRadius: 10, padding: "12px 16px", marginBottom: 10, borderLeft: "3px solid " + corBorda } },
+      const porVer = !n.vista_gestao;
+      return React.createElement("div", { key: n.id, style: { background: porVer ? "#FFFBEB" : "#F8FAFC", borderRadius: 10, padding: "12px 16px", marginBottom: 10, borderLeft: "3px solid " + corBorda, boxShadow: porVer ? "0 0 0 1.5px #FCD34D" : "none" } },
         React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 } },
           React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" } },
+            porVer && React.createElement(Bdg, { label: "● NOVA", bg: "#FEF3C7", tx: "#B45309", sz: 10 }),
             React.createElement(Bdg, { label: n.tipo === "geral" ? "Geral" : "Serviço", bg: n.tipo === "geral" ? "#EFF6FF" : "#F0FDF4", tx: n.tipo === "geral" ? "#2E6DA4" : "#15803D", sz: 10 }),
             isPartilhada && React.createElement(Bdg, { label: "📤 Partilhada — " + n.servicos_restantes + " serviço" + (n.servicos_restantes !== 1 ? "s" : ""), bg: "#FEF3C7", tx: "#92400E", sz: 10 }),
             n.contact_name && React.createElement("span", { style: { fontSize: 11, color: "#64748B" } }, "por ", n.contact_name)
@@ -3972,6 +3974,7 @@ function NotasCliente(props) {
         ),
         React.createElement("div", { style: { fontSize: 13, color: "#334155", lineHeight: 1.6, marginBottom: 10 } }, n.nota),
         React.createElement("div", { style: { display: "flex", gap: 6 } },
+          porVer && React.createElement("button", { onClick: function() { marcarNotaVista(n); }, style: { background: "#DCFCE7", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 800, color: "#15803D", cursor: "pointer" } }, "\u2713 Vi"),
           !isPartilhada
             ? React.createElement("button", { onClick: function() { setPartilharId(n.id); setNumServicos(1); }, style: { background: "#FEF3C7", border: "none", borderRadius: 6, padding: "5px 10px", fontSize: 11, fontWeight: 700, color: "#92400E", cursor: "pointer" } }, "📤 Partilhar")
             : React.createElement("button", { onClick: function() { despartilhar(n); }, style: { background: "#FEF3C7", border: "none", borderRadius: 6, padding: "5px 10px", fontSize: 11, fontWeight: 700, color: "#92400E", cursor: "pointer" } }, "✕ Retirar"),
@@ -8826,6 +8829,7 @@ function PedidosExtra() {
   const [clientsMap, setClientsMap] = useState({});
   const [selCliente, setSelCliente] = useState(null);
   const [swapJob, setSwapJob] = useState(null);
+  const [pedidoDetalhe, setPedidoDetalhe] = useState(null);
   const [swapPedido, setSwapPedido] = useState(null);
   const [clientJobs, setClientJobs] = useState([]);
   const [selJob, setSelJob] = useState(null);
@@ -8958,6 +8962,25 @@ function PedidosExtra() {
   return /* @__PURE__ */ React.createElement("div", null,
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 } },
       /* @__PURE__ */ React.createElement("div", null,
+        pedidoDetalhe && /* @__PURE__ */ React.createElement("div", { onClick: function() { setPedidoDetalhe(null); }, style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 } },
+          /* @__PURE__ */ React.createElement("div", { onClick: function(e) { e.stopPropagation(); }, style: { background: "#fff", borderRadius: 14, padding: 24, maxWidth: 440, width: "100%", maxHeight: "80vh", overflowY: "auto" } },
+            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 17, color: "#1A3A5C" } }, clientsMap[pedidoDetalhe.client_id] ? clientsMap[pedidoDetalhe.client_id].name : pedidoDetalhe.client_id),
+              /* @__PURE__ */ React.createElement("button", { onClick: function() { setPedidoDetalhe(null); }, style: { border: "none", background: "none", fontSize: 22, cursor: "pointer", color: "#94A3B8", lineHeight: 1 } }, "\u00D7")
+            ),
+            pedidoDetalhe.tipo && /* @__PURE__ */ React.createElement("div", { style: { display: "inline-block", background: "#EFF6FF", color: "#2E6DA4", borderRadius: 7, padding: "3px 10px", fontSize: 12, fontWeight: 700, marginBottom: 12 } }, pedidoDetalhe.tipo),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "O que o cliente escreveu"),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "#1A3A5C", background: "#F8FAFC", borderRadius: 10, padding: "14px 16px", lineHeight: 1.6, marginBottom: 16, whiteSpace: "pre-wrap" } }, pedidoDetalhe.descricao || "(sem texto)"),
+            pedidoDetalhe.resposta && /* @__PURE__ */ React.createElement("div", null,
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Resposta dada"),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#475569", fontStyle: "italic", marginBottom: 16 } }, pedidoDetalhe.resposta)
+            ),
+            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, color: "#64748B", borderTop: "1px solid #F1F5F9", paddingTop: 12 } },
+              /* @__PURE__ */ React.createElement("span", null, pedidoDetalhe.created_at ? new Date(pedidoDetalhe.created_at).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" }) : ""),
+              /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, color: pedidoDetalhe.status === "aprovado" ? "#15803D" : pedidoDetalhe.status === "recusado" ? "#DC2626" : "#64748B" } }, pedidoDetalhe.status || "pendente")
+            )
+          )
+        ),
         /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Pedidos Extra"),
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, totalPendentes, " pendente", totalPendentes !== 1 ? "s" : "", " \u2014 ", clientList.length, " clientes")
       ),
@@ -8982,7 +9005,7 @@ function PedidosExtra() {
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 12 } }, "Todos os pedidos j\xE1 resolvidos (aprovados ou recusados)."),
         /* @__PURE__ */ React.createElement("div", { style: { maxHeight: 420, overflowY: "auto" } }, resolvidos.map(function(p) {
           var aprovado = p.status === "aprovado";
-          return /* @__PURE__ */ React.createElement("div", { key: p.id, style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "9px 0", borderBottom: "1px solid #F1F5F9", gap: 10 } },
+          return /* @__PURE__ */ React.createElement("div", { key: p.id, onClick: function() { setPedidoDetalhe(p); }, style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "9px 0", borderBottom: "1px solid #F1F5F9", gap: 10, cursor: "pointer" } },
             /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } },
               /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#1A3A5C" } }, clientsMap[p.client_id] ? clientsMap[p.client_id].name : p.client_id),
               /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 2 } }, p.descricao || p.tipo || "\u2014"),
