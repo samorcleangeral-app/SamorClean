@@ -8571,7 +8571,8 @@ function Avaliacoes() {
           : "Pode avaliar atrav\xE9s do QR code no local ou do portal do cliente:\n" + baseUrl)
       + "\n\nDemora menos de 1 minuto.\n\nObrigado pelo seu tempo.\n\nEquipa SamorClean";
   }
-  const [showPendentes, setShowPendentes] = useState(true);
+  const [showPendentes, setShowPendentes] = useState(false);
+  const [mostrarInativosAv, setMostrarInativosAv] = useState(false);
   const [avSearch, setAvSearch] = useState("");
   const [servicoDatas, setServicoDatas] = useState({});
   useEffect(function() {
@@ -8781,8 +8782,10 @@ function Avaliacoes() {
       var porColab = {};
       Object.keys(empsMap).forEach(function(eid) {
         var e = empsMap[eid];
-        if (!e || e.ativo === false) return;
-        porColab[eid] = { nome: e.name, stars: [] };
+        if (!e) return;
+        var inativo = e.ativo === false;
+        if (inativo && !mostrarInativosAv) return;
+        porColab[eid] = { nome: e.name, stars: [], inativo: inativo };
       });
       doMes.forEach(function(a) {
         if (!porColab[a.funcionario_id]) return;
@@ -8791,16 +8794,25 @@ function Avaliacoes() {
       var lista = Object.keys(porColab).map(function(k) {
         var c = porColab[k];
         var media = c.stars.length > 0 ? c.stars.reduce(function(x, y) { return x + y; }, 0) / c.stars.length : null;
-        return { nome: c.nome, n: c.stars.length, media: media };
-      }).sort(function(a, b) { return (b.media || -1) - (a.media || -1) || b.n - a.n; });
-      if (lista.length === 0) return null;
+        return { nome: c.nome, n: c.stars.length, media: media, inativo: c.inativo };
+      }).sort(function(a, b) { return (a.inativo ? 1 : 0) - (b.inativo ? 1 : 0) || (b.media || -1) - (a.media || -1) || b.n - a.n; });
+      var temInativos = Object.keys(empsMap).some(function(eid) { return empsMap[eid] && empsMap[eid].ativo === false; });
+      if (lista.length === 0 && !temInativos) return null;
       return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
-        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 2 } }, "\u2B50 M\xE9dia por colaborador \u2014 ", new Date(mesA + "-01T12:00:00").toLocaleDateString("pt-PT", { month: "long", year: "numeric" })),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 12 } }, "M\xE9dia deste m\xEAs (a que conta para o pr\xE9mio). O n\xFAmero de avalia\xE7\xF5es indica a fiabilidade da m\xE9dia."),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" } },
+          /* @__PURE__ */ React.createElement("div", null,
+            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 2 } }, "\u2B50 M\xE9dia por colaborador \u2014 ", new Date(mesA + "-01T12:00:00").toLocaleDateString("pt-PT", { month: "long", year: "numeric" })),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 12 } }, "M\xE9dia deste m\xEAs (a que conta para o pr\xE9mio). O n\xFAmero de avalia\xE7\xF5es indica a fiabilidade da m\xE9dia.")
+          ),
+          temInativos && /* @__PURE__ */ React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#64748B", cursor: "pointer", whiteSpace: "nowrap" } },
+            /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: mostrarInativosAv, onChange: function(e) { setMostrarInativosAv(e.target.checked); } }),
+            "Mostrar inativos"
+          )
+        ),
         /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 10 } }, lista.map(function(c) {
           var cor = c.media === null ? "#94A3B8" : c.media >= 4.5 ? "#16A34A" : c.media >= 3.5 ? "#F59E0B" : "#DC2626";
-          return /* @__PURE__ */ React.createElement("div", { key: c.nome, style: { border: "1.5px solid #E2EBF4", borderRadius: 10, padding: "10px 12px" } },
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#1A3A5C" } }, c.nome),
+          return /* @__PURE__ */ React.createElement("div", { key: c.nome, style: { border: "1.5px solid " + (c.inativo ? "#E2E8F0" : "#E2EBF4"), borderRadius: 10, padding: "10px 12px", opacity: c.inativo ? 0.6 : 1, background: c.inativo ? "#F8FAFC" : "#fff" } },
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#1A3A5C" } }, c.nome, c.inativo ? /* @__PURE__ */ React.createElement("span", { style: { fontSize: 9, color: "#94A3B8", fontWeight: 400, marginLeft: 5 } }, "(inativo)") : null),
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 900, color: cor, marginTop: 3 } }, c.media === null ? "\u2014" : c.media.toFixed(1) + " \u2605"),
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: c.n < 3 ? "#DC2626" : "#94A3B8", marginTop: 2 } }, c.n === 0 ? "sem avalia\xE7\xF5es" : c.n + " avalia\xE7\xE3o" + (c.n !== 1 ? "es" : ""), c.n > 0 && c.n < 3 ? " (abaixo do m\xEDnimo)" : "")
           );
