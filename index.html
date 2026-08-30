@@ -1022,9 +1022,13 @@ function Finance() {
     });
     return { faturado: faturado, pago: pago, porPagar: dividaTotalAcumulada, projecao: projecao };
   })();
+  // Material: a margem conta o CONSUMO do mês (regular), não a compra (às pancadas).
+  // A compra fica como existência no stock. Regra alinhada com a margem por cliente.
+  var consumoMaterialMes = stockSaidas.filter(function(m) { return (m.created_at || "").slice(0, 7) === localDateStr().slice(0, 7); })
+    .reduce(function(s, m) { return s + (parseFloat(m.quantidade) || 0) * (parseFloat(m.valor_unitario) || 0); }, 0);
   const totalCustos = despesas.reduce(function(s, d) {
-    return s + d.valor;
-  }, 0);
+    return d.is_stock ? s : s + (parseFloat(d.valor) || 0);
+  }, 0) + consumoMaterialMes;
   const totalIVADedutivel = despesas.reduce(function(s, d) {
     if (!d.iva_dedutivel) return s;
     const ivaTotal = d.valor * (d.iva_percentagem / 100) / (1 + d.iva_percentagem / 100);
@@ -1428,9 +1432,7 @@ function Finance() {
   }
   // Compras de material são EXISTÊNCIAS, não custo. O custo é o que se consome.
   var totalDespesasCorrentes = despesas.reduce(function(s, d) { return d.is_stock ? s : s + (parseFloat(d.valor) || 0); }, 0);
-  var consumoStockMes = stockSaidas.filter(function(m) { return (m.created_at || "").slice(0, 7) === localDateStr().slice(0, 7); })
-    .reduce(function(s, m) { return s + (parseFloat(m.quantidade) || 0) * (parseFloat(m.valor_unitario) || 0); }, 0);
-  var totalDespesas = totalDespesasCorrentes + consumoStockMes;
+  var totalDespesas = totalDespesasCorrentes + consumoMaterialMes;
 
   // Clientes de valor fixo (Pós-Obra/Profunda) ficam fora do rateio de custos operacionais
   var clientesOrcamento = {};
