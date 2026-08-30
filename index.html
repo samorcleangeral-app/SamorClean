@@ -5176,6 +5176,8 @@ function Employees() {
   const [newForm, setNewForm] = useState({ id: "", name: "", role: "T\xE9cnico", pin: "", av: "" });
   const [errMsg, setErrMsg] = useState("");
   const [empSearch, setEmpSearch] = useState("");
+  const [feriasAno, setFeriasAno] = useState([]);
+  const [anoMapa, setAnoMapa] = useState((/* @__PURE__ */ new Date()).getFullYear());
   const [abaAtivos, setAbaAtivos] = useState("activos");
   const [pinRecemGerado, setPinRecemGerado] = useState(null);
   const [faltasLevantamento, setFaltasLevantamento] = useState([]);
@@ -5239,12 +5241,14 @@ function Employees() {
     var monthEnd = localDateStr(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0));
     Promise.all([
       db.list("ausencias", "?select=*&tipo=eq.Falta&data_inicio=gte." + monthStart + "&data_inicio=lte." + monthEnd),
-      db.list("funcionarios_rh", "?select=funcionario_id,tipo_contrato")
+      db.list("funcionarios_rh", "?select=funcionario_id,tipo_contrato"),
+      db.list("ausencias", "?select=funcionario_id,tipo,data_inicio,data_fim,estado&tipo=eq.F\xE9rias")
     ]).then(function(res) {
       var rhMap = {};
       (res[1] || []).forEach(function(r) { rhMap[r.funcionario_id] = r.tipo_contrato; });
       var faltasContrato = (res[0] || []).filter(function(a) { return (rhMap[a.funcionario_id] || "Contrato") === "Contrato"; });
       setFaltasLevantamento(faltasContrato);
+      setFeriasAno((res[2] || []).filter(function(a) { return (a.estado || "aprovado") === "aprovado"; }));
     });
   }, []);
   async function classificarFaltaLista(id, tipoFinal) {
@@ -5390,7 +5394,7 @@ function Employees() {
       setNewForm({ id: "", name: "", role: "T\xE9cnico", pin: "", av: "" });
       setErrMsg("");
       setView("new");
-    } }, "+ Novo Funcionario"))), faltasLevantamento.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { background: "#FFFBEB", border: "1.5px solid #F59E0B", marginBottom: 16 }) },
+    } }, "+ Novo Funcionario"), /* @__PURE__ */ React.createElement("button", { onClick: function() { setView("mapa"); }, style: Object.assign({}, btnO, { marginLeft: 8 }) }, "\uD83D\uDCC5 Mapa de F\xE9rias"))), faltasLevantamento.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { background: "#FFFBEB", border: "1.5px solid #F59E0B", marginBottom: 16 }) },
     /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#92400E", marginBottom: 4 } }, "\u26A0 Levantamento de faltas por classificar este m\xEAs (", faltasLevantamento.length, ")"),
     /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#78350F", marginBottom: 12 } }, "S\xF3 colaboradores a Contrato \u2014 recibo verde n\xE3o precisa de justificar faltas."),
     faltasLevantamento.map(function(a) {
@@ -5423,6 +5427,61 @@ function Employees() {
       setView("list");
     } }, "Voltar"), /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0, flex: 1 } }, sel.name), /* @__PURE__ */ React.createElement("button", { onClick: function() { alternarAtivoColaborador(sel); }, disabled: desactivando, style: { padding: "8px 16px", borderRadius: 8, border: "1.5px solid " + (sel.ativo === false ? "#16A34A" : "#EF4444"), background: sel.ativo === false ? "#DCFCE7" : "#FEE2E2", color: sel.ativo === false ? "#15803D" : "#DC2626", fontSize: 12, fontWeight: 700, cursor: "pointer", opacity: desactivando ? 0.6 : 1 } }, desactivando ? "A processar..." : sel.ativo === false ? "\u2713 Reactivar" : "\u23F8 Desactivar")), saved ? /* @__PURE__ */ React.createElement("div", { style: { background: "#DCFCE7", border: "1px solid #16A34A", color: "#15803D", borderRadius: 8, padding: "12px 18px", marginBottom: 20, fontWeight: 700 } }, "Guardado com sucesso!") : null, errMsg ? /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", border: "1px solid #EF4444", color: "#991B1B", borderRadius: 8, padding: "12px 18px", marginBottom: 20, fontWeight: 600 } }, errMsg) : null, /* @__PURE__ */ React.createElement(FichaRH, { sel, editForm, setEditForm, saveEdit, saving, emps, dates: [], wJobs: [] }));
   }
+  if (view === "mapa") {
+    var MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+    function sobrepoe(a, b) {
+      var ai = a.data_inicio, af = a.data_fim || a.data_inicio, bi = b.data_inicio, bf = b.data_fim || b.data_inicio;
+      return ai <= bf && bi <= af;
+    }
+    var feriasDoAno = feriasAno.filter(function(f) { return (f.data_inicio || "").slice(0, 4) === String(anoMapa) || (f.data_fim || "").slice(0, 4) === String(anoMapa); });
+    var empsComFerias = emps.filter(function(e) { return e.ativo !== false; });
+    function feriasNoMes(fid, mesIdx) {
+      return feriasDoAno.filter(function(f) {
+        if (f.funcionario_id !== fid) return false;
+        var mi = parseInt((f.data_inicio || "").slice(5, 7)) - 1;
+        var mf = parseInt((f.data_fim || f.data_inicio || "").slice(5, 7)) - 1;
+        return mesIdx >= mi && mesIdx <= mf;
+      });
+    }
+    function temCruzamento(fid, mesIdx) {
+      var minhas = feriasNoMes(fid, mesIdx);
+      if (minhas.length === 0) return false;
+      return feriasDoAno.some(function(outra) {
+        if (outra.funcionario_id === fid) return false;
+        return minhas.some(function(m) { return sobrepoe(m, outra); });
+      });
+    }
+    return React.createElement("div", null,
+      React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 20 } },
+        React.createElement("button", { onClick: function() { setView("list"); }, style: btnO }, "\u2190 Voltar"),
+        React.createElement("h1", { style: { fontSize: 20, fontWeight: 800, color: "#1A3A5C", margin: 0, flex: 1 } }, "\uD83D\uDCC5 Mapa de F\xE9rias"),
+        React.createElement("button", { onClick: function() { setAnoMapa(anoMapa - 1); }, style: Object.assign({}, btnO, { padding: "4px 12px" }) }, "\u2039"),
+        React.createElement("span", { style: { fontSize: 15, fontWeight: 800, color: "#1A3A5C", minWidth: 50, textAlign: "center" } }, anoMapa),
+        React.createElement("button", { onClick: function() { setAnoMapa(anoMapa + 1); }, style: Object.assign({}, btnO, { padding: "4px 12px" }) }, "\u203A")
+      ),
+      React.createElement("div", { style: Object.assign({}, card, { overflowX: "auto" }) },
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "110px repeat(12, 1fr)", gap: 2, minWidth: 640 } },
+          [React.createElement("div", { key: "h0" })].concat(MESES.map(function(m) {
+            return React.createElement("div", { key: m, style: { textAlign: "center", fontSize: 10, color: "#94A3B8", fontWeight: 600, paddingBottom: 4 } }, m);
+          })),
+          empsComFerias.map(function(e) {
+            return [React.createElement("div", { key: e.id + "n", style: { fontSize: 11, fontWeight: 600, color: "#1A3A5C", display: "flex", alignItems: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, e.name)].concat(
+              MESES.map(function(m, mi) {
+                var tem = feriasNoMes(e.id, mi).length > 0;
+                var cruza = tem && temCruzamento(e.id, mi);
+                return React.createElement("div", { key: e.id + mi, title: cruza ? "Cruza com outro colaborador" : (tem ? "F\xE9rias" : ""), style: { height: 22, borderRadius: 3, background: cruza ? "#E24B4A" : tem ? "#1D9E75" : "#F1F5F9" } });
+              })
+            );
+          })
+        ),
+        React.createElement("div", { style: { display: "flex", gap: 16, marginTop: 14, fontSize: 10, color: "#94A3B8", flexWrap: "wrap" } },
+          React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 5 } }, React.createElement("span", { style: { width: 10, height: 10, background: "#1D9E75", borderRadius: 2 } }), "F\xE9rias"),
+          React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 5 } }, React.createElement("span", { style: { width: 10, height: 10, background: "#E24B4A", borderRadius: 2 } }), "Cruzamento (2+ ao mesmo tempo)")
+        )
+      )
+    );
+  }
+
   if (view === "new") {
     return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 24 } }, /* @__PURE__ */ React.createElement("button", { style: btnX, onClick: function() {
       setView("list");
