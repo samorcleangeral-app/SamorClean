@@ -9180,7 +9180,7 @@ function Manager(props) {
       (results[13] || []).forEach(function(r) { rhMap[r.funcionario_id] = r.tipo_contrato; });
       var nomesEmp = {};
       (results[4] || []).forEach(function(e) { nomesEmp[e.id] = e.name; });
-      var ausSem = (results[16] || []).filter(function(a) {
+      var ausSem = (results[15] || []).filter(function(a) {
         if ((a.estado || "aprovado") !== "aprovado") return false;
         var fim = a.data_fim || a.data_inicio;
         return fim >= semSegunda && (a.data_inicio || "") <= semDomingo;
