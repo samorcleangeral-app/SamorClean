@@ -4538,13 +4538,13 @@ function FichaRH(props) {
   const [showAddFard, setShowAddFard] = useState(false);
   const [showAddDoc, setShowAddDoc] = useState(false);
   const [showAddAv, setShowAddAv] = useState(false);
-  const [ausForm, setAusForm] = useState({ tipo: "Baixa M\xE9dica", data_inicio: "", data_fim: "", descricao: "", estado: "aprovado", subsidio_ferias_pago: false, subsidio_ferias_valor: "", parcial: false, hora_inicio: "", hora_fim: "" });
+  const [ausForm, setAusForm] = useState({ tipo: "Falta", data_inicio: "", data_fim: "", descricao: "", estado: "aprovado", subsidio_ferias_pago: false, subsidio_ferias_valor: "", parcial: false, hora_inicio: "", hora_fim: "" });
   const [fardForm, setFardForm] = useState({ item: "", tamanho: "", quantidade: 1, data_entrega: localDateStr(), estado: "activo", notas: "" });
   const [docFile, setDocFile] = useState(null);
   const [docForm, setDocForm] = useState({ tipo: "Contrato", nome: "", mes_ano: "" });
   const [avForm, setAvForm] = useState({ periodo: "", qualidade_trabalho: 3, pontualidade: 3, postura: 3, relacao_equipa: 3, seguimento_instrucoes: 3, nota_geral: "", avaliado_por: "" });
   const [uploading, setUploading] = useState(false);
-  const TIPOS_AUS = ["Baixa M\xE9dica", "F\xE9rias", "Falta Justificada", "Falta Injustificada", "Licen\xE7a", "Forma\xE7\xE3o Externa", "Dispensa"];
+  const TIPOS_AUS = ["Falta", "F\xE9rias", "Baixa"];
   const TIPOS_DOC = ["Contrato", "Recibo de Vencimento", "Declara\xE7\xE3o", "Certificado", "Outro"];
   useEffect(function() {
     setLoading(true);
@@ -9078,6 +9078,7 @@ function Manager(props) {
   const [pedidosPendentes, setPedidosPendentes] = useState(0);
   const [pedidosColabPendentes, setPedidosColabPendentes] = useState(0);
   const [notasClientesNovas, setNotasClientesNovas] = useState(0);
+  const [ausenciasSemana, setAusenciasSemana] = useState([]);
   const [avaliacoesNovas, setAvaliacoesNovas] = useState(0);
   const [ratingsMes, setRatingsMes] = useState({});
   const [alertasFreqCount, setAlertasFreqCount] = useState(0);
@@ -9099,6 +9100,9 @@ function Manager(props) {
     const monthStart = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
     const monthEnd = localDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
     const past60 = localDateStr(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 60));
+    var _dow = (now.getDay() + 6) % 7;
+    const semSegunda = localDateStr(new Date(now.getFullYear(), now.getMonth(), now.getDate() - _dow));
+    const semDomingo = localDateStr(new Date(now.getFullYear(), now.getMonth(), now.getDate() - _dow + 6));
     Promise.all([
       db.list("clientes", "?select=id,name,freq,iva_type,ativo"),
       db.list("servicos", "?select=*&order=date&date=eq." + today),
@@ -9114,7 +9118,8 @@ function Manager(props) {
       db.list("avaliacoes", "?select=stars,funcionario_id,created_at&created_at=gte." + new Date(now.getFullYear(), now.getMonth(), 1).toISOString()),
       db.list("ausencias", "?select=id,funcionario_id,data_inicio&tipo=eq.Falta&data_inicio=gte." + monthStart + "&data_inicio=lte." + monthEnd),
       db.list("funcionarios_rh", "?select=funcionario_id,tipo_contrato"),
-      db.list("alertas_dispensados", "?select=chave")
+      db.list("alertas_dispensados", "?select=chave"),
+      db.list("ausencias", "?select=funcionario_id,tipo,data_inicio,data_fim,estado&data_fim=gte." + semSegunda + "&data_inicio=lte." + semDomingo)
     ]).then(function(results) {
       setClientCount(results[0] ? results[0].length : 0);
       setTodayJobs(results[1] || []);
@@ -9172,6 +9177,12 @@ function Manager(props) {
       setAlertasFreqHome(alertas);
       const rhMap = {};
       (results[13] || []).forEach(function(r) { rhMap[r.funcionario_id] = r.tipo_contrato; });
+      var nomesEmp = {};
+      (results[4] || []).forEach(function(e) { nomesEmp[e.id] = e.name; });
+      var ausSem = (results[16] || []).filter(function(a) { return (a.estado || "aprovado") === "aprovado"; }).map(function(a) {
+        return { funcionario_id: a.funcionario_id, nome: nomesEmp[a.funcionario_id] || "\u2014", tipo: a.tipo, data_inicio: a.data_inicio, data_fim: a.data_fim || a.data_inicio };
+      });
+      setAusenciasSemana(ausSem);
       const faltasContrato = (results[12] || []).filter(function(a) {
         return (rhMap[a.funcionario_id] || "Contrato") === "Contrato";
       });
@@ -9302,7 +9313,32 @@ function Manager(props) {
         { key: "rating", label: "Avalia\xE7\xE3o" }
       ]));
     }, 1e3);
-  }, style: Object.assign({}, btnO, { fontSize: 12, padding: "8px 14px" }) }, "\u2B07 Backup CSV")), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 20 } }, [
+  }, style: Object.assign({}, btnO, { fontSize: 12, padding: "8px 14px" }) }, "\u2B07 Backup CSV")), (function() {
+    var faltasSem = ausenciasSemana.filter(function(a) { return a.tipo === "Falta"; });
+    var totalAusentes = ausenciasSemana.length;
+    var DIAS = ["Seg", "Ter", "Qua", "Qui", "Sex", "S\xE1b", "Dom"];
+    function diasLabel(a) {
+      var ini = new Date(a.data_inicio + "T12:00:00"), fim = new Date(a.data_fim + "T12:00:00");
+      if (a.data_inicio === a.data_fim) return ini.toLocaleDateString("pt-PT", { weekday: "short" });
+      return ini.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric" }) + " \u2192 " + fim.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric" });
+    }
+    return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, borderLeft: "3px solid " + (totalAusentes > 0 ? "#F59E0B" : "#16A34A") }) },
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: totalAusentes > 0 ? 12 : 0 } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "\uD83D\uDCC5 Ausências esta semana"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, totalAusentes === 0 ? "Ningu\xE9m ausente esta semana \u2705" : totalAusentes + (totalAusentes === 1 ? " pessoa ausente" : " pessoas ausentes"))
+      ),
+      totalAusentes > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 8 } }, ausenciasSemana.map(function(a, i) {
+        var ferias = a.tipo === "F\xE9rias";
+        return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#F8FAFC", borderRadius: 8 } },
+          /* @__PURE__ */ React.createElement("span", { style: { background: ferias ? "#DCFCE7" : "#FEF3C7", color: ferias ? "#15803D" : "#92400E", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" } }, a.tipo),
+          /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } },
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#1A3A5C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, a.nome),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8" } }, diasLabel(a))
+          )
+        );
+      }))
+    );
+  })(), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 20 } }, [
     { l: "Clientes activos", v: clientCount, c: "#2E6DA4", go: function() {
       setView("clients");
     } },
@@ -9415,12 +9451,21 @@ function EmpPedidos(props) {
   const [historico, setHistorico] = useState([]);
   const [loadingHist, setLoadingHist] = useState(false);
   const [ausForm, setAusForm] = useState({ tipo: "F\xE9rias", parcial: false, hora_inicio: "", hora_fim: "", data_inicio: "", data_fim: "", descricao: "" });
+  const [tipoContrato, setTipoContrato] = useState("");
+  useEffect(function() {
+    if (tipoContrato === "Recibo Verde" && ausForm.tipo === "F\xE9rias") {
+      setAusForm(function(p) { return Object.assign({}, p, { tipo: "Falta" }); });
+    }
+  }, [tipoContrato]);
   const [fardForm, setFardForm] = useState({ item: "", tamanho: "", quantidade: 1, motivo: "" });
   const [matForm, setMatForm] = useState({ item: "", quantidade: 1, motivo: "" });
   const [saving, setSaving] = useState(false);
   const [stockProdutos, setStockProdutos] = useState([]);
   useEffect(function() {
     db.list("stock_produtos", "?select=id,nome&order=nome").then(function(rows) { setStockProdutos(rows || []); });
+    db.list("funcionarios_rh", "?select=tipo_contrato&funcionario_id=eq." + encodeURIComponent(empId)).then(function(rows) {
+      if (rows && rows.length > 0) setTipoContrato(rows[0].tipo_contrato || "");
+    });
   }, []);
   useEffect(function() {
     fetch(SUPABASE_URL + "/rest/v1/pedidos_colaboradores?funcionario_id=eq." + encodeURIComponent(empId) + "&estado=neq.pendente&visto=is.false", { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ visto: true }), keepalive: true }).catch(function(e) { console.warn("Falha ao marcar pedidos como vistos:", e); });
@@ -9434,7 +9479,7 @@ function EmpPedidos(props) {
       });
     }
   }, [tab, empId]);
-  const TIPOS_AUS = ["F\xE9rias", "Falta", "Licen\xE7a", "Forma\xE7\xE3o Externa", "Dispensa", "Outro"];
+  const TIPOS_AUS = tipoContrato === "Recibo Verde" ? ["Falta"] : ["Falta", "F\xE9rias"];
   async function submitAusencia() {
     setSaving(true);
     var descParcial = ausForm.parcial ? " | das " + ausForm.hora_inicio + " \xE0s " + ausForm.hora_fim : (ausForm.data_fim ? " \u2192 " + ausForm.data_fim : "");
