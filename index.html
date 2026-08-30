@@ -9079,6 +9079,9 @@ function Manager(props) {
   const [pedidosColabPendentes, setPedidosColabPendentes] = useState(0);
   const [notasClientesNovas, setNotasClientesNovas] = useState(0);
   const [ausenciasSemana, setAusenciasSemana] = useState([]);
+  const [todasAusencias, setTodasAusencias] = useState([]);
+  const [mesAbsentismo, setMesAbsentismo] = useState(localDateStr().slice(0, 7));
+  const [rhHorasMap, setRhHorasMap] = useState({});
   const [avaliacoesNovas, setAvaliacoesNovas] = useState(0);
   const [ratingsMes, setRatingsMes] = useState({});
   const [alertasFreqCount, setAlertasFreqCount] = useState(0);
@@ -9118,9 +9121,10 @@ function Manager(props) {
       db.list("avaliacoes", "?select=id&vista=is.false"),
       db.list("avaliacoes", "?select=stars,funcionario_id,created_at&created_at=gte." + new Date(now.getFullYear(), now.getMonth(), 1).toISOString()),
       db.list("ausencias", "?select=id,funcionario_id,data_inicio&tipo=eq.Falta&data_inicio=gte." + monthStart + "&data_inicio=lte." + monthEnd),
-      db.list("funcionarios_rh", "?select=funcionario_id,tipo_contrato"),
+      db.list("funcionarios_rh", "?select=funcionario_id,tipo_contrato,horas_dia"),
       db.list("alertas_dispensados", "?select=chave"),
-      db.list("ausencias", "?select=funcionario_id,tipo,data_inicio,data_fim,estado&data_inicio=lte." + semDomingo + "&data_inicio=gte." + past60)
+      db.list("ausencias", "?select=funcionario_id,tipo,data_inicio,data_fim,estado&data_inicio=lte." + semDomingo + "&data_inicio=gte." + past60),
+      db.list("ausencias", "?select=funcionario_id,tipo,data_inicio,data_fim,estado,parcial,hora_inicio,hora_fim")
     ]).then(function(results) {
       setClientCount(results[0] ? results[0].length : 0);
       setTodayJobs(results[1] || []);
@@ -9178,6 +9182,9 @@ function Manager(props) {
       setAlertasFreqHome(alertas);
       const rhMap = {};
       (results[13] || []).forEach(function(r) { rhMap[r.funcionario_id] = r.tipo_contrato; });
+      var horasMap = {};
+      (results[13] || []).forEach(function(r) { horasMap[r.funcionario_id] = parseFloat(r.horas_dia) || 8; });
+      setRhHorasMap(horasMap);
       var nomesEmp = {};
       (results[4] || []).forEach(function(e) { nomesEmp[e.id] = e.name; });
       var ausSem = (results[15] || []).filter(function(a) {
@@ -9188,6 +9195,7 @@ function Manager(props) {
         return { funcionario_id: a.funcionario_id, nome: nomesEmp[a.funcionario_id] || "\u2014", tipo: a.tipo, data_inicio: a.data_inicio, data_fim: a.data_fim || a.data_inicio, estaSemana: (a.data_inicio || "") <= fimEstaSemana };
       });
       setAusenciasSemana(ausSem);
+      setTodasAusencias(results[16] || []);
       const faltasContrato = (results[12] || []).filter(function(a) {
         return (rhMap[a.funcionario_id] || "Contrato") === "Contrato";
       });
@@ -9368,6 +9376,71 @@ function Manager(props) {
       ),
       grupo("Esta semana", estaSem, "#DC2626"),
       grupo("Próxima semana", proxSem, "#F59E0B")
+    );
+  })(), (function() {
+    var ymAbs = mesAbsentismo;
+    var partesAbs = ymAbs.split("-");
+    var anoAbs = parseInt(partesAbs[0]), mesIdxAbs = parseInt(partesAbs[1]) - 1;
+    var refAbs = new Date(anoAbs, mesIdxAbs, 15);
+    var diasUteisAbs = calcDiasUteisMes(refAbs);
+    var mStartAbs = new Date(anoAbs, mesIdxAbs, 1), mEndAbs = new Date(anoAbs, mesIdxAbs + 1, 0);
+    function horasAusMes(fid) {
+      var hd = rhHorasMap[fid] || 8;
+      var horas = 0;
+      todasAusencias.filter(function(a) {
+        return a.funcionario_id === fid && (a.estado || "aprovado") === "aprovado" && a.tipo !== "F\xE9rias";
+      }).forEach(function(a) {
+        if (a.parcial && a.hora_inicio && a.hora_fim) {
+          var d = new Date((a.data_inicio || "") + "T12:00:00");
+          if (d >= mStartAbs && d <= mEndAbs) {
+            var hi = a.hora_inicio.split(":"), hf = a.hora_fim.split(":");
+            horas += Math.max(0, (parseInt(hf[0]) * 60 + parseInt(hf[1]) - (parseInt(hi[0]) * 60 + parseInt(hi[1]))) / 60);
+          }
+        } else {
+          var start = new Date((a.data_inicio || "") + "T12:00:00"), end = new Date((a.data_fim || a.data_inicio || "") + "T12:00:00");
+          var d = new Date(Math.max(start, mStartAbs)), dEnd = new Date(Math.min(end, mEndAbs));
+          while (d <= dEnd) { if (d.getDay() !== 0 && d.getDay() !== 6) horas += hd; d.setDate(d.getDate() + 1); }
+        }
+      });
+      return horas;
+    }
+    var linhasAbs = (emps || []).filter(function(e) { return e.ativo !== false; }).map(function(e) {
+      var hd = rhHorasMap[e.id] || 8;
+      var trab = diasUteisAbs * hd;
+      var falta = horasAusMes(e.id);
+      return { nome: e.name, falta: falta, trab: trab, taxa: trab > 0 ? falta / trab * 100 : 0 };
+    }).filter(function(x) { return x.falta > 0; }).sort(function(a, b) { return b.taxa - a.taxa; });
+    var totalFalta = linhasAbs.reduce(function(s, x) { return s + x.falta; }, 0);
+    var totalTrab = (emps || []).filter(function(e) { return e.ativo !== false; }).reduce(function(s, e) { return s + diasUteisAbs * (rhHorasMap[e.id] || 8); }, 0);
+    var taxaEquipa = totalTrab > 0 ? totalFalta / totalTrab * 100 : 0;
+    function mudarMesAbs(delta) {
+      var nd = new Date(anoAbs, mesIdxAbs + delta, 15);
+      setMesAbsentismo(nd.getFullYear() + "-" + String(nd.getMonth() + 1).padStart(2, "0"));
+    }
+    return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20 }) },
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 12 } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "\uD83D\uDCC9 Absentismo da equipa"),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { mudarMesAbs(-1); }, style: Object.assign({}, btnO, { padding: "3px 10px", fontSize: 13 }) }, "\u2039"),
+          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: "#334155", minWidth: 90, textAlign: "center" } }, refAbs.toLocaleDateString("pt-PT", { month: "long", year: "numeric" })),
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { mudarMesAbs(1); }, style: Object.assign({}, btnO, { padding: "3px 10px", fontSize: 13 }) }, "\u203A")
+        )
+      ),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 10, marginBottom: linhasAbs.length > 0 ? 14 : 0 } },
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 28, fontWeight: 900, color: taxaEquipa >= 10 ? "#DC2626" : taxaEquipa >= 5 ? "#F59E0B" : "#16A34A" } }, taxaEquipa.toFixed(1), "%"),
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "taxa da equipa \xB7 f\xE9rias n\xE3o contam")
+      ),
+      linhasAbs.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#16A34A", fontWeight: 600 } }, "\u2713 Sem faltas registadas neste m\xEAs.") :
+      /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 8 } }, linhasAbs.map(function(x, i) {
+        var cor = x.taxa >= 10 ? "#DC2626" : x.taxa >= 5 ? "#F59E0B" : "#64748B";
+        return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "#F8FAFC", borderRadius: 8 } },
+          /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } },
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#1A3A5C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, x.nome),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8" } }, x.falta.toFixed(x.falta % 1 === 0 ? 0 : 1), "h de ", x.trab, "h")
+          ),
+          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 15, fontWeight: 900, color: cor } }, x.taxa.toFixed(1), "%")
+        );
+      }))
     );
   })(), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 20 } }, [
     { l: "Clientes activos", v: clientCount, c: "#2E6DA4", go: function() {
