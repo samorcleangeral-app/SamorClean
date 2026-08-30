@@ -5454,10 +5454,10 @@ function Employees() {
     function diasNoMes(fid, mesIdx) {
       var total = 0;
       feriasNoMes(fid, mesIdx).forEach(function(f) {
-        var ini = new Date(f.data_inicio + "T12:00:00"), fim = new Date((f.data_fim || f.data_inicio) + "T12:00:00");
+        var ini = new Date(f.data_inicio + "T00:00:00"), fim = new Date((f.data_fim || f.data_inicio) + "T00:00:00");
         var mStart = new Date(anoMapa, mesIdx, 1), mEnd = new Date(anoMapa, mesIdx + 1, 0);
-        var d = new Date(Math.max(ini, mStart)), dEnd = new Date(Math.min(fim, mEnd));
-        while (d <= dEnd) { total++; d.setDate(d.getDate() + 1); }
+        var d = new Date(Math.max(ini.getTime(), mStart.getTime())), dEnd = new Date(Math.min(fim.getTime(), mEnd.getTime()));
+        while (d <= dEnd) { if (d.getDay() !== 0 && d.getDay() !== 6) total++; d.setDate(d.getDate() + 1); }
       });
       return total;
     }
@@ -9809,17 +9809,19 @@ function EmpPedidos(props) {
     var MESESF = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
     var fDoAno = minhasFerias.filter(function(f) { return (f.data_inicio || "").slice(0, 4) === String(anoF) || (f.data_fim || "").slice(0, 4) === String(anoF); });
     function diasFer(f) {
-      var ini = new Date(f.data_inicio + "T12:00:00"), fim = new Date((f.data_fim || f.data_inicio) + "T12:00:00");
-      return Math.round((fim - ini) / 86400000) + 1;
+      var ini = new Date(f.data_inicio + "T00:00:00"), fim = new Date((f.data_fim || f.data_inicio) + "T00:00:00");
+      var d = new Date(ini), total = 0;
+      while (d <= fim) { if (d.getDay() !== 0 && d.getDay() !== 6) total++; d.setDate(d.getDate() + 1); }
+      return total;
     }
     var totalDias = fDoAno.reduce(function(s, f) { return s + diasFer(f); }, 0);
     function diasNoMesF(mesIdx) {
       var total = 0;
       fDoAno.forEach(function(f) {
-        var ini = new Date(f.data_inicio + "T12:00:00"), fim = new Date((f.data_fim || f.data_inicio) + "T12:00:00");
+        var ini = new Date(f.data_inicio + "T00:00:00"), fim = new Date((f.data_fim || f.data_inicio) + "T00:00:00");
         var mStart = new Date(anoF, mesIdx, 1), mEnd = new Date(anoF, mesIdx + 1, 0);
-        var d = new Date(Math.max(ini, mStart)), dEnd = new Date(Math.min(fim, mEnd));
-        while (d <= dEnd) { total++; d.setDate(d.getDate() + 1); }
+        var d = new Date(Math.max(ini.getTime(), mStart.getTime())), dEnd = new Date(Math.min(fim.getTime(), mEnd.getTime()));
+        while (d <= dEnd) { if (d.getDay() !== 0 && d.getDay() !== 6) total++; d.setDate(d.getDate() + 1); }
       });
       return total;
     }
