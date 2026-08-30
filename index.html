@@ -7124,6 +7124,54 @@ function Stock(props) {
         })
       );
     })(),
+    verHistorico && (function() {
+      var saidasP = (movimentos || []).filter(function(m) { return m.tipo === "saida" && (m.created_at || "").slice(0, 7) === histMes; });
+      var porProd = {};
+      saidasP.forEach(function(m) {
+        var k = m.produto_nome || "Sem nome";
+        if (!porProd[k]) porProd[k] = { q: 0, v: 0, unidade: "" };
+        porProd[k].q += parseFloat(m.quantidade) || 0;
+        porProd[k].v += (parseFloat(m.quantidade) || 0) * (parseFloat(m.valor_unitario) || 0);
+        var pr = produtos.find(function(p) { return p.nome === k; });
+        if (pr) porProd[k].unidade = pr.unidade_consumo || pr.unidade || "";
+      });
+      var listaP = Object.keys(porProd).map(function(k) { return Object.assign({ nome: k }, porProd[k]); }).sort(function(a, b) { return b.v - a.v; });
+      var totalMesP = listaP.reduce(function(a, x) { return a + x.v; }, 0);
+      var labelMesP = new Date(histMes + "-01T12:00:00").toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
+      function exportarProdPDF() {
+        var linhas = listaP.map(function(p) {
+          return "<tr><td style='font-weight:600;padding:6px 10px'>" + p.nome + "</td><td style='padding:6px 10px'>" + (Math.round(p.q * 100) / 100) + " " + (p.unidade || "") + "</td><td style='text-align:right;padding:6px 10px;font-weight:700'>" + fmt(p.v) + "\u20AC</td></tr>";
+        }).join("");
+        var win = window.open("", "_blank");
+        win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Consumo por Produto</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C}h1{margin-bottom:2px}h2{color:#64748B;font-weight:normal;margin-top:0;margin-bottom:24px}table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;padding:6px 10px;background:#1A3A5C;color:#fff;font-size:10px;text-transform:uppercase}tr{border-bottom:1px solid #E2EBF4}tfoot td{font-weight:800;padding:10px;border-top:2px solid #1A3A5C}@media print{body{padding:15px}}</style></head><body><h1>SamorClean</h1><h2>Consumo de material por produto \u2014 " + labelMesP + "</h2><table><thead><tr><th>Produto</th><th>Quantidade</th><th style='text-align:right'>Custo</th></tr></thead><tbody>" + linhas + "</tbody><tfoot><tr><td>Total</td><td></td><td style='text-align:right'>" + fmt(totalMesP) + "\u20AC</td></tr></tfoot></table><script>window.onload=function(){window.print();}<\/script></body></html>");
+        win.document.close();
+      }
+      return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 12 } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "\uD83D\uDCE6 Consumo por produto"),
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+            /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: "#334155", textTransform: "capitalize" } }, labelMesP),
+            listaP.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: exportarProdPDF, style: Object.assign({}, btnO, { padding: "4px 12px", fontSize: 11 }) }, "\uD83D\uDCC4 PDF")
+          )
+        ),
+        listaP.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 20, color: "#94A3B8", fontSize: 12 } }, "Sem consumo registado neste m\xEAs.") :
+        /* @__PURE__ */ React.createElement("div", null,
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } }, listaP.map(function(p, i) {
+            return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "#F8FAFC", borderRadius: 8 } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#1A3A5C" } }, p.nome),
+              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 14, alignItems: "center" } },
+                /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#64748B" } }, Math.round(p.q * 100) / 100, " ", p.unidade),
+                /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 800, color: "#1A3A5C", minWidth: 70, textAlign: "right" } }, fmt(p.v), "\u20AC")
+              )
+            );
+          })),
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", padding: "10px 12px", marginTop: 6, borderTop: "2px solid #E2EBF4", fontWeight: 800, color: "#1A3A5C" } },
+            /* @__PURE__ */ React.createElement("span", null, "Total do m\xEAs"),
+            /* @__PURE__ */ React.createElement("span", null, fmt(totalMesP), "\u20AC")
+          )
+        )
+      );
+    })(),
     showAnalise && /* @__PURE__ */ React.createElement(StockAnalise, { consumos, produtos }),
     emBaixo.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#FEF2F2", border: "1.5px solid #EF4444" }) },
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#991B1B", marginBottom: 6 } }, "\u26A0 ", emBaixo.length, " produto", emBaixo.length !== 1 ? "s" : "", " em baixo de stock:"),
