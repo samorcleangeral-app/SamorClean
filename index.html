@@ -1457,7 +1457,7 @@ function Finance() {
     if (isOrcamentoCliente) {
       receita = jobs.reduce(function(s, j) { return s + (j.val || 0); }, 0);
     } else if (c.tipo_faturacao === "visita") {
-      receita = jobs.length * (parseFloat(c.valor_visita) || 0);
+      receita = jobs.reduce(function(s, j) { return s + (parseFloat(j.val) || 0); }, 0);
     } else if (c.tipo_faturacao === "mensal") {
       receita = parseFloat(c.valor_visita) || 0;
     } else {
@@ -2479,7 +2479,7 @@ function Routes() {
       var jaGerouAntes = !!v.ultima_gerada;
       var primeiraDesteLote = datasAlvo.length > 0 ? datasAlvo[0] : null;
       datasAlvo.forEach(function(dataStr) {
-        var jaExiste = jobsFrescos.some(function(j) { return j.client_id === v.client_id && j.date === dataStr; }) || novosServicos.some(function(j) { return j.client_id === v.client_id && j.date === dataStr; });
+        var jaExiste = jobsFrescos.some(function(j) { return j.client_id === v.client_id && j.date === dataStr && j.t1 === v.hora_inicio; }) || novosServicos.some(function(j) { return j.client_id === v.client_id && j.date === dataStr && j.t1 === v.hora_inicio; });
         if (jaExiste) return;
         var horas = horasReais(v.hora_inicio, v.hora_fim);
         // Nunca arrastar inactivos dos moldes para serviços novos
