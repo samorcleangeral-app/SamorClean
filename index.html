@@ -9101,8 +9101,9 @@ function Manager(props) {
     const monthEnd = localDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
     const past60 = localDateStr(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 60));
     var _dow = (now.getDay() + 6) % 7;
-    const semSegunda = localDateStr(new Date(now.getFullYear(), now.getMonth(), now.getDate() - _dow));
-    const semDomingo = localDateStr(new Date(now.getFullYear(), now.getMonth(), now.getDate() - _dow + 6));
+    const semSegunda = localDateStr(now);
+    const semDomingo = localDateStr(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 13));
+    const fimEstaSemana = localDateStr(new Date(now.getFullYear(), now.getMonth(), now.getDate() - _dow + 6));
     Promise.all([
       db.list("clientes", "?select=id,name,freq,iva_type,ativo"),
       db.list("servicos", "?select=*&order=date&date=eq." + today),
@@ -9180,7 +9181,7 @@ function Manager(props) {
       var nomesEmp = {};
       (results[4] || []).forEach(function(e) { nomesEmp[e.id] = e.name; });
       var ausSem = (results[16] || []).filter(function(a) { return (a.estado || "aprovado") === "aprovado"; }).map(function(a) {
-        return { funcionario_id: a.funcionario_id, nome: nomesEmp[a.funcionario_id] || "\u2014", tipo: a.tipo, data_inicio: a.data_inicio, data_fim: a.data_fim || a.data_inicio };
+        return { funcionario_id: a.funcionario_id, nome: nomesEmp[a.funcionario_id] || "\u2014", tipo: a.tipo, data_inicio: a.data_inicio, data_fim: a.data_fim || a.data_inicio, estaSemana: (a.data_inicio || "") <= fimEstaSemana };
       });
       setAusenciasSemana(ausSem);
       const faltasContrato = (results[12] || []).filter(function(a) {
@@ -9314,29 +9315,38 @@ function Manager(props) {
       ]));
     }, 1e3);
   }, style: Object.assign({}, btnO, { fontSize: 12, padding: "8px 14px" }) }, "\u2B07 Backup CSV")), (function() {
-    var faltasSem = ausenciasSemana.filter(function(a) { return a.tipo === "Falta"; });
     var totalAusentes = ausenciasSemana.length;
-    var DIAS = ["Seg", "Ter", "Qua", "Qui", "Sex", "S\xE1b", "Dom"];
+    var estaSem = ausenciasSemana.filter(function(a) { return a.estaSemana; });
+    var proxSem = ausenciasSemana.filter(function(a) { return !a.estaSemana; });
     function diasLabel(a) {
       var ini = new Date(a.data_inicio + "T12:00:00"), fim = new Date(a.data_fim + "T12:00:00");
-      if (a.data_inicio === a.data_fim) return ini.toLocaleDateString("pt-PT", { weekday: "short" });
-      return ini.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric" }) + " \u2192 " + fim.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric" });
+      if (a.data_inicio === a.data_fim) return ini.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" });
+      return ini.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric" }) + " \u2192 " + fim.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" });
+    }
+    function linhaAus(a, i) {
+      var ferias = a.tipo === "F\xE9rias";
+      return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#F8FAFC", borderRadius: 8 } },
+        /* @__PURE__ */ React.createElement("span", { style: { background: ferias ? "#DCFCE7" : "#FEF3C7", color: ferias ? "#15803D" : "#92400E", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" } }, a.tipo),
+        /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#1A3A5C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, a.nome),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8" } }, diasLabel(a))
+        )
+      );
+    }
+    function grupo(titulo, lista, cor) {
+      if (lista.length === 0) return null;
+      return /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: cor, textTransform: "uppercase", marginBottom: 6 } }, titulo, " (", lista.length, ")"),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 8 } }, lista.map(linhaAus))
+      );
     }
     return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, borderLeft: "3px solid " + (totalAusentes > 0 ? "#F59E0B" : "#16A34A") }) },
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: totalAusentes > 0 ? 12 : 0 } },
-        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "\uD83D\uDCC5 Ausências esta semana"),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, totalAusentes === 0 ? "Ningu\xE9m ausente esta semana \u2705" : totalAusentes + (totalAusentes === 1 ? " pessoa ausente" : " pessoas ausentes"))
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "\uD83D\uDCC5 Ausências \u2014 próximas 2 semanas"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, totalAusentes === 0 ? "Ningu\xE9m ausente \u2705" : totalAusentes + (totalAusentes === 1 ? " ausência" : " ausências"))
       ),
-      totalAusentes > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 8 } }, ausenciasSemana.map(function(a, i) {
-        var ferias = a.tipo === "F\xE9rias";
-        return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#F8FAFC", borderRadius: 8 } },
-          /* @__PURE__ */ React.createElement("span", { style: { background: ferias ? "#DCFCE7" : "#FEF3C7", color: ferias ? "#15803D" : "#92400E", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" } }, a.tipo),
-          /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } },
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#1A3A5C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, a.nome),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8" } }, diasLabel(a))
-          )
-        );
-      }))
+      grupo("Esta semana", estaSem, "#DC2626"),
+      grupo("Próxima semana", proxSem, "#F59E0B")
     );
   })(), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 20 } }, [
     { l: "Clientes activos", v: clientCount, c: "#2E6DA4", go: function() {
