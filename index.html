@@ -5451,6 +5451,32 @@ function Employees() {
         return minhas.some(function(m) { return sobrepoe(m, outra); });
       });
     }
+    function diasNoMes(fid, mesIdx) {
+      var total = 0;
+      feriasNoMes(fid, mesIdx).forEach(function(f) {
+        var ini = new Date(f.data_inicio + "T12:00:00"), fim = new Date((f.data_fim || f.data_inicio) + "T12:00:00");
+        var mStart = new Date(anoMapa, mesIdx, 1), mEnd = new Date(anoMapa, mesIdx + 1, 0);
+        var d = new Date(Math.max(ini, mStart)), dEnd = new Date(Math.min(fim, mEnd));
+        while (d <= dEnd) { total++; d.setDate(d.getDate() + 1); }
+      });
+      return total;
+    }
+    var nomeEmp = {};
+    empsComFerias.forEach(function(e) { nomeEmp[e.id] = e.name; });
+    var conflitos = [];
+    for (var ci = 0; ci < feriasDoAno.length; ci++) {
+      for (var cj = ci + 1; cj < feriasDoAno.length; cj++) {
+        var fa = feriasDoAno[ci], fb = feriasDoAno[cj];
+        if (fa.funcionario_id === fb.funcionario_id) continue;
+        if (sobrepoe(fa, fb)) {
+          var ini = fa.data_inicio > fb.data_inicio ? fa.data_inicio : fb.data_inicio;
+          var afim = (fa.data_fim || fa.data_inicio), bfim = (fb.data_fim || fb.data_inicio);
+          var fim = afim < bfim ? afim : bfim;
+          conflitos.push({ a: nomeEmp[fa.funcionario_id] || fa.funcionario_id, b: nomeEmp[fb.funcionario_id] || fb.funcionario_id, ini: ini, fim: fim });
+        }
+      }
+    }
+    function dLabel(s) { return new Date(s + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }); }
     return React.createElement("div", null,
       React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 20 } },
         React.createElement("button", { onClick: function() { setView("list"); }, style: btnO }, "\u2190 Voltar"),
@@ -5458,6 +5484,12 @@ function Employees() {
         React.createElement("button", { onClick: function() { setAnoMapa(anoMapa - 1); }, style: Object.assign({}, btnO, { padding: "4px 12px" }) }, "\u2039"),
         React.createElement("span", { style: { fontSize: 15, fontWeight: 800, color: "#1A3A5C", minWidth: 50, textAlign: "center" } }, anoMapa),
         React.createElement("button", { onClick: function() { setAnoMapa(anoMapa + 1); }, style: Object.assign({}, btnO, { padding: "4px 12px" }) }, "\u203A")
+      ),
+      conflitos.length > 0 && React.createElement("div", { style: Object.assign({}, card, { background: "#FEF2F2", border: "1.5px solid #E24B4A", marginBottom: 16 }) },
+        React.createElement("div", { style: { fontWeight: 800, fontSize: 13, color: "#B91C1C", marginBottom: 8 } }, "\u26A0 ", conflitos.length, conflitos.length === 1 ? " cruzamento de f\xE9rias" : " cruzamentos de f\xE9rias"),
+        React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 5 } }, conflitos.map(function(c, i) {
+          return React.createElement("div", { key: i, style: { fontSize: 12, color: "#7F1D1D" } }, React.createElement("b", null, c.a), " e ", React.createElement("b", null, c.b), " \u2014 ", c.ini === c.fim ? dLabel(c.ini) : dLabel(c.ini) + " a " + dLabel(c.fim));
+        }))
       ),
       React.createElement("div", { style: Object.assign({}, card, { overflowX: "auto" }) },
         React.createElement("div", { style: { display: "grid", gridTemplateColumns: "110px repeat(12, 1fr)", gap: 2, minWidth: 640 } },
@@ -5467,16 +5499,16 @@ function Employees() {
           empsComFerias.map(function(e) {
             return [React.createElement("div", { key: e.id + "n", style: { fontSize: 11, fontWeight: 600, color: "#1A3A5C", display: "flex", alignItems: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, e.name)].concat(
               MESES.map(function(m, mi) {
-                var tem = feriasNoMes(e.id, mi).length > 0;
-                var cruza = tem && temCruzamento(e.id, mi);
-                return React.createElement("div", { key: e.id + mi, title: cruza ? "Cruza com outro colaborador" : (tem ? "F\xE9rias" : ""), style: { height: 22, borderRadius: 3, background: cruza ? "#E24B4A" : tem ? "#1D9E75" : "#F1F5F9" } });
+                var nd = diasNoMes(e.id, mi);
+                var cruza = nd > 0 && temCruzamento(e.id, mi);
+                return React.createElement("div", { key: e.id + mi, title: nd > 0 ? (nd + " dia(s)" + (cruza ? " \u2014 cruza com outro" : "")) : "", style: { height: 26, borderRadius: 3, background: cruza ? "#E24B4A" : nd > 0 ? "#1D9E75" : "#F1F5F9", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: nd > 0 ? "#fff" : "transparent" } }, nd > 0 ? nd : "");
               })
             );
           })
         ),
         React.createElement("div", { style: { display: "flex", gap: 16, marginTop: 14, fontSize: 10, color: "#94A3B8", flexWrap: "wrap" } },
-          React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 5 } }, React.createElement("span", { style: { width: 10, height: 10, background: "#1D9E75", borderRadius: 2 } }), "F\xE9rias"),
-          React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 5 } }, React.createElement("span", { style: { width: 10, height: 10, background: "#E24B4A", borderRadius: 2 } }), "Cruzamento (2+ ao mesmo tempo)")
+          React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 5 } }, React.createElement("span", { style: { width: 10, height: 10, background: "#1D9E75", borderRadius: 2 } }), "Dias de f\xE9rias (n\xBA no m\xEAs)"),
+          React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 5 } }, React.createElement("span", { style: { width: 10, height: 10, background: "#E24B4A", borderRadius: 2 } }), "Cruza com outro colaborador")
         )
       )
     );
