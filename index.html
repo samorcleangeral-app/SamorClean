@@ -9320,28 +9320,45 @@ function Manager(props) {
     }, 1e3);
   }, style: Object.assign({}, btnO, { fontSize: 12, padding: "8px 14px" }) }, "\u2B07 Backup CSV")), (function() {
     var totalAusentes = ausenciasSemana.length;
-    var estaSem = ausenciasSemana.filter(function(a) { return a.estaSemana; });
-    var proxSem = ausenciasSemana.filter(function(a) { return !a.estaSemana; });
-    function diasLabel(a) {
+    function ordPorData(lista) { return lista.slice().sort(function(a, b) { return (a.data_inicio || "") < (b.data_inicio || "") ? -1 : 1; }); }
+    var estaSem = ordPorData(ausenciasSemana.filter(function(a) { return a.estaSemana; }));
+    var proxSem = ordPorData(ausenciasSemana.filter(function(a) { return !a.estaSemana; }));
+    function contaDias(a) {
       var ini = new Date(a.data_inicio + "T12:00:00"), fim = new Date(a.data_fim + "T12:00:00");
-      if (a.data_inicio === a.data_fim) return ini.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" });
-      return ini.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric" }) + " \u2192 " + fim.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" });
+      return Math.round((fim - ini) / 86400000) + 1;
+    }
+    function periodoLabel(a) {
+      var ini = new Date(a.data_inicio + "T12:00:00"), fim = new Date(a.data_fim + "T12:00:00");
+      var d = contaDias(a);
+      if (a.data_inicio === a.data_fim) {
+        var base = ini.toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "short" });
+        return a.parcial ? base + " \xB7 parcial" : base + " \xB7 1 dia";
+      }
+      return ini.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric" }) + " \u2192 " + fim.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" }) + " \xB7 " + d + " dias";
     }
     function linhaAus(a, i) {
       var ferias = a.tipo === "F\xE9rias";
-      return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#F8FAFC", borderRadius: 8 } },
-        /* @__PURE__ */ React.createElement("span", { style: { background: ferias ? "#DCFCE7" : "#FEF3C7", color: ferias ? "#15803D" : "#92400E", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" } }, a.tipo),
-        /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } },
-          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#1A3A5C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, a.nome),
-          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8" } }, diasLabel(a))
-        )
+      var falta = a.tipo === "Falta" || (a.tipo || "").indexOf("Falta") === 0;
+      var corBadge = ferias ? { bg: "#DCFCE7", tx: "#15803D" } : falta ? { bg: "#FEF3C7", tx: "#92400E" } : { bg: "#EFF6FF", tx: "#2E6DA4" };
+      var ini = new Date(a.data_inicio + "T12:00:00");
+      return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "#fff", border: "0.5px solid #E2EBF4", borderRadius: 10 } },
+        /* @__PURE__ */ React.createElement("div", { style: { width: 40, textAlign: "center", flexShrink: 0 } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: "#1A3A5C", lineHeight: 1 } }, ini.getDate()),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", textTransform: "uppercase" } }, ini.toLocaleDateString("pt-PT", { weekday: "short" }))
+        ),
+        /* @__PURE__ */ React.createElement("div", { style: { width: 1, alignSelf: "stretch", background: "#E2EBF4" } }),
+        /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, a.nome),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, periodoLabel(a))
+        ),
+        /* @__PURE__ */ React.createElement("span", { style: { background: corBadge.bg, color: corBadge.tx, borderRadius: 6, padding: "3px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" } }, a.tipo)
       );
     }
     function grupo(titulo, lista, cor) {
       if (lista.length === 0) return null;
-      return /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } },
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: cor, textTransform: "uppercase", marginBottom: 6 } }, titulo, " (", lista.length, ")"),
-        /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 8 } }, lista.map(linhaAus))
+      return /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: cor, textTransform: "uppercase", marginBottom: 8 } }, titulo, " (", lista.length, ")"),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, lista.map(linhaAus))
       );
     }
     return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, borderLeft: "3px solid " + (totalAusentes > 0 ? "#F59E0B" : "#16A34A") }) },
