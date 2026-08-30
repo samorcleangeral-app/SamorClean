@@ -9120,7 +9120,7 @@ function Manager(props) {
       db.list("ausencias", "?select=id,funcionario_id,data_inicio&tipo=eq.Falta&data_inicio=gte." + monthStart + "&data_inicio=lte." + monthEnd),
       db.list("funcionarios_rh", "?select=funcionario_id,tipo_contrato"),
       db.list("alertas_dispensados", "?select=chave"),
-      db.list("ausencias", "?select=funcionario_id,tipo,data_inicio,data_fim,estado&data_fim=gte." + semSegunda + "&data_inicio=lte." + semDomingo)
+      db.list("ausencias", "?select=funcionario_id,tipo,data_inicio,data_fim,estado&data_inicio=lte." + semDomingo + "&data_inicio=gte." + past60)
     ]).then(function(results) {
       setClientCount(results[0] ? results[0].length : 0);
       setTodayJobs(results[1] || []);
@@ -9180,7 +9180,11 @@ function Manager(props) {
       (results[13] || []).forEach(function(r) { rhMap[r.funcionario_id] = r.tipo_contrato; });
       var nomesEmp = {};
       (results[4] || []).forEach(function(e) { nomesEmp[e.id] = e.name; });
-      var ausSem = (results[16] || []).filter(function(a) { return (a.estado || "aprovado") === "aprovado"; }).map(function(a) {
+      var ausSem = (results[16] || []).filter(function(a) {
+        if ((a.estado || "aprovado") !== "aprovado") return false;
+        var fim = a.data_fim || a.data_inicio;
+        return fim >= semSegunda && (a.data_inicio || "") <= semDomingo;
+      }).map(function(a) {
         return { funcionario_id: a.funcionario_id, nome: nomesEmp[a.funcionario_id] || "\u2014", tipo: a.tipo, data_inicio: a.data_inicio, data_fim: a.data_fim || a.data_inicio, estaSemana: (a.data_inicio || "") <= fimEstaSemana };
       });
       setAusenciasSemana(ausSem);
