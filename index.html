@@ -8778,7 +8778,14 @@ function Avaliacoes() {
     /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar cliente ou colaborador...", value: avSearch, onChange: function(e) { setAvSearch(e.target.value); } }),
     (function() {
       var mesA = localDateStr().slice(0, 7);
-      var doMes = avs.filter(function(a) { return (a.created_at || "").slice(0, 7) === mesA; });
+      // Prémio mensal: só conta avaliações avaliadas ESTE mês E cujo serviço também foi este mês.
+      // Avaliações atrasadas (serviço de mês anterior, avaliado agora) contam para a média geral, não para o prémio.
+      var doMes = avs.filter(function(a) {
+        if ((a.created_at || "").slice(0, 7) !== mesA) return false;
+        var dataServico = servicoDatas[a.servico_id];
+        if (!dataServico) return true;
+        return (dataServico || "").slice(0, 7) === mesA;
+      });
       var porColab = {};
       Object.keys(empsMap).forEach(function(eid) {
         var e = empsMap[eid];
