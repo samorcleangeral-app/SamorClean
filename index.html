@@ -8718,7 +8718,7 @@ function Avaliacoes() {
     Promise.all([
       db.list("avaliacoes", "?select=*&order=created_at.desc"),
       db.list("clientes", "?select=id,name,email,contact,phone,ativo"),
-      db.list("funcionarios", "?select=id,name,av"),
+      db.list("funcionarios", "?select=id,name,av,ativo"),
       db.list("servicos", "?select=id,client_id,date,rated&status=eq.completed"),
       db.list("client_contacts", "?select=client_id,name,email,phone")
     ]).then(function(results) {
@@ -9683,7 +9683,7 @@ function Manager(props) {
     return /* @__PURE__ */ React.createElement("div", { key: j.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 6, height: 6, borderRadius: "50%", background: "#16A34A", flexShrink: 0 } }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, j.cn), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, (/* @__PURE__ */ new Date(j.date + "T12:00:00")).toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" }), " ", j.t1)), /* @__PURE__ */ React.createElement(Bdg, { label: "Feito", bg: "#DCFCE7", tx: "#15803D" }));
   }), /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setView("routes");
-  }, style: Object.assign({}, btnO, { width: "100%", marginTop: 12, fontSize: 12, padding: "8px 0", textAlign: "center" }) }, "Ver rotas")), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "Ranking da Equipa"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 10 } }, "Ordenado pela nota deste m\xEAs \u2014 nota hist\xF3rica ao lado"), emps.slice().map(function(e) {
+  }, style: Object.assign({}, btnO, { width: "100%", marginTop: 12, fontSize: 12, padding: "8px 0", textAlign: "center" }) }, "Ver rotas")), /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "Ranking da Equipa"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 10 } }, "Ordenado pela nota deste m\xEAs \u2014 nota hist\xF3rica ao lado"), emps.slice().filter(function(e) { return e.ativo !== false; }).map(function(e) {
     var rMes = ratingsMes[e.id];
     return Object.assign({}, e, { _ordenacao: rMes ? rMes.media : -1 });
   }).sort(function(a, b) {
@@ -9961,10 +9961,24 @@ function Employee(props) {
   const [ratingMesEmp, setRatingMesEmp] = useState(null);
   useEffect(function() {
     if (!emp) { setRatingMesEmp(null); return; }
-    var monthStart = new Date((/* @__PURE__ */ new Date()).getFullYear(), (/* @__PURE__ */ new Date()).getMonth(), 1).toISOString();
-    db.list("avaliacoes", "?select=stars&funcionario_id=eq." + encodeURIComponent(emp.id) + "&created_at=gte." + monthStart).then(function(rows) {
-      if (rows && rows.length > 0) {
-        var media = rows.reduce(function(s, r) { return s + (r.stars || 0); }, 0) / rows.length;
+    var agora = /* @__PURE__ */ new Date();
+    var mesYM = agora.getFullYear() + "-" + String(agora.getMonth() + 1).padStart(2, "0");
+    var monthStart = new Date(agora.getFullYear(), agora.getMonth(), 1).toISOString();
+    var svcDesde = new Date(agora.getFullYear(), agora.getMonth() - 2, 1).toISOString().slice(0, 10);
+    Promise.all([
+      db.list("avaliacoes", "?select=stars,servico_id&funcionario_id=eq." + encodeURIComponent(emp.id) + "&created_at=gte." + monthStart),
+      db.list("servicos", "?select=id,date&date=gte." + svcDesde)
+    ]).then(function(res) {
+      var rows = res[0] || [];
+      var svcMap = {};
+      (res[1] || []).forEach(function(sv) { svcMap[sv.id] = sv.date; });
+      var validas = rows.filter(function(r) {
+        var ds = svcMap[r.servico_id];
+        if (!ds) return true;
+        return (ds || "").slice(0, 7) === mesYM;
+      });
+      if (validas.length > 0) {
+        var media = validas.reduce(function(s, r) { return s + (r.stars || 0); }, 0) / validas.length;
         setRatingMesEmp(Math.round(media * 10) / 10);
       } else {
         setRatingMesEmp(null);
