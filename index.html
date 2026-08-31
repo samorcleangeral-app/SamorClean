@@ -9258,12 +9258,13 @@ function Manager(props) {
       db.list("servicos", "?select=client_id,date&date=gte." + past60 + "&order=date.desc"),
       db.list("client_notes", "?select=id&vista_gestao=eq.false&expires_at=gte." + new Date().toISOString()),
       db.list("avaliacoes", "?select=id&vista=is.false"),
-      db.list("avaliacoes", "?select=stars,funcionario_id,created_at&created_at=gte." + new Date(now.getFullYear(), now.getMonth(), 1).toISOString()),
+      db.list("avaliacoes", "?select=stars,funcionario_id,created_at,servico_id&created_at=gte." + new Date(now.getFullYear(), now.getMonth(), 1).toISOString()),
       db.list("ausencias", "?select=id,funcionario_id,data_inicio&tipo=eq.Falta&data_inicio=gte." + monthStart + "&data_inicio=lte." + monthEnd),
       db.list("funcionarios_rh", "?select=funcionario_id,tipo_contrato,horas_dia"),
       db.list("alertas_dispensados", "?select=chave"),
       db.list("ausencias", "?select=funcionario_id,tipo,data_inicio,data_fim,estado&data_inicio=lte." + semDomingo + "&data_inicio=gte." + past60),
-      db.list("ausencias", "?select=funcionario_id,tipo,data_inicio,data_fim,estado,parcial,hora_inicio,hora_fim")
+      db.list("ausencias", "?select=funcionario_id,tipo,data_inicio,data_fim,estado,parcial,hora_inicio,hora_fim"),
+      db.list("servicos", "?select=id,date&date=gte." + new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString().slice(0, 10))
     ]).then(function(results) {
       setClientCount(results[0] ? results[0].length : 0);
       setTodayJobs(results[1] || []);
@@ -9276,7 +9277,15 @@ function Manager(props) {
       setNotasClientesNovas(results[9] ? results[9].length : 0);
       setAvaliacoesNovas(results[10] ? results[10].length : 0);
       var ratingsMesCalc = {};
-      (results[11] || []).forEach(function(a) {
+      var mesAtualYM = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+      var svcDatasHome = {};
+      (results[17] || []).forEach(function(sv) { svcDatasHome[sv.id] = sv.date; });
+      (results[11] || []).filter(function(a) {
+        if ((a.created_at || "").slice(0, 7) !== mesAtualYM) return false;
+        var ds = svcDatasHome[a.servico_id];
+        if (!ds) return true;
+        return (ds || "").slice(0, 7) === mesAtualYM;
+      }).forEach(function(a) {
         if (!ratingsMesCalc[a.funcionario_id]) ratingsMesCalc[a.funcionario_id] = { soma: 0, count: 0 };
         ratingsMesCalc[a.funcionario_id].soma += a.stars || 0;
         ratingsMesCalc[a.funcionario_id].count++;
