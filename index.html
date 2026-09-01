@@ -447,7 +447,7 @@ function calcValorFaturacao(c, jobs, horas) {
   if (isOrcamento) return { valor: jobs.reduce(function(s, j) { return s + (j.val || 0); }, 0), tipo: "orcamento" };
   var tipoFat = c.tipo_faturacao || "hora";
   if (tipoFat === "mensal") return { valor: parseFloat(c.valor_visita) || 0, tipo: "mensal" };
-  if (tipoFat === "visita") return { valor: jobs.length * (parseFloat(c.valor_visita) || 0), tipo: "visita" };
+  if (tipoFat === "visita") return { valor: jobs.reduce(function(s, j) { return s + (parseFloat(j.val) || 0); }, 0), tipo: "visita" };
   return { valor: horas * (c.price_per_hour || 0), tipo: "hora" };
 }
 function calcCustoAteHojeReal(emp, rhData, absData, monthJobs, hoje) {
