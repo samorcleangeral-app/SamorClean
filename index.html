@@ -9217,6 +9217,7 @@ function Manager(props) {
   const [pedidosPendentes, setPedidosPendentes] = useState(0);
   const [pedidosColabPendentes, setPedidosColabPendentes] = useState(0);
   const [notasClientesNovas, setNotasClientesNovas] = useState(0);
+  const [pedidosPendentesLista, setPedidosPendentesLista] = useState([]);
   const [ausenciasSemana, setAusenciasSemana] = useState([]);
   const [todasAusencias, setTodasAusencias] = useState([]);
   const [mesAbsentismo, setMesAbsentismo] = useState(localDateStr().slice(0, 7));
@@ -9254,7 +9255,7 @@ function Manager(props) {
       db.list("funcionarios", "?select=*&ativo=neq.false&order=id"),
       db.list("pedidos_extra", "?select=id&status=eq.pendente"),
       db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd + "&status=eq.completed"),
-      db.list("pedidos_colaboradores", "?select=id&estado=eq.pendente"),
+      db.list("pedidos_colaboradores", "?select=id,tipo,funcionario_nome,descricao&estado=eq.pendente"),
       db.list("servicos", "?select=client_id,date&date=gte." + past60 + "&order=date.desc"),
       db.list("client_notes", "?select=id&vista_gestao=eq.false&expires_at=gte." + new Date().toISOString()),
       db.list("avaliacoes", "?select=id&vista=is.false"),
@@ -9274,6 +9275,7 @@ function Manager(props) {
       setEmps(results[4] || []);
       setPedidosPendentes(results[5] ? results[5].length : 0);
       setPedidosColabPendentes(results[7] ? results[7].length : 0);
+      setPedidosPendentesLista(results[7] || []);
       setNotasClientesNovas(results[9] ? results[9].length : 0);
       setAvaliacoesNovas(results[10] ? results[10].length : 0);
       var ratingsMesCalc = {};
@@ -9475,6 +9477,40 @@ function Manager(props) {
       ]));
     }, 1e3);
   }, style: Object.assign({}, btnO, { fontSize: 12, padding: "8px 14px" }) }, "\u2B07 Backup CSV")), (function() {
+    // LEMBRETES — tarefas de gestão que precisam de ti (estados, não dispensáveis)
+    var ausenciasPorAprovar = pedidosPendentesLista.filter(function(p) { return p.tipo === "ausencia"; });
+    var outrosPedidos = pedidosPendentesLista.filter(function(p) { return p.tipo !== "ausencia"; });
+    // Cruzamento de férias (usa todasAusencias já carregadas)
+    function sobrepoeFer(a, b) {
+      var ai = a.data_inicio, af = a.data_fim || a.data_inicio, bi = b.data_inicio, bf = b.data_fim || b.data_inicio;
+      return ai <= bf && bi <= af;
+    }
+    var feriasAprovadas = (todasAusencias || []).filter(function(a) { return a.tipo === "F\xE9rias" && (a.estado || "aprovado") === "aprovado" && (a.data_fim || a.data_inicio) >= localDateStr(); });
+    var cruzamentosFer = [];
+    for (var i = 0; i < feriasAprovadas.length; i++) {
+      for (var j = i + 1; j < feriasAprovadas.length; j++) {
+        if (feriasAprovadas[i].funcionario_id !== feriasAprovadas[j].funcionario_id && sobrepoeFer(feriasAprovadas[i], feriasAprovadas[j])) {
+          cruzamentosFer.push([feriasAprovadas[i], feriasAprovadas[j]]);
+        }
+      }
+    }
+    var lembretes = [];
+    if (ausenciasPorAprovar.length > 0) lembretes.push({ cor: "#F59E0B", icon: "\uD83D\uDCDD", txt: ausenciasPorAprovar.length + (ausenciasPorAprovar.length === 1 ? " pedido de ausência" : " pedidos de ausência") + " à espera de aprovação", go: function() { setView("pedidos_colab"); } });
+    if (cruzamentosFer.length > 0) lembretes.push({ cor: "#E24B4A", icon: "\u26A0", txt: cruzamentosFer.length + (cruzamentosFer.length === 1 ? " cruzamento de férias" : " cruzamentos de férias") + " por resolver", go: function() { setView("employees"); } });
+    if (notasClientesNovas > 0) lembretes.push({ cor: "#2E6DA4", icon: "\uD83D\uDCAC", txt: notasClientesNovas + (notasClientesNovas === 1 ? " nota de cliente por ver" : " notas de clientes por ver"), go: function() { setView("clients"); } });
+    if (outrosPedidos.length > 0) lembretes.push({ cor: "#7C3AED", icon: "\uD83D\uDCE6", txt: outrosPedidos.length + (outrosPedidos.length === 1 ? " outro pedido" : " outros pedidos") + " (fardamento/material) por responder", go: function() { setView("pedidos_colab"); } });
+    if (lembretes.length === 0) return null;
+    return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, borderLeft: "3px solid #F59E0B" }) },
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 10 } }, "\uD83D\uDD14 A precisar de ti"),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, lembretes.map(function(l, i) {
+        return /* @__PURE__ */ React.createElement("div", { key: i, onClick: l.go, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "#F8FAFC", borderRadius: 8, cursor: "pointer", borderLeft: "3px solid " + l.cor } },
+          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 16 } }, l.icon),
+          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 600, color: "#334155", flex: 1 } }, l.txt),
+          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 16, color: "#CBD5E1" } }, "\u203A")
+        );
+      }))
+    );
+  })(), (function() {
     var totalAusentes = ausenciasSemana.length;
     function ordPorData(lista) { return lista.slice().sort(function(a, b) { return (a.data_inicio || "") < (b.data_inicio || "") ? -1 : 1; }); }
     var estaSem = ordPorData(ausenciasSemana.filter(function(a) { return a.estaSemana; }));
