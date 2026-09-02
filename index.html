@@ -8698,17 +8698,41 @@ function Avaliacoes() {
   function corpoEmailAvaliacao(cliente, contacto) {
     var svcs = (porAvaliar || []).filter(function(j) { return j.client_id === cliente.id; })
       .filter(function(j) { return Math.floor((new Date() - new Date(j.date + "T12:00:00")) / (24 * 3600 * 1e3)) <= 30; })
-      .sort(function(a, b) { return a.date < b.date ? 1 : -1; });
+      .sort(function(a, b) { return a.date < b.date ? 1 : -1; })
+      .slice(0, 8);
     var baseUrl = "https://samorcleangeral-app.github.io/SamorClean?cliente=" + cliente.id;
-    var links = svcs.slice(0, 5).map(function(j) {
-      return "\u2022 Servi\xE7o de " + new Date(j.date + "T12:00:00").toLocaleDateString("pt-PT") + ":\n  " + baseUrl + "&avaliar=" + j.id;
+    // Agrupar por mês
+    var porMes = {};
+    var ordemMeses = [];
+    svcs.forEach(function(j) {
+      var d = new Date(j.date + "T12:00:00");
+      var chave = d.toLocaleDateString("pt-PT", { month: "long", year: "numeric" }).toUpperCase();
+      if (!porMes[chave]) { porMes[chave] = []; ordemMeses.push(chave); }
+      porMes[chave].push(j);
+    });
+    var blocos = ordemMeses.map(function(mes) {
+      var linhas = porMes[mes].map(function(j) {
+        var dataFmt = new Date(j.date + "T12:00:00").toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long" });
+        return "  \u25B8 Servi\xE7o de " + dataFmt + "\n     " + baseUrl + "&avaliar=" + j.id;
+      }).join("\n\n");
+      return "\u2500\u2500 " + mes + " \u2500\u2500\n\n" + linhas;
     }).join("\n\n");
-    var nome = contacto && contacto.name ? contacto.name.split(" ")[0] : "";
-    return "Ol\xE1" + (nome ? " " + nome : "") + ",\n\nA sua avalia\xE7\xE3o sobre o(s) \xFAltimo(s) servi\xE7o(s) da SamorClean ajuda-nos a manter o padr\xE3o de qualidade que a nossa equipa trabalha para entregar todos os dias \u2014 e conta directamente para o pr\xE9mio de produtividade dos colaboradores que o realizaram.\n\n"
+    var varios = svcs.length > 1;
+    return "Exmo(a). Cliente,\n\n"
+      + "A sua opini\xE3o \xE9 muito importante para n\xF3s. Avaliar os nossos servi\xE7os ajuda-nos a manter o padr\xE3o de qualidade que procuramos entregar todos os dias, e reconhece directamente o trabalho dos colaboradores que o realizaram.\n\n"
       + (svcs.length > 0
-          ? "Basta clicar no link do servi\xE7o e introduzir o seu PIN:\n\n" + links + "\n\n(Os links s\xE3o v\xE1lidos durante 30 dias.)"
-          : "Pode avaliar atrav\xE9s do QR code no local ou do portal do cliente:\n" + baseUrl)
-      + "\n\nDemora menos de 1 minuto.\n\nObrigado pelo seu tempo.\n\nEquipa SamorClean";
+          ? "COMO AVALIAR:\n"
+            + "1. Clique no link do servi\xE7o que pretende avaliar.\n"
+            + "2. Confirme a data do servi\xE7o (para n\xE3o trocar).\n"
+            + "3. Introduza o seu PIN de acesso.\n"
+            + "4. Atribua a sua avalia\xE7\xE3o, com sinceridade.\n\n"
+            + (varios
+                ? "Tem " + svcs.length + " servi\xE7os por avaliar, organizados por m\xEAs. Por favor, avalie cada um a pensar nesse dia especifico:\n\n"
+                : "Servi\xE7o a avaliar:\n\n")
+            + blocos
+            + "\n\n(Os links s\xE3o v\xE1lidos durante 30 dias. Servi\xE7os mais antigos deixam de estar dispon\xEDveis para avalia\xE7\xE3o.)"
+          : "De momento n\xE3o tem servi\xE7os por avaliar. Quando tiver, poder\xE1 faz\xEA-lo pelo QR code no local ou pelo portal:\n" + baseUrl)
+      + "\n\nDemora menos de um minuto e agradecemos o seu tempo.\n\nCom os melhores cumprimentos,\nEquipa SamorClean";
   }
   const [showPendentes, setShowPendentes] = useState(false);
   const [mostrarInativosAv, setMostrarInativosAv] = useState(false);
