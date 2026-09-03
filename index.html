@@ -10818,6 +10818,7 @@ function ClientPortal(props) {
   const onExit = props.onExit;
   const clientId = props.clientId || null;
   const isOcasional = props.isOcasional || false;
+  const aberturaRegistadaRef = React.useRef(null);
   const [phase, setPhase] = useState("welcome");
   const clientLastActivityRef = React.useRef(Date.now());
   const [clientTimedOut, setClientTimedOut] = useState(false);
@@ -10930,12 +10931,15 @@ function ClientPortal(props) {
       ]).then(function(results) {
         if (results[0] && results[0].length) {
           setClient(results[0][0]);
-          fetch(SUPABASE_URL + "/rest/v1/qr_aberturas", {
-            method: "POST",
-            headers: dbHeaders(),
-            body: JSON.stringify({ client_id: clientId, client_nome: results[0][0].name }),
-            keepalive: true
-          }).catch(function(e) { console.warn("Falha ao registar abertura QR:", e); });
+          if (aberturaRegistadaRef.current !== clientId) {
+            aberturaRegistadaRef.current = clientId;
+            fetch(SUPABASE_URL + "/rest/v1/qr_aberturas", {
+              method: "POST",
+              headers: dbHeaders(),
+              body: JSON.stringify({ client_id: clientId, client_nome: results[0][0].name }),
+              keepalive: true
+            }).catch(function(e) { console.warn("Falha ao registar abertura QR:", e); });
+          }
         }
         setContacts(results[1] || []);
         const empList = results[2] || [];
