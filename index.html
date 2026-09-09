@@ -590,6 +590,47 @@ function Finance() {
   const [verTudoCobrar, setVerTudoCobrar] = useState(false);
   const [clientsMap, setClientsMap] = useState({});
   const [despesas, setDespesas] = useState([]);
+  const [ivaTrimestre, setIvaTrimestre] = useState(null);
+  const [ivaTrimIdx, setIvaTrimIdx] = useState(0);
+  useEffect(function() {
+    var hoje = /* @__PURE__ */ new Date();
+    var trimAtual = Math.floor(hoje.getMonth() / 3);
+    var alvo = trimAtual + ivaTrimIdx;
+    var ano = hoje.getFullYear() + Math.floor(alvo / 4);
+    var trim = ((alvo % 4) + 4) % 4;
+    var mesIni = trim * 3;
+    var ini = localDateStr(new Date(ano, mesIni, 1));
+    var fim = localDateStr(new Date(ano, mesIni + 3, 0));
+    Promise.all([
+      db.list("servicos", "?select=val,client_id,val_manual&status=eq.completed&date=gte." + ini + "&date=lte." + fim),
+      db.list("clientes", "?select=id,iva_type"),
+      db.list("despesas", "?select=valor,iva_percentagem,iva_dedutivel,iva_percentagem_dedutivel&data=gte." + ini + "&data=lte." + fim)
+    ]).then(function(r) {
+      var servs = r[0] || [], cls = r[1] || [], desps = r[2] || [];
+      var ivaCli = {};
+      cls.forEach(function(c) { ivaCli[c.id] = c.iva_type || "normal"; });
+      var ivaLiquidado = 0;
+      servs.forEach(function(s) {
+        if (ivaCli[s.client_id] === "autoliquida\xE7\xE3o") return;
+        ivaLiquidado += (parseFloat(s.val) || 0) * 0.23;
+      });
+      var ivaDedutivel = 0;
+      desps.forEach(function(d) {
+        if (!d.iva_dedutivel) return;
+        var perc = d.iva_percentagem != null ? d.iva_percentagem : 23;
+        var ivaDaDespesa = (parseFloat(d.valor) || 0) * (perc / 100) / (1 + perc / 100);
+        ivaDedutivel += ivaDaDespesa * ((d.iva_percentagem_dedutivel != null ? d.iva_percentagem_dedutivel : 100) / 100);
+      });
+      var nomesTrim = ["1º trimestre", "2º trimestre", "3º trimestre", "4º trimestre"];
+      setIvaTrimestre({
+        label: nomesTrim[trim] + " de " + ano,
+        periodo: "Jan-Mar Abr-Jun Jul-Set Out-Dez".split(" ")[trim] + " " + ano,
+        liquidado: ivaLiquidado,
+        dedutivel: ivaDedutivel,
+        aEntregar: ivaLiquidado - ivaDedutivel
+      });
+    });
+  }, [ivaTrimIdx]);
   const [stockSaidas, setStockSaidas] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [avencaParcialEdit, setAvencaParcialEdit] = useState({});
@@ -2105,7 +2146,42 @@ function Finance() {
     { l: "Por pagar", v: fmt(custosPorPagar), c: "#F59E0B" }
   ].map(function(k) {
     return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 14, borderTop: "3px solid " + k.c }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 8 } }, k.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 900, color: k.c } }, k.v));
-  })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, padding: 20, background: margemBruta >= 0 ? "#F0FDF4" : "#FEF2F2", border: "2px solid " + (margemBruta >= 0 ? "#16A34A" : "#EF4444") }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 4 } }, "Margem Bruta do M\xEAs"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, fontWeight: 900, color: margemBruta >= 0 ? "#16A34A" : "#EF4444" } }, fmt(margemBruta)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 2 } }, "Receitas (", fmt(fatSemIva), "\u20AC) \u2212 Despesas (", fmt(totalCustos), "\u20AC) \u2212 M\xE3o de Obra (", fmt(totalCustoMaoObraGeral), "\u20AC)")), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 48, fontWeight: 900, color: margemBruta >= 0 ? "#16A34A" : "#EF4444" } }, margemPct, "%"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, "margem")))), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, marginBottom: 20 } }, /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 16 } }, "Fatura\xE7\xE3o vs Recebido \u2014 6 meses"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", height: 140 } }, monthsData.map(function(m, i) {
+  })), /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, padding: 20, background: margemBruta >= 0 ? "#F0FDF4" : "#FEF2F2", border: "2px solid " + (margemBruta >= 0 ? "#16A34A" : "#EF4444") }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 4 } }, "Margem Bruta do M\xEAs"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, fontWeight: 900, color: margemBruta >= 0 ? "#16A34A" : "#EF4444" } }, fmt(margemBruta)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 2 } }, "Receitas (", fmt(fatSemIva), "\u20AC) \u2212 Despesas (", fmt(totalCustos), "\u20AC) \u2212 M\xE3o de Obra (", fmt(totalCustoMaoObraGeral), "\u20AC)")), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 48, fontWeight: 900, color: margemBruta >= 0 ? "#16A34A" : "#EF4444" } }, margemPct, "%"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, "margem")))), ivaTrimestre && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, padding: 20 }) },
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 16 } },
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "\uD83E\uDDFE Apuramento de IVA \u2014 ", ivaTrimestre.label),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setIvaTrimIdx(ivaTrimIdx - 1); }, style: Object.assign({}, btnO, { padding: "3px 10px" }) }, "\u2039"),
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#64748B", minWidth: 60, textAlign: "center" } }, ivaTrimestre.periodo),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { if (ivaTrimIdx < 0) setIvaTrimIdx(ivaTrimIdx + 1); }, style: Object.assign({}, btnO, { padding: "3px 10px", opacity: ivaTrimIdx < 0 ? 1 : 0.4 }) }, "\u203A")
+      )
+    ),
+    /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 } },
+      /* @__PURE__ */ React.createElement("div", { style: { background: "#F0FDF4", borderRadius: 10, padding: 14 } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#15803D", textTransform: "uppercase", marginBottom: 4 } }, "IVA que cobraste"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#16A34A" } }, fmt(ivaTrimestre.liquidado), "\u20AC"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", marginTop: 2 } }, "nas tuas facturas (liquidado)")
+      ),
+      /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 10, padding: 14 } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#1E40AF", textTransform: "uppercase", marginBottom: 4 } }, "IVA que pagaste"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#2E6DA4" } }, fmt(ivaTrimestre.dedutivel), "\u20AC"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", marginTop: 2 } }, "nas compras/despesas (dedutível)")
+      )
+    ),
+    (function() {
+      var aEntregar = ivaTrimestre.aEntregar;
+      var entregar = aEntregar >= 0;
+      return /* @__PURE__ */ React.createElement("div", { style: { background: entregar ? "#FEF2F2" : "#F0FDF4", border: "2px solid " + (entregar ? "#EF4444" : "#16A34A"), borderRadius: 10, padding: 16, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 } },
+        /* @__PURE__ */ React.createElement("div", null,
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, entregar ? "A entregar ao Estado" : "A recuperar / reportar"),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } }, fmt(ivaTrimestre.liquidado), " cobrado \u2212 ", fmt(ivaTrimestre.dedutivel), " pago")
+        ),
+        /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right" } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 30, fontWeight: 900, color: entregar ? "#EF4444" : "#16A34A" } }, fmt(Math.abs(aEntregar)), "\u20AC"),
+          entregar && aEntregar > 0 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, "\u2248 ", fmt(aEntregar / 3), "\u20AC se dividires por 3")
+        )
+      );
+    })()
+  ), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, marginBottom: 20 } }, /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 16 } }, "Fatura\xE7\xE3o vs Recebido \u2014 6 meses"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", height: 140 } }, monthsData.map(function(m, i) {
     const fH = Math.round(m.fat / maxB * 120);
     const rH = Math.round(m.rec / maxB * 120);
     return /* @__PURE__ */ React.createElement("div", { key: i, style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 2, alignItems: "flex-end", height: 120 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 14, height: Math.max(2, fH), background: "#2E6DA4", borderRadius: "3px 3px 0 0" } }), /* @__PURE__ */ React.createElement("div", { style: { width: 14, height: Math.max(2, rH), background: "#38B6D8", borderRadius: "3px 3px 0 0" } })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", fontWeight: 600 } }, m.m));
