@@ -11103,6 +11103,15 @@ function ClientPortal(props) {
   const isOcasional = props.isOcasional || false;
   const aberturaRegistadaRef = React.useRef(null);
   const [phase, setPhase] = useState("welcome");
+  useEffect(function() {
+    try {
+      var picou = window.localStorage.getItem("sc_picou");
+      if (picou && (Date.now() - parseInt(picou)) < 120000) {
+        window.localStorage.removeItem("sc_picou");
+        window.location.href = "https://samorcleangeral-app.github.io/SamorClean/sessao-terminada.html";
+      }
+    } catch (e) {}
+  }, []);
   const clientLastActivityRef = React.useRef(Date.now());
   const [clientTimedOut, setClientTimedOut] = useState(false);
   const [recrutForm, setRecrutForm] = useState({ nome: "", telefone: "", disponibilidade: "", carta_conducao: null, experiencia: "" });
@@ -11188,6 +11197,7 @@ function ClientPortal(props) {
     setNotaColabSaving(null);
   }
   const [teamPhase, setTeamPhase] = useState("list");
+  const [doneInfo, setDoneInfo] = useState(null);
   const [loadingTeam, setLoadingTeam] = useState(false);
   const [popupJob, setPopupJob] = useState(null);
   const [checkedInThisSession, setCheckedInThisSession] = useState({});
@@ -11599,13 +11609,17 @@ function ClientPortal(props) {
   }
   if (phase === "team-portal") {
     if (teamPhase === "done") {
+      try { window.localStorage.setItem("sc_picou", String(Date.now())); } catch (e) {}
       setTimeout(function() {
         window.location.href = "https://samorcleangeral-app.github.io/SamorClean/sessao-terminada.html";
       }, 10000);
-      return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, textAlign: "center" } },
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 72, marginBottom: 20 } }, "\u2705"),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#fff", marginBottom: 12 } }, "Registo efectuado!"),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, color: "rgba(255,255,255,0.6)", lineHeight: 1.8 } }, "A fechar em 10 segundos...", /* @__PURE__ */ React.createElement("br", null), "Para uma nova ac\xE7\xE3o, utilize o QR code novamente.")
+      var di = doneInfo || { tipo: "Registo", cliente: "", hora: "" };
+      return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#16A34A", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, textAlign: "center" } },
+        /* @__PURE__ */ React.createElement("div", { style: { width: 88, height: 88, borderRadius: "50%", background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 22, fontSize: 48, color: "#fff" } }, "\u2713"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 800, color: "#fff", marginBottom: 8 } }, di.tipo, " registada"),
+        di.cliente && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, color: "rgba(255,255,255,0.9)", marginBottom: 6 } }, di.cliente),
+        di.hora && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 40, fontWeight: 900, color: "#fff", margin: "10px 0" } }, di.hora),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "rgba(255,255,255,0.85)", lineHeight: 1.6, marginTop: 20 } }, "J\xE1 pode fechar esta p\xE1gina.", /* @__PURE__ */ React.createElement("br", null), "Bom trabalho! \uD83D\uDCAA")
       );
     }
     let TeamJobCard = function(props2) {
@@ -11648,6 +11662,7 @@ function ClientPortal(props) {
             u[job.id] = true;
             return u;
           });
+          setDoneInfo({ tipo: "Entrada", cliente: job.cn || job.client_nome || job.nome || "", hora: time });
           setTeamPhase("done");
         }
       }
@@ -11667,6 +11682,7 @@ function ClientPortal(props) {
               return j.id === job.id ? updatedJob : j;
             }), next: p.next, completed: p.completed.concat([updatedJob]) };
           });
+          setDoneInfo({ tipo: "Sa\xEDda", cliente: job.cn || job.client_nome || job.nome || "", hora: time });
           setTeamPhase("done");
         } else {
           const err = await res.text();
