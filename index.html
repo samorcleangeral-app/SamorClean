@@ -323,7 +323,18 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
     else { temAusenciaPenalizante = true; }
   });
   var temAusencia = temAusenciaPenalizante || diasBaixa > 0;
-  var premio = (temAusencia || diasFerias > 0) ? 0 : 50;
+  // Esquecimentos de picagem nos serviços (Opção A: cada picagem em falta conta 1)
+  var esquecimentosServico = 0;
+  (monthJobs || []).forEach(function(j) {
+    if (j.status !== "completed") return;
+    if ((j.team || []).indexOf(emp.id) === -1) return;
+    if (!j.check_in) esquecimentosServico++;
+    if (!j.check_out) esquecimentosServico++;
+  });
+  // Esquecimentos de armazém (só entrada) — vêm de fora
+  var esquecimentosArmazem = (dadosProdutividade && dadosProdutividade.esquecimentosArmazem) || 0;
+  var perdePorPicagem = esquecimentosServico > 10 || esquecimentosArmazem >= 5;
+  var premio = (temAusencia || diasFerias > 0 || perdePorPicagem) ? 0 : 50;
   if (tipo === "Recibo Verde") {
     premio = (premiosOpcionais && premiosOpcionais[emp.id]) || 0;
   }
@@ -375,7 +386,12 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
     detalhe.push({ l: "Seguro acidentes (1,5%)", v: seguro });
     total = salarioEfectivo + subAlim + subFerias + subNatal + ss + seguro;
   }
-  detalhe.push({ l: tipo === "Recibo Verde" ? "Prémio assiduidade (opcional, decidido pela gest\xE3o)" : "Prémio assiduidade", v: premio });
+  var labelAssid = tipo === "Recibo Verde" ? "Prémio assiduidade (opcional, decidido pela gest\xE3o)" : "Prémio assiduidade";
+  if (premio === 0 && perdePorPicagem && !temAusencia && diasFerias === 0) {
+    if (esquecimentosServico > 10) labelAssid += " (\u26A0 " + esquecimentosServico + " picagens em falta)";
+    else if (esquecimentosArmazem >= 5) labelAssid += " (\u26A0 " + esquecimentosArmazem + " faltas de picagem no armaz\xE9m)";
+  }
+  detalhe.push({ l: labelAssid, v: premio });
   total += premio;
   if (dadosProdutividade) {
     var prod = calcPremioProdutividade(dadosProdutividade.avsClientes || [], dadosProdutividade.notaMensal != null ? dadosProdutividade.notaMensal : null);
@@ -619,6 +635,7 @@ function Finance() {
   const [avsClientesFin, setAvsClientesFin] = useState([]);
   const [avsMensaisFin, setAvsMensaisFin] = useState([]);
   const [svcDatasFin, setSvcDatasFin] = useState({});
+  const [picagensArmFin, setPicagensArmFin] = useState([]);
   const [ivaTrimIdx, setIvaTrimIdx] = useState(0);
   const [ivaMostrarDivisao, setIvaMostrarDivisao] = useState(false);
   useEffect(function() {
@@ -713,13 +730,15 @@ function Finance() {
       db.list("historico_financeiro", "?select=ano,mes,despesas,faturado&ano=eq." + now.getFullYear() + "&order=mes.desc"),
       db.list("stock_movimentos", "?select=*&tipo=eq.saida"),
       db.list("avaliacoes", "?select=stars,funcionario_id,servico_id,created_at&created_at=gte." + new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString()),
-      db.list("avaliacoes_mensais", "?select=funcionario_id,mes,nota_final")
+      db.list("avaliacoes_mensais", "?select=funcionario_id,mes,nota_final"),
+      db.list("picagens_armazem", "?select=funcionario_id,tipo,created_at&created_at=gte." + monthStart)
     ]).then(function(results) {
       const cm = {};
       (results[2] || []).forEach(function(c) { cm[c.id] = c; });
       setMonthJobs((results[0] || []).filter(function(j) { return cm[j.client_id]; }));
       setAvsClientesFin(results[20] || []);
       setAvsMensaisFin(results[21] || []);
+      setPicagensArmFin(results[22] || []);
       var svcMap = {};
       (results[1] || []).forEach(function(sv) { svcMap[sv.id] = sv.date; });
       setSvcDatasFin(svcMap);
@@ -1297,7 +1316,19 @@ function Finance() {
       return (ds || "").slice(0, 7) === mesYM;
     }).map(function(a) { return a.stars || 0; });
     var avMensal = (avsMensaisFin || []).find(function(a) { return a.funcionario_id === emp.id && a.mes === mesYM; });
-    var dadosProd = { avsClientes: avsCli, notaMensal: avMensal ? Number(avMensal.nota_final) : null };
+    // Esquecimentos de armazém: dias com serviço mas sem picagem de ENTRADA no armazém
+    var diasComServico = {};
+    (monthJobs || []).forEach(function(j) { if ((j.team || []).indexOf(emp.id) !== -1 && j.status === "completed") diasComServico[j.date] = true; });
+    var diasComEntradaArm = {};
+    (picagensArmFin || []).forEach(function(p) {
+      if (p.funcionario_id !== emp.id) return;
+      if (p.tipo && p.tipo !== "entrada") return;
+      var dia = (p.created_at || "").slice(0, 10);
+      if (dia) diasComEntradaArm[dia] = true;
+    });
+    var esqArm = 0;
+    Object.keys(diasComServico).forEach(function(dia) { if (!diasComEntradaArm[dia]) esqArm++; });
+    var dadosProd = { avsClientes: avsCli, notaMensal: avMensal ? Number(avMensal.nota_final) : null, esquecimentosArmazem: esqArm };
     return calcCustoColaboradorMes(emp, rhData, absData, monthJobs, now, ajustesRecibo, premiosOpcionais, dadosProd);
   }
 
@@ -10378,13 +10409,18 @@ function Employee(props) {
         const allPast = results[1] || [];
         const myPast = allPast.filter(function(j) { return (j.team || []).indexOf(emp.id) !== -1; });
         const allMonthJobs = results[0].concat(results[1] || []).filter(function(j) { return (j.team || []).indexOf(emp.id) !== -1 && j.date >= firstDayMonthStr; });
-        const faltasServico = allMonthJobs.filter(function(j) { return j.status === "completed" && (!j.check_in || !j.check_out); }).length;
+        var faltasServico = 0;
+        allMonthJobs.forEach(function(j) {
+          if (j.status !== "completed") return;
+          if (!j.check_in) faltasServico++;
+          if (!j.check_out) faltasServico++;
+        });
         var diasComServico2 = {}; allServicos.forEach(function(j) { if ((j.team || []).indexOf(emp.id) !== -1) { diasComServico2[j.date] = j.dispensa_armazem || diasComServico2[j.date] === true; } });
-        var diasComPicagem2 = {}; picagens.forEach(function(p) { var dia = (p.hora || p.created_at || "").slice(0, 10); diasComPicagem2[dia] = true; });
+        var diasComPicagem2 = {}; picagens.forEach(function(p) { if (p.tipo && p.tipo !== "entrada") return; var dia = (p.hora || p.created_at || "").slice(0, 10); diasComPicagem2[dia] = true; });
         var esquecimentosArmazem = 0;
         Object.keys(diasComServico2).forEach(function(dia) { if (!diasComServico2[dia] && !diasComPicagem2[dia] && dia < today && dia >= firstDayMonthStr) esquecimentosArmazem++; });
         const temAusenciaPenalizanteMes = ausencias.some(function(a) { if ((a.tipo || "").toLowerCase() === "férias") return false; var start = a.data_inicio; var end = a.data_fim || a.data_inicio; return start <= today && end >= firstDayMonthStr; });
-        var perdeuPremio = temAusenciaPenalizanteMes || esquecimentosArmazem >= 5 || faltasServico >= 10;
+        var perdeuPremio = temAusenciaPenalizanteMes || esquecimentosArmazem >= 5 || faltasServico > 10;
         const faltas = myPast.filter(function(j) { return !j.check_in && j.status === "completed"; }).length;
         const parciais = myPast.filter(function(j) { return j.early_leave && j.early_leave.indexOf && j.early_leave.indexOf(emp.id) !== -1; }).length;
         setAbsStats({ total: myPast.length, faltas, parciais, temAusenciaPenalizanteMes, faltasServico, esquecimentosArmazem, perdeuPremio });
