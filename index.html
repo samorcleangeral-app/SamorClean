@@ -276,7 +276,23 @@ function diasAusenciaMes(emp, absData, refDate) {
   });
   return dias;
 }
-function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajustesRecibo, premiosOpcionais) {
+function calcPremioProdutividade(avsClientesMes, avMensal) {
+  var nAvs = avsClientesMes.length;
+  var fonte = null, origem = null;
+  if (nAvs >= 3) {
+    var soma = avsClientesMes.reduce(function(s, x) { return s + x; }, 0);
+    fonte = Math.round(soma / nAvs * 10) / 10;
+    origem = "clientes";
+  } else if (avMensal != null) {
+    fonte = avMensal;
+    origem = "gestao";
+  } else {
+    return { premio: 0, nota: null, origem: "pendente", precisaAvaliar: true };
+  }
+  var premio = fonte < 4 ? 0 : (fonte <= 4.5 ? 25 : 50);
+  return { premio: premio, nota: fonte, origem: origem, precisaAvaliar: false };
+}
+function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajustesRecibo, premiosOpcionais, dadosProdutividade) {
   var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
   if (!rh) return { total: 0, detalhe: [], tipo: null };
   var tipo = rh.tipo_contrato || "Contrato";
@@ -361,6 +377,15 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
   }
   detalhe.push({ l: tipo === "Recibo Verde" ? "Prémio assiduidade (opcional, decidido pela gest\xE3o)" : "Prémio assiduidade", v: premio });
   total += premio;
+  if (dadosProdutividade) {
+    var prod = calcPremioProdutividade(dadosProdutividade.avsClientes || [], dadosProdutividade.notaMensal != null ? dadosProdutividade.notaMensal : null);
+    var labelProd = "Prémio produtividade";
+    if (prod.precisaAvaliar) labelProd += " (\u26A0 falta avalia\xE7\xE3o mensal)";
+    else if (prod.origem === "gestao") labelProd += " (aval. gest\xE3o: " + prod.nota.toFixed(1) + ")";
+    else labelProd += " (" + prod.nota.toFixed(1) + "\u2605)";
+    detalhe.push({ l: labelProd, v: prod.premio });
+    total += prod.premio;
+  }
   return { total: total, detalhe: detalhe, tipo: tipo };
 }
 function calcCustoHoraReal(emp, rhData, refDate, absData) {
@@ -591,6 +616,9 @@ function Finance() {
   const [clientsMap, setClientsMap] = useState({});
   const [despesas, setDespesas] = useState([]);
   const [ivaTrimestre, setIvaTrimestre] = useState(null);
+  const [avsClientesFin, setAvsClientesFin] = useState([]);
+  const [avsMensaisFin, setAvsMensaisFin] = useState([]);
+  const [svcDatasFin, setSvcDatasFin] = useState({});
   const [ivaTrimIdx, setIvaTrimIdx] = useState(0);
   const [ivaMostrarDivisao, setIvaMostrarDivisao] = useState(false);
   useEffect(function() {
@@ -683,11 +711,18 @@ function Finance() {
       db.list("ajuste_dias_recibo_verde", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
       db.list("premio_assiduidade_opcional", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
       db.list("historico_financeiro", "?select=ano,mes,despesas,faturado&ano=eq." + now.getFullYear() + "&order=mes.desc"),
-      db.list("stock_movimentos", "?select=*&tipo=eq.saida")
+      db.list("stock_movimentos", "?select=*&tipo=eq.saida"),
+      db.list("avaliacoes", "?select=stars,funcionario_id,servico_id,created_at&created_at=gte." + new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString()),
+      db.list("avaliacoes_mensais", "?select=funcionario_id,mes,nota_final")
     ]).then(function(results) {
       const cm = {};
       (results[2] || []).forEach(function(c) { cm[c.id] = c; });
       setMonthJobs((results[0] || []).filter(function(j) { return cm[j.client_id]; }));
+      setAvsClientesFin(results[20] || []);
+      setAvsMensaisFin(results[21] || []);
+      var svcMap = {};
+      (results[1] || []).forEach(function(sv) { svcMap[sv.id] = sv.date; });
+      setSvcDatasFin(svcMap);
       setMonthJobsAll((results[12] || []).filter(function(j) { return cm[j.client_id]; }));
       setLast6Months((results[1] || []).filter(function(j) { return cm[j.client_id]; }));
       setDespesas6Months(results[13] || []);
@@ -1253,7 +1288,17 @@ function Finance() {
   const proporcaoMes = diasUteisDoMes > 0 ? diasUteisPassados / diasUteisDoMes : 1;
 
   function custoColaborador(emp) {
-    return calcCustoColaboradorMes(emp, rhData, absData, monthJobs, now, ajustesRecibo, premiosOpcionais);
+    var mesYM = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+    var avsCli = (avsClientesFin || []).filter(function(a) {
+      if (a.funcionario_id !== emp.id) return false;
+      if ((a.created_at || "").slice(0, 7) !== mesYM) return false;
+      var ds = svcDatasFin[a.servico_id];
+      if (!ds) return true;
+      return (ds || "").slice(0, 7) === mesYM;
+    }).map(function(a) { return a.stars || 0; });
+    var avMensal = (avsMensaisFin || []).find(function(a) { return a.funcionario_id === emp.id && a.mes === mesYM; });
+    var dadosProd = { avsClientes: avsCli, notaMensal: avMensal ? Number(avMensal.nota_final) : null };
+    return calcCustoColaboradorMes(emp, rhData, absData, monthJobs, now, ajustesRecibo, premiosOpcionais, dadosProd);
   }
 
   function custoHoraReal(emp) {
