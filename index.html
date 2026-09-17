@@ -4282,10 +4282,13 @@ function FotosCliente(props) {
   }
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24 } }, "A carregar fotos...");
   if (fotosColab.length === 0 && fotosCli.length === 0) return /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24, fontSize: 13 } }, "Ainda não há fotos para este cliente.");
-  function Grelha(lista) {
+  function Grelha(lista, comPartilha) {
     return /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8 } },
       lista.map(function(f, i) {
-        return /* @__PURE__ */ React.createElement("img", { key: i, src: f.url, onClick: function() { setLightbox(f); }, style: { width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 8, cursor: "pointer", border: "1.5px solid #E2EBF4" } });
+        return /* @__PURE__ */ React.createElement("div", { key: i, style: { position: "relative" } },
+          /* @__PURE__ */ React.createElement("img", { src: f.url, onClick: function() { setLightbox(f); }, style: { width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 8, cursor: "pointer", border: "1.5px solid " + (f.partilhada_equipa ? "#16A34A" : "#E2EBF4") } }),
+          comPartilha && /* @__PURE__ */ React.createElement("button", { onClick: function() { partilharFoto(f); }, style: { width: "100%", marginTop: 4, background: f.partilhada_equipa ? "#DCFCE7" : "#2E6DA4", border: "none", borderRadius: 6, padding: "5px 4px", fontSize: 10, fontWeight: 700, color: f.partilhada_equipa ? "#15803D" : "#fff", cursor: "pointer" } }, f.partilhada_equipa ? "\u2713 Partilhada" : "\uD83D\uDCE2 Partilhar")
+        );
       })
     );
   }
@@ -4296,7 +4299,7 @@ function FotosCliente(props) {
       /* @__PURE__ */ React.createElement("button", { onClick: function() { setLightbox(null); }, style: { marginTop: 16, background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: 8, padding: "8px 20px", cursor: "pointer", fontSize: 13 } }, "Fechar")
     ),
     /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 12, color: "#64748B", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 } }, "\uD83D\uDC64 Enviadas pelo cliente (", fotosCli.length, ")"),
-    fotosCli.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", marginBottom: 20 } }, "Nenhuma.") : /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 20 } }, Grelha(fotosCli)),
+    fotosCli.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", marginBottom: 20 } }, "Nenhuma.") : /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 20 } }, Grelha(fotosCli, true)),
     /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 12, color: "#64748B", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 } }, "\uD83E\uDDF9 Enviadas pelos colaboradores (", fotosColab.length, ")"),
     fotosColab.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8" } }, "Nenhuma.") : Grelha(fotosColab)
   );
