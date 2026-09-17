@@ -4140,6 +4140,21 @@ function NotasCliente(props) {
     setPartilharId(null);
   }
 
+  async function partilharComEquipa(nota) {
+    var agora = new Date().toISOString();
+    await fetch(SUPABASE_URL + "/rest/v1/client_notes?id=eq." + nota.id, {
+      method: "PATCH", headers: dbHeaders(),
+      body: JSON.stringify({ partilhada_equipa: true, partilhada_em: agora })
+    });
+    setNotas(function(p) { return p.map(function(n) { return n.id === nota.id ? Object.assign({}, n, { partilhada_equipa: true, partilhada_em: agora }) : n; }); });
+  }
+  async function despartilharEquipa(nota) {
+    await fetch(SUPABASE_URL + "/rest/v1/client_notes?id=eq." + nota.id, {
+      method: "PATCH", headers: dbHeaders(),
+      body: JSON.stringify({ partilhada_equipa: false, partilhada_em: null })
+    });
+    setNotas(function(p) { return p.map(function(n) { return n.id === nota.id ? Object.assign({}, n, { partilhada_equipa: false, partilhada_em: null }) : n; }); });
+  }
   async function apagar(id) {
     if (!window.confirm("Apagar esta nota?")) return;
     await fetch(SUPABASE_URL + "/rest/v1/client_notes?id=eq." + id, { method: "DELETE", headers: dbHeaders() });
@@ -4179,6 +4194,9 @@ function NotasCliente(props) {
             ? React.createElement("button", { onClick: function() { setPartilharId(n.id); setNumServicos(1); }, style: { background: "#FEF3C7", border: "none", borderRadius: 6, padding: "5px 10px", fontSize: 11, fontWeight: 700, color: "#92400E", cursor: "pointer" } }, "📤 Partilhar")
             : React.createElement("button", { onClick: function() { despartilhar(n); }, style: { background: "#FEF3C7", border: "none", borderRadius: 6, padding: "5px 10px", fontSize: 11, fontWeight: 700, color: "#92400E", cursor: "pointer" } }, "✕ Retirar"),
           React.createElement("button", { onClick: function() { apagar(n.id); }, style: { background: "#FEE2E2", border: "none", borderRadius: 6, padding: "5px 10px", fontSize: 11, fontWeight: 700, color: "#DC2626", cursor: "pointer" } }, "🗑 Apagar"),
+          !n.partilhada_equipa
+            ? React.createElement("button", { onClick: function() { partilharComEquipa(n); }, style: { background: "#2E6DA4", border: "none", borderRadius: 6, padding: "5px 10px", fontSize: 11, fontWeight: 700, color: "#fff", cursor: "pointer" } }, "📢 Partilhar c/ equipa")
+            : React.createElement("button", { onClick: function() { despartilharEquipa(n); }, style: { background: "#DBEAFE", border: "none", borderRadius: 6, padding: "5px 10px", fontSize: 11, fontWeight: 700, color: "#1E40AF", cursor: "pointer" } }, "✓ Partilhada c/ equipa"),
           partilharId === n.id && React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center" } },
             React.createElement("span", { style: { fontSize: 11, color: "#64748B" } }, "Para"),
             [1, 2, 3, 4].map(function(num) {
@@ -4249,10 +4267,19 @@ function FotosCliente(props) {
         }
       });
       setFotosColab(all);
-      setFotosCli((res[1] || []).map(function(f) { return { url: f.url, date: (f.created_at || "").slice(0, 10), descricao: f.descricao }; }));
+      setFotosCli((res[1] || []).map(function(f) { return { id: f.id, url: f.url, date: (f.created_at || "").slice(0, 10), descricao: f.descricao, partilhada_equipa: f.partilhada_equipa }; }));
       setLoading(false);
     });
   }, [clientId]);
+  async function partilharFoto(foto) {
+    var agora = new Date().toISOString();
+    var novo = !foto.partilhada_equipa;
+    await fetch(SUPABASE_URL + "/rest/v1/fotos_cliente?id=eq." + foto.id, {
+      method: "PATCH", headers: dbHeaders(),
+      body: JSON.stringify({ partilhada_equipa: novo, partilhada_em: novo ? agora : null })
+    });
+    setFotosCli(function(p) { return p.map(function(f) { return f.id === foto.id ? Object.assign({}, f, { partilhada_equipa: novo }) : f; }); });
+  }
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24 } }, "A carregar fotos...");
   if (fotosColab.length === 0 && fotosCli.length === 0) return /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 24, fontSize: 13 } }, "Ainda não há fotos para este cliente.");
   function Grelha(lista) {
@@ -10326,6 +10353,42 @@ function Employee(props) {
   const [cin, setCin] = useState(null);
   const [cout, setCout] = useState(null);
   const [dashTab, setDashTab] = useState("hoje");
+  const [notasPartilhadas, setNotasPartilhadas] = useState([]);
+  const [fotosPartilhadas, setFotosPartilhadas] = useState([]);
+  const [partilhasVistas, setPartilhasVistas] = useState([]);
+  const [clientesNomes, setClientesNomes] = useState({});
+  const [clienteAbertoNotas, setClienteAbertoNotas] = useState(null);
+  useEffect(function() {
+    if (!emp) return;
+    var ha30dias = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+    Promise.all([
+      db.list("client_notes", "?select=*&partilhada_equipa=is.true&partilhada_em=gte." + ha30dias + "&order=partilhada_em.desc"),
+      db.list("fotos_cliente", "?select=*&partilhada_equipa=is.true&partilhada_em=gte." + ha30dias + "&order=partilhada_em.desc"),
+      db.list("partilhas_vistas", "?select=*&funcionario_id=eq." + encodeURIComponent(emp.id)),
+      db.list("clientes", "?select=id,name")
+    ]).then(function(r) {
+      setNotasPartilhadas(r[0] || []);
+      setFotosPartilhadas(r[1] || []);
+      setPartilhasVistas(r[2] || []);
+      var nomes = {};
+      (r[3] || []).forEach(function(c) { nomes[c.id] = c.name; });
+      setClientesNomes(nomes);
+    }).catch(function(e) { console.warn("Falha ao carregar partilhas:", e); });
+  }, [emp && emp.id]);
+  function jaViu(tipo, itemId) {
+    return partilhasVistas.some(function(v) { return v.tipo === tipo && v.item_id === itemId; });
+  }
+  async function marcarPartilhaVista(tipo, itemId) {
+    if (!emp || jaViu(tipo, itemId)) return;
+    setPartilhasVistas(function(p) { return p.concat([{ tipo: tipo, item_id: itemId, funcionario_id: emp.id }]); });
+    try {
+      await fetch(SUPABASE_URL + "/rest/v1/partilhas_vistas", {
+        method: "POST", headers: dbHeaders(),
+        body: JSON.stringify({ funcionario_id: emp.id, tipo: tipo, item_id: itemId })
+      });
+    } catch (e) { console.warn("Falha ao marcar partilha vista:", e); }
+  }
+  var notasPartilhadasNaoVistas = notasPartilhadas.filter(function(n) { return !jaViu("nota", n.id); }).length + fotosPartilhadas.filter(function(f) { return !jaViu("foto", f.id); }).length;
   const [fotosJob, setFotosJob] = useState(null);
   const [aEnviarFotos, setAEnviarFotos] = useState(false);
   const [absStats, setAbsStats] = useState({ total: 0, faltas: 0, parciais: 0 });
@@ -10792,9 +10855,9 @@ function Employee(props) {
     { l: "Avalia\xE7\xE3o (m\xEAs)", v: ratingMesEmp ? ratingMesEmp + "\u2605" : "--" }
   ].map(function(s) {
     return /* @__PURE__ */ React.createElement("div", { key: s.l, style: { background: "rgba(255,255,255,0.08)", borderRadius: 10, padding: "10px 8px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 18 } }, s.v), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.4)", fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginTop: 2 } }, s.l));
-  }))), /* @__PURE__ */ React.createElement("div", { style: { padding: "16px 16px 32px" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" } }, ["hoje", "hist\xF3rico", "semana", "assiduidade", "picagens", "formacao", "pedidos"].map(function(t) {
-    const labels = { hoje: "Hoje", "hist\xF3rico": "Hist\xF3rico", semana: "Semana", assiduidade: "Assiduidade", picagens: "Picagens", formacao: "Documentos RH", pedidos: "Pedidos" };
-    const badgeCount = t === "pedidos" && pedidosRespondidos > 0 ? pedidosRespondidos : t === "hoje" && alertasRota.length > 0 ? alertasRota.length : 0;
+  }))), /* @__PURE__ */ React.createElement("div", { style: { padding: "16px 16px 32px" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" } }, ["hoje", "hist\xF3rico", "semana", "notas", "assiduidade", "picagens", "formacao", "pedidos"].map(function(t) {
+    const labels = { hoje: "Hoje", "hist\xF3rico": "Hist\xF3rico", semana: "Semana", notas: "\uD83D\uDCCB Notas", assiduidade: "Assiduidade", picagens: "Picagens", formacao: "Documentos RH", pedidos: "Pedidos" };
+    const badgeCount = t === "pedidos" && pedidosRespondidos > 0 ? pedidosRespondidos : t === "hoje" && alertasRota.length > 0 ? alertasRota.length : t === "notas" && notasPartilhadasNaoVistas > 0 ? notasPartilhadasNaoVistas : 0;
     return /* @__PURE__ */ React.createElement("button", { key: t, onClick: function() {
       setDashTab(t);
       if (t === "pedidos" && pedidosRespondidos > 0 && emp) { setPedidosRespondidos(0); fetch(SUPABASE_URL + "/rest/v1/pedidos_colaboradores?funcionario_id=eq." + encodeURIComponent(emp.id) + "&estado=neq.pendente&visto=is.false", { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ visto: true }), keepalive: true }); }
@@ -10967,6 +11030,46 @@ function Employee(props) {
           })
         );
       });
+    })()), dashTab === "notas" && /* @__PURE__ */ React.createElement("div", null, (function() {
+      var porCliente = {};
+      notasPartilhadas.forEach(function(n) { var cid = n.client_id; if (!porCliente[cid]) porCliente[cid] = { notas: [], fotos: [] }; porCliente[cid].notas.push(n); });
+      fotosPartilhadas.forEach(function(f) { var cid = f.client_id; if (!porCliente[cid]) porCliente[cid] = { notas: [], fotos: [] }; porCliente[cid].fotos.push(f); });
+      var cids = Object.keys(porCliente);
+      if (cids.length === 0) return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8", fontSize: 13 }) }, "Sem notas ou fotos de clientes partilhadas.");
+      if (clienteAbertoNotas && porCliente[clienteAbertoNotas]) {
+        var det = porCliente[clienteAbertoNotas];
+        return /* @__PURE__ */ React.createElement("div", null,
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { setClienteAbertoNotas(null); }, style: { background: "#fff", border: "1px solid #E2EBF4", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 700, color: "#64748B", cursor: "pointer", marginBottom: 14 } }, "\u2190 Voltar"),
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C", marginBottom: 14 } }, clientesNomes[clienteAbertoNotas] || "Cliente"),
+          det.notas.map(function(n) {
+            var visto = jaViu("nota", n.id);
+            return /* @__PURE__ */ React.createElement("div", { key: n.id, style: Object.assign({}, card, { marginBottom: 10, borderLeft: visto ? "3px solid #E2EBF4" : "3px solid #F59E0B" }) },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginBottom: 6 } }, "\uD83D\uDCDD Nota \u00B7 partilhada " + new Date(n.partilhada_em).toLocaleDateString("pt-PT", { day: "numeric", month: "short" })),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "#334155", lineHeight: 1.5, marginBottom: visto ? 0 : 10 } }, n.texto || n.nota || n.descricao || ""),
+              !visto && /* @__PURE__ */ React.createElement("button", { onClick: function() { marcarPartilhaVista("nota", n.id); }, style: { background: "#DCFCE7", border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 12, fontWeight: 800, color: "#15803D", cursor: "pointer" } }, "\u2713 Vi"));
+          }),
+          det.fotos.map(function(f) {
+            var visto = jaViu("foto", f.id);
+            return /* @__PURE__ */ React.createElement("div", { key: f.id, style: Object.assign({}, card, { marginBottom: 10, borderLeft: visto ? "3px solid #E2EBF4" : "3px solid #F59E0B" }) },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginBottom: 6 } }, "\uD83D\uDCF7 Foto \u00B7 partilhada " + new Date(f.partilhada_em).toLocaleDateString("pt-PT", { day: "numeric", month: "short" })),
+              /* @__PURE__ */ React.createElement("img", { src: f.url || f.foto_url, style: { width: "100%", borderRadius: 8, marginBottom: visto ? 0 : 10 } }),
+              f.descricao && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: visto ? 0 : 10 } }, f.descricao),
+              !visto && /* @__PURE__ */ React.createElement("button", { onClick: function() { marcarPartilhaVista("foto", f.id); }, style: { background: "#DCFCE7", border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 12, fontWeight: 800, color: "#15803D", cursor: "pointer" } }, "\u2713 Vi"));
+          })
+        );
+      }
+      return /* @__PURE__ */ React.createElement("div", null,
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 14, lineHeight: 1.5 } }, "Informa\xE7\xF5es partilhadas pela gest\xE3o sobre clientes. Toca num cliente para ver os detalhes."),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 10 } }, cids.map(function(cid) {
+          var d = porCliente[cid];
+          var naoVistas = d.notas.filter(function(n) { return !jaViu("nota", n.id); }).length + d.fotos.filter(function(f) { return !jaViu("foto", f.id); }).length;
+          return /* @__PURE__ */ React.createElement("div", { key: cid, onClick: function() { setClienteAbertoNotas(cid); }, style: Object.assign({}, card, { cursor: "pointer", position: "relative", padding: 16 }) },
+            naoVistas > 0 && /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", top: 8, right: 8, background: "#EF4444", color: "#fff", borderRadius: 10, minWidth: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, padding: "0 5px" } }, naoVistas),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 26, marginBottom: 8 } }, "\uD83C\uDFE2"),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C", marginBottom: 4 } }, clientesNomes[cid] || "Cliente"),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, (d.notas.length + d.fotos.length) + (d.notas.length + d.fotos.length === 1 ? " item" : " itens")));
+        }))
+      );
     })()), dashTab === "assiduidade" && /* @__PURE__ */ React.createElement("div", null,
     /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, padding: 20, borderLeft: "4px solid " + (!absStats.perdeuPremio ? "#16A34A" : "#EF4444") }) },
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 16, marginBottom: 12 } },
