@@ -3283,6 +3283,21 @@ function Routes() {
       return true;
     });
   }
+  function ausenciaDoDia(empId, dateStr) {
+    // devolve { diaInteiro: bool, horasParcial: number } para as ausências do colaborador nesse dia
+    var res = { diaInteiro: false, horasParcial: 0 };
+    ausencias.forEach(function(a) {
+      if (a.funcionario_id !== empId || !a.data_inicio) return;
+      var start = a.data_inicio, end = a.data_fim || a.data_inicio;
+      if (dateStr < start || dateStr > end) return;
+      if (a.parcial && a.hora_inicio && a.hora_fim) {
+        res.horasParcial += horasReais(a.hora_inicio, a.hora_fim);
+      } else {
+        res.diaInteiro = true;
+      }
+    });
+    return res;
+  }
   function exportarProdutividadePDF() {
     const mesLabel = dates.length ? new Date(dates[0] + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) + " \u2014 " + new Date(dates[dates.length - 1] + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short", year: "numeric" }) : "";
     var linhas = "";
@@ -3705,10 +3720,12 @@ function Routes() {
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: cor } }, e.name.split(" ")[0])
         ),
         dates.map(function(d) {
-          const ausenteDia = isEmpAusente(e.id, d);
-          const horasDia = wJobs.filter(function(j) { return j.date === d && (j.team || []).indexOf(e.id) !== -1; }).reduce(function(s, j) { return s + horasReais(j.t1, j.t2); }, 0);
+          const ausInfo = ausenciaDoDia(e.id, d);
+          const ausenteDia = ausInfo.diaInteiro;
+          const horasBrutas = wJobs.filter(function(j) { return j.date === d && (j.team || []).indexOf(e.id) !== -1; }).reduce(function(s, j) { return s + horasReais(j.t1, j.t2); }, 0);
+          const horasDia = Math.max(0, horasBrutas - (ausenteDia ? 0 : ausInfo.horasParcial));
           return /* @__PURE__ */ React.createElement("div", { key: d, style: { textAlign: "center", fontSize: 10, fontWeight: 600, color: ausenteDia ? "#EF4444" : horasDia > 0 ? empColor(e.id) : "#CBD5E1", background: ausenteDia ? "#FEE2E2" : horasDia > 0 ? empColor(e.id) + "15" : "transparent", borderRadius: 4, padding: "2px 0" } },
-            ausenteDia ? "—" : horasDia > 0 ? horasDia.toFixed(1) + "h" : ""
+            ausenteDia ? "\u2014" : horasDia > 0 ? horasDia.toFixed(1) + "h" : ""
           );
         }),
         /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", fontSize: 10, fontWeight: 800, color: cor, background: cor + "15", borderRadius: 4, padding: "2px 0" } }, ausente ? "aus." : horasSemana > 0 ? horasSemana.toFixed(1) + "h" : "0h")
