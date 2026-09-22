@@ -9064,6 +9064,10 @@ function Avaliacoes() {
   const [mostrarInativosAv, setMostrarInativosAv] = useState(false);
   const [avSearch, setAvSearch] = useState("");
   const [servicoDatas, setServicoDatas] = useState({});
+  const [servicoClientes, setServicoClientes] = useState({});
+  const [mesDecomp, setMesDecomp] = useState(localDateStr().slice(0, 7));
+  const [colabExpandido, setColabExpandido] = useState(null);
+  const [clienteExpandido, setClienteExpandido] = useState(null);
   useEffect(function() {
     Promise.all([
       db.list("avaliacoes", "?select=*&order=created_at.desc"),
@@ -9080,8 +9084,10 @@ function Avaliacoes() {
       (results[2] || []).forEach(function(e) { em[e.id] = e; });
       setEmpsMap(em);
       var svcDatas = {};
-      (results[3] || []).forEach(function(sv) { svcDatas[sv.id] = sv.date; });
+      var svcClientes = {};
+      (results[3] || []).forEach(function(sv) { svcDatas[sv.id] = sv.date; svcClientes[sv.id] = sv.client_id; });
       setServicoDatas(svcDatas);
+      setServicoClientes(svcClientes);
       var byCliente = {};
       (results[3] || []).filter(function(s) { return !s.rated; }).forEach(function(s) {
         if (!byCliente[s.client_id]) byCliente[s.client_id] = { count: 0, ultima: s.date };
@@ -9167,6 +9173,72 @@ function Avaliacoes() {
         );
       })
     );
+  }
+  function decomposicaoPorCliente(empId, mesYM) {
+    var doMesEmp = avs.filter(function(a) {
+      if (a.funcionario_id !== empId) return false;
+      if ((a.created_at || "").slice(0, 7) !== mesYM) return false;
+      var ds = servicoDatas[a.servico_id];
+      if (!ds) return true;
+      return (ds || "").slice(0, 7) === mesYM;
+    });
+    var porCli = {};
+    doMesEmp.forEach(function(a) {
+      var cid = servicoClientes[a.servico_id] || "?";
+      if (!porCli[cid]) porCli[cid] = { clientId: cid, servicos: [], stars: [] };
+      porCli[cid].stars.push(parseFloat(a.stars) || 0);
+      porCli[cid].servicos.push({ data: servicoDatas[a.servico_id] || null, stars: parseFloat(a.stars) || 0 });
+    });
+    var linhas = Object.keys(porCli).map(function(cid) {
+      var pc = porCli[cid];
+      var media = pc.stars.reduce(function(x, y) { return x + y; }, 0) / pc.stars.length;
+      var nome = clientsMap[cid] ? clientsMap[cid].name : "Cliente";
+      return { clientId: cid, nome: nome, media: media, n: pc.stars.length, servicos: pc.servicos.sort(function(a, b) { return (a.data || "") < (b.data || "") ? -1 : 1; }) };
+    }).sort(function(a, b) { return b.media - a.media; });
+    var totalStars = doMesEmp.reduce(function(s, a) { return s + (parseFloat(a.stars) || 0); }, 0);
+    var totalMedia = doMesEmp.length > 0 ? totalStars / doMesEmp.length : null;
+    return { linhas: linhas, totalMedia: totalMedia, totalN: doMesEmp.length };
+  }
+  function exportarDecompPDF(empId, mesYM) {
+    var nomeColab = empsMap[empId] ? empsMap[empId].name : "Colaborador";
+    var dec = decomposicaoPorCliente(empId, mesYM);
+    var win = window.open("", "_blank");
+    if (!win) return;
+    var linhasHtml = dec.linhas.map(function(ln) {
+      var servHtml = ln.servicos.map(function(sv) {
+        var d = sv.data ? new Date(sv.data + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) : "\u2014";
+        return "<tr class='serv'><td style='padding-left:24px;color:#64748B'>" + d + "</td><td style='text-align:right;color:#1A3A5C;font-weight:600'>" + sv.stars + " \u2605</td></tr>";
+      }).join("");
+      return "<tr class='cli'><td style='font-weight:700;color:#1A3A5C'>" + ln.nome + " <span style='color:#94A3B8;font-weight:400'>(" + ln.n + ")</span></td><td style='text-align:right;font-weight:800;color:#2E6DA4'>" + ln.media.toFixed(1) + " \u2605</td></tr>" + servHtml;
+    }).join("");
+    var mesLabel = new Date(mesYM + "-01T12:00:00").toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
+    win.document.write("<html><head><meta charset='utf-8'><title>Avalia\xE7\xF5es " + nomeColab + "</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#2D3A4A}h1{color:#1A3A5C;font-size:22px;margin-bottom:4px}.sub{color:#64748B;font-size:14px;margin-bottom:20px}table{width:100%;border-collapse:collapse}td{padding:8px 6px;border-bottom:1px solid #F1F5F9;font-size:14px}.serv td{font-size:12px;border-bottom:1px solid #F8FAFC}.total{background:#1A3A5C;color:#fff;font-weight:800;font-size:16px}.total td{color:#fff;padding:12px}</style></head><body>");
+    win.document.write("<h1>" + nomeColab + "</h1><div class='sub'>Avalia\xE7\xF5es por cliente \u2014 " + mesLabel + "</div>");
+    win.document.write("<table>" + linhasHtml + "<tr class='total'><td>M\xE9dia do m\xEAs (" + dec.totalN + " avalia\xE7\xF5es)</td><td style='text-align:right'>" + (dec.totalMedia !== null ? dec.totalMedia.toFixed(1) + " \u2605" : "\u2014") + "</td></tr></table>");
+    win.document.write("<p style='margin-top:30px;font-size:11px;color:#94A3B8'>SamorClean &middot; Gerado em " + new Date().toLocaleDateString("pt-PT") + "</p>");
+    win.document.write("</body></html>");
+    win.document.close();
+    setTimeout(function() { win.print(); }, 300);
+  }
+  function exportarTodosDecompPDF(mesYM) {
+    var win = window.open("", "_blank");
+    if (!win) return;
+    var mesLabel = new Date(mesYM + "-01T12:00:00").toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
+    win.document.write("<html><head><meta charset='utf-8'><title>Avalia\xE7\xF5es da equipa</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#2D3A4A}h1{color:#1A3A5C;font-size:22px}.sub{color:#64748B;font-size:14px;margin-bottom:24px}.colab{margin-bottom:28px;page-break-inside:avoid}.colab h2{font-size:17px;color:#1A3A5C;border-bottom:2px solid #E2EBF4;padding-bottom:6px;margin-bottom:8px}table{width:100%;border-collapse:collapse}td{padding:6px;border-bottom:1px solid #F1F5F9;font-size:13px}.total td{background:#1A3A5C;color:#fff;font-weight:800;padding:10px}</style></head><body>");
+    win.document.write("<h1>Avalia\xE7\xF5es da equipa</h1><div class='sub'>Por cliente \u2014 " + mesLabel + "</div>");
+    var ativos = Object.keys(empsMap).filter(function(eid) { return empsMap[eid] && empsMap[eid].ativo !== false; });
+    ativos.forEach(function(eid) {
+      var dec = decomposicaoPorCliente(eid, mesYM);
+      if (dec.totalN === 0) return;
+      var nome = empsMap[eid].name;
+      var linhasHtml = dec.linhas.map(function(ln) {
+        return "<tr><td style='font-weight:700;color:#1A3A5C'>" + ln.nome + " <span style='color:#94A3B8;font-weight:400'>(" + ln.n + ")</span></td><td style='text-align:right;font-weight:800;color:#2E6DA4'>" + ln.media.toFixed(1) + " \u2605</td></tr>";
+      }).join("");
+      win.document.write("<div class='colab'><h2>" + nome + "</h2><table>" + linhasHtml + "<tr class='total'><td>M\xE9dia do m\xEAs (" + dec.totalN + ")</td><td style='text-align:right'>" + (dec.totalMedia !== null ? dec.totalMedia.toFixed(1) + " \u2605" : "\u2014") + "</td></tr></table></div>");
+    });
+    win.document.write("<p style='font-size:11px;color:#94A3B8'>SamorClean &middot; Gerado em " + new Date().toLocaleDateString("pt-PT") + "</p></body></html>");
+    win.document.close();
+    setTimeout(function() { win.print(); }, 300);
   }
   return /* @__PURE__ */ React.createElement("div", null,
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 } },
@@ -9290,7 +9362,7 @@ function Avaliacoes() {
       var lista = Object.keys(porColab).map(function(k) {
         var c = porColab[k];
         var media = c.stars.length > 0 ? c.stars.reduce(function(x, y) { return x + y; }, 0) / c.stars.length : null;
-        return { nome: c.nome, n: c.stars.length, media: media, inativo: c.inativo };
+        return { id: k, nome: c.nome, n: c.stars.length, media: media, inativo: c.inativo };
       }).sort(function(a, b) { return (a.inativo ? 1 : 0) - (b.inativo ? 1 : 0) || (b.media || -1) - (a.media || -1) || b.n - a.n; });
       var temInativos = Object.keys(empsMap).some(function(eid) { return empsMap[eid] && empsMap[eid].ativo === false; });
       if (lista.length === 0 && !temInativos) return null;
@@ -9298,7 +9370,9 @@ function Avaliacoes() {
         /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" } },
           /* @__PURE__ */ React.createElement("div", null,
             /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 2 } }, "\u2B50 M\xE9dia por colaborador \u2014 ", new Date(mesA + "-01T12:00:00").toLocaleDateString("pt-PT", { month: "long", year: "numeric" })),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 12 } }, "M\xE9dia deste m\xEAs (a que conta para o pr\xE9mio). O n\xFAmero de avalia\xE7\xF5es indica a fiabilidade da m\xE9dia.")
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 12 } }, "M\xE9dia deste m\xEAs (a que conta para o pr\xE9mio). O n\xFAmero de avalia\xE7\xF5es indica a fiabilidade da m\xE9dia."),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 4 } }, "Toca num colaborador para ver a decomposi\xE7\xE3o por cliente."),
+            /* @__PURE__ */ React.createElement("button", { onClick: function() { exportarTodosDecompPDF(mesDecomp); }, style: Object.assign({}, btnO, { fontSize: 11, padding: "6px 12px", marginBottom: 8 }) }, "\uD83D\uDCC4 Exportar todos (PDF)")
           ),
           temInativos && /* @__PURE__ */ React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#64748B", cursor: "pointer", whiteSpace: "nowrap" } },
             /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: mostrarInativosAv, onChange: function(e) { setMostrarInativosAv(e.target.checked); } }),
@@ -9307,12 +9381,54 @@ function Avaliacoes() {
         ),
         /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 10 } }, lista.map(function(c) {
           var cor = c.media === null ? "#94A3B8" : c.media >= 4.5 ? "#16A34A" : c.media >= 3.5 ? "#F59E0B" : "#DC2626";
-          return /* @__PURE__ */ React.createElement("div", { key: c.nome, style: { border: "1.5px solid " + (c.inativo ? "#E2E8F0" : "#E2EBF4"), borderRadius: 10, padding: "10px 12px", opacity: c.inativo ? 0.6 : 1, background: c.inativo ? "#F8FAFC" : "#fff" } },
+          return /* @__PURE__ */ React.createElement("div", { key: c.nome, onClick: function() { setColabExpandido(colabExpandido === c.id ? null : c.id); setClienteExpandido(null); }, style: { cursor: "pointer", border: "1.5px solid " + (colabExpandido === c.id ? "#2E6DA4" : (c.inativo ? "#E2E8F0" : "#E2EBF4")), borderRadius: 10, padding: "10px 12px", opacity: c.inativo ? 0.6 : 1, background: c.inativo ? "#F8FAFC" : "#fff" } },
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#1A3A5C" } }, c.nome, c.inativo ? /* @__PURE__ */ React.createElement("span", { style: { fontSize: 9, color: "#94A3B8", fontWeight: 400, marginLeft: 5 } }, "(inativo)") : null),
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 900, color: cor, marginTop: 3 } }, c.media === null ? "\u2014" : c.media.toFixed(1) + " \u2605"),
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: c.n < 3 ? "#DC2626" : "#94A3B8", marginTop: 2 } }, c.n === 0 ? "sem avalia\xE7\xF5es" : c.n + (c.n !== 1 ? " avalia\xE7\xF5es" : " avalia\xE7\xE3o"), c.n > 0 && c.n < 3 ? " (abaixo do m\xEDnimo)" : "")
           );
-        }))
+        })),
+        colabExpandido && (function() {
+          var dec = decomposicaoPorCliente(colabExpandido, mesDecomp);
+          var nomeColab = empsMap[colabExpandido] ? empsMap[colabExpandido].name : "Colaborador";
+          return /* @__PURE__ */ React.createElement("div", { style: { marginTop: 16, borderTop: "2px solid #E2EBF4", paddingTop: 16 } },
+            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 12 } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, "\uD83D\uDCCA ", nomeColab, " \u2014 por cliente"),
+              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+                /* @__PURE__ */ React.createElement("input", { type: "month", value: mesDecomp, onChange: function(ev) { setMesDecomp(ev.target.value); setClienteExpandido(null); }, style: Object.assign({}, inp, { maxWidth: 150, marginBottom: 0, fontSize: 12, padding: "6px 8px" }) }),
+                /* @__PURE__ */ React.createElement("button", { onClick: function() { exportarDecompPDF(colabExpandido, mesDecomp); }, style: Object.assign({}, btnO, { fontSize: 11, padding: "6px 12px" }) }, "\uD83D\uDCC4 PDF")
+              )
+            ),
+            dec.linhas.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8", textAlign: "center", padding: 20 } }, "Sem avalia\xE7\xF5es neste m\xEAs.") : /* @__PURE__ */ React.createElement("div", null,
+              dec.linhas.map(function(ln) {
+                var aberto = clienteExpandido === ln.clientId;
+                var corCli = ln.media >= 4.5 ? "#16A34A" : ln.media >= 3.5 ? "#F59E0B" : "#DC2626";
+                return /* @__PURE__ */ React.createElement("div", { key: ln.clientId, style: { marginBottom: 6 } },
+                  /* @__PURE__ */ React.createElement("div", { onClick: function() { setClienteExpandido(aberto ? null : ln.clientId); }, style: { display: "flex", justifyContent: "space-between", alignItems: "center", background: "#F6FAFD", borderRadius: 8, padding: "10px 14px", cursor: "pointer" } },
+                    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+                      /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#CBD5E1" } }, aberto ? "\u25B4" : "\u25BE"),
+                      /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, ln.nome),
+                      /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "(", ln.n, ")")
+                    ),
+                    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } },
+                      /* @__PURE__ */ React.createElement("span", { style: { fontSize: 15, fontWeight: 900, color: corCli } }, ln.media.toFixed(1)),
+                      /* @__PURE__ */ React.createElement("span", { style: { color: "#F59E0B" } }, "\u2605")
+                    )
+                  ),
+                  aberto && /* @__PURE__ */ React.createElement("div", { style: { padding: "8px 14px 4px 30px" } }, ln.servicos.map(function(sv, si) {
+                    return /* @__PURE__ */ React.createElement("div", { key: si, style: { display: "flex", justifyContent: "space-between", fontSize: 12, color: "#64748B", padding: "3px 0" } },
+                      /* @__PURE__ */ React.createElement("span", null, sv.data ? new Date(sv.data + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) : "\u2014"),
+                      /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, color: "#1A3A5C" } }, sv.stars, " \u2605")
+                    );
+                  }))
+                );
+              }),
+              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", background: "#1A3A5C", color: "#fff", borderRadius: 8, padding: "12px 16px", marginTop: 10 } },
+                /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 700 } }, "M\xE9dia do m\xEAs (", dec.totalN, " avalia\xE7\xF5es)"),
+                /* @__PURE__ */ React.createElement("span", { style: { fontSize: 20, fontWeight: 900 } }, dec.totalMedia !== null ? dec.totalMedia.toFixed(1) + " \u2605" : "\u2014")
+              )
+            )
+          );
+        })()
       );
     })(),
     clientList.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 48, color: "#94A3B8" }) }, "Sem avalia\xE7\xF5es ainda.") :
