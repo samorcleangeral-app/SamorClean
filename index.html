@@ -9684,6 +9684,7 @@ function Manager(props) {
   const [pedidosColabPendentes, setPedidosColabPendentes] = useState(0);
   const [notasClientesNovas, setNotasClientesNovas] = useState(0);
   const [pedidosPendentesLista, setPedidosPendentesLista] = useState([]);
+  const [ausenciasConfirmadas, setAusenciasConfirmadas] = useState([]);
   const [ausenciasSemana, setAusenciasSemana] = useState([]);
   const [todasAusencias, setTodasAusencias] = useState([]);
   const [mesAbsentismo, setMesAbsentismo] = useState(localDateStr().slice(0, 7));
@@ -9732,7 +9733,8 @@ function Manager(props) {
       db.list("alertas_dispensados", "?select=chave"),
       db.list("ausencias", "?select=funcionario_id,tipo,data_inicio,data_fim,estado&data_inicio=lte." + semDomingo + "&data_inicio=gte." + past60),
       db.list("ausencias", "?select=funcionario_id,tipo,data_inicio,data_fim,estado,parcial,hora_inicio,hora_fim"),
-      db.list("servicos", "?select=id,date&date=gte." + new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString().slice(0, 10))
+      db.list("servicos", "?select=id,date&date=gte." + new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString().slice(0, 10)),
+      db.list("ausencias_confirmacao", "?select=*&resolvido=is.false&order=created_at.desc")
     ]).then(function(results) {
       setClientCount(results[0] ? results[0].length : 0);
       setTodayJobs(results[1] || []);
@@ -9813,6 +9815,7 @@ function Manager(props) {
       });
       setAusenciasSemana(ausSem);
       setTodasAusencias(results[16] || []);
+      setAusenciasConfirmadas(results[18] || []);
       const faltasContrato = (results[12] || []).filter(function(a) {
         return (rhMap[a.funcionario_id] || "Contrato") === "Contrato";
       });
@@ -9966,6 +9969,7 @@ function Manager(props) {
     if (cruzamentosFer.length > 0) lembretes.push({ cor: "#E24B4A", icon: "\u26A0", txt: cruzamentosFer.length + (cruzamentosFer.length === 1 ? " cruzamento de férias" : " cruzamentos de férias") + " por resolver", go: function() { setView("employees"); } });
     if (notasClientesNovas > 0) lembretes.push({ cor: "#2E6DA4", icon: "\uD83D\uDCAC", txt: notasClientesNovas + (notasClientesNovas === 1 ? " nota de cliente por ver" : " notas de clientes por ver"), go: function() { setView("clients"); } });
     if (outrosPedidos.length > 0) lembretes.push({ cor: "#7C3AED", icon: "\uD83D\uDCE6", txt: outrosPedidos.length + (outrosPedidos.length === 1 ? " outro pedido" : " outros pedidos") + " (fardamento/material) por responder", go: function() { setView("pedidos_colab"); } });
+    if (ausenciasConfirmadas.length > 0) lembretes.push({ cor: "#DC2626", icon: "\uD83D\uDC64", txt: ausenciasConfirmadas.length + (ausenciasConfirmadas.length === 1 ? " colaborador marcado como ausente" : " colaboradores marcados como ausentes") + " num servi\xE7o \u2014 confirmar", go: function() { setView("auditoria_qr"); } });
     if (lembretes.length === 0) return null;
     return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, borderLeft: "3px solid #F59E0B" }) },
       /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 10 } }, "\uD83D\uDD14 A precisar de ti"),
@@ -10541,6 +10545,16 @@ function Employee(props) {
   const [aEnviarFotos, setAEnviarFotos] = useState(false);
   const [absStats, setAbsStats] = useState({ total: 0, faltas: 0, parciais: 0 });
   const [teamConfirm, setTeamConfirm] = useState(null);
+  const [teamPresentes, setTeamPresentes] = useState([]);
+  useEffect(function() {
+    if (phase === "team-confirm" && emp) {
+      var today3 = localDateStr();
+      var meusJobs = jobs.filter(function(j) { return j.date === today3 && (j.team || []).indexOf(emp.id) !== -1; });
+      var ids = [];
+      meusJobs.forEach(function(j) { (j.team || []).forEach(function(id) { if (id !== emp.id && ids.indexOf(id) === -1) ids.push(id); }); });
+      setTeamPresentes(ids);
+    }
+  }, [phase, emp && emp.id, jobs.length]);
   const [earlyLeaveEmp, setEarlyLeaveEmp] = useState(null);
   const [showEarlyLeave, setShowEarlyLeave] = useState(false);
   const [popupEmpJob, setPopupEmpJob] = useState(null);
@@ -10781,16 +10795,28 @@ function Employee(props) {
       setSJob(updated);
     }
   }
-  async function confirmTeam(mateId) {
+  async function confirmTeam(presentesConfirmados) {
+    // presentesConfirmados: array de ids que o colaborador confirmou estarem presentes (inclui ele próprio)
+    // A equipa alocada NUNCA é reescrita. Só registamos as ausências (alocados que foram desmarcados) como aviso à gestão.
     const todayMyJobs = jobs.filter(function(j) {
-      return (j.team || []).indexOf(emp.id) !== -1;
+      return (j.team || []).indexOf(emp.id) !== -1 && j.status !== "completed";
     });
-    for (let i = 0; i < todayMyJobs.length; i++) {
-      const j = todayMyJobs[i];
-      let newTeam = mateId ? [emp.id, mateId] : [emp.id];
-      await db.update("servicos", j.id, { team: newTeam });
+    var avisos = [];
+    todayMyJobs.forEach(function(j) {
+      (j.team || []).forEach(function(id) {
+        if (presentesConfirmados.indexOf(id) === -1) {
+          avisos.push({ servico_id: j.id, servico_nome: j.cn || "", data: j.date, funcionario_ausente: id, confirmado_por: emp.id, criado_em: new Date().toISOString() });
+        }
+      });
+    });
+    if (avisos.length > 0) {
+      for (var i = 0; i < avisos.length; i++) {
+        try {
+          await fetch(SUPABASE_URL + "/rest/v1/ausencias_confirmacao", { method: "POST", headers: dbHeaders(), body: JSON.stringify(avisos[i]) });
+        } catch (e) { console.warn("Falha ao registar aviso de ausência:", e); }
+      }
     }
-    setTeamConfirm(mateId);
+    setTeamConfirm(presentesConfirmados);
     setPhase("dash");
     db.list("servicos", "?select=*&date=eq." + today).then(function(rows) {
       setJobs(rows || []);
@@ -10827,26 +10853,40 @@ function Employee(props) {
     }) || null;
   }
   if (phase === "team-confirm") {
-    const todayJobs = jobs.filter(function(j) {
-      return (j.team || []).indexOf(emp.id) !== -1;
+    var today2 = localDateStr();
+    var todayJobs = jobs.filter(function(j) { return j.date === today2 && (j.team || []).indexOf(emp.id) !== -1; });
+    // Reunir a equipa alocada (todos os colaboradores alocados aos serviços do dia deste colaborador)
+    var equipaIds = [];
+    todayJobs.forEach(function(j) {
+      (j.team || []).forEach(function(id) { if (equipaIds.indexOf(id) === -1) equipaIds.push(id); });
     });
-    const suggestedMateId = todayJobs.length > 0 ? (todayJobs[0].team || []).find(function(id) {
-      return id !== emp.id;
-    }) : null;
-    const suggestedMate = suggestedMateId ? emps.find(function(e) {
-      return e.id === suggestedMateId;
-    }) : null;
-    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 } }, /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", marginBottom: 32 } }, /* @__PURE__ */ React.createElement(Av, { init: emp.av, size: 60, color: "#38B6D8" }), /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 20, marginTop: 12 } }, "Ola, ", emp.name.split(" ")[0], "!"), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.5)", fontSize: 13, marginTop: 4 } }, "Com quem trabalhas hoje?")), suggestedMate && /* @__PURE__ */ React.createElement("div", { style: { background: "rgba(56,182,216,0.15)", border: "1px solid rgba(56,182,216,0.3)", borderRadius: 14, padding: "16px 20px", width: "100%", maxWidth: 360, marginBottom: 16, textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.5)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginBottom: 8 } }, "Sugerido (com base na semana gerada)"), /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 16, marginBottom: 14 } }, suggestedMate.name), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-      confirmTeam(suggestedMateId);
-    }, style: { width: "100%", background: "#38B6D8", border: "none", borderRadius: 10, padding: "13px 0", color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer" } }, "Confirmar \u2014 estou com ", suggestedMate.name.split(" ")[0])), /* @__PURE__ */ React.createElement("div", { style: { width: "100%", maxWidth: 360, marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginBottom: 10, textAlign: "center" } }, "Ou escolhe outro colega"), emps.filter(function(e) {
-      return e.id !== emp.id && (!suggestedMateId || e.id !== suggestedMateId);
-    }).map(function(e) {
-      return /* @__PURE__ */ React.createElement("button", { key: e.id, onClick: function() {
-        confirmTeam(e.id);
-      }, style: { width: "100%", background: "rgba(255,255,255,0.07)", border: "1.5px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "12px 16px", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", marginBottom: 8, display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 32, color: "#64748B" }), /* @__PURE__ */ React.createElement("span", null, e.name));
-    })), /* @__PURE__ */ React.createElement("button", { onClick: function() {
-      confirmTeam(null);
-    }, style: { background: "transparent", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 12, cursor: "pointer" } }, "Trabalho sozinho hoje"));
+    var colegas = equipaIds.filter(function(id) { return id !== emp.id; }).map(function(id) {
+      return emps.find(function(e) { return e.id === id; });
+    }).filter(Boolean);
+    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 } },
+      /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", marginBottom: 28 } },
+        /* @__PURE__ */ React.createElement(Av, { init: emp.av, size: 60, color: "#38B6D8" }),
+        /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 20, marginTop: 12 } }, "Ol\xE1, ", emp.name.split(" ")[0], "!"),
+        /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.6)", fontSize: 13, marginTop: 6 } }, colegas.length > 0 ? "Confirma quem est\xE1 contigo hoje" : "Hoje trabalhas sozinho(a)")
+      ),
+      colegas.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { width: "100%", maxWidth: 360, marginBottom: 20 } },
+        colegas.map(function(c) {
+          var presente = teamPresentes.indexOf(c.id) !== -1;
+          return /* @__PURE__ */ React.createElement("div", { key: c.id, onClick: function() {
+            setTeamPresentes(presente ? teamPresentes.filter(function(x) { return x !== c.id; }) : teamPresentes.concat([c.id]));
+          }, style: { display: "flex", alignItems: "center", gap: 12, background: presente ? "rgba(56,182,216,0.15)" : "rgba(255,255,255,0.05)", border: "1px solid " + (presente ? "rgba(56,182,216,0.5)" : "rgba(255,255,255,0.1)"), borderRadius: 12, padding: "14px 16px", marginBottom: 10, cursor: "pointer" } },
+            /* @__PURE__ */ React.createElement("div", { style: { width: 24, height: 24, borderRadius: 6, background: presente ? "#38B6D8" : "transparent", border: "2px solid " + (presente ? "#38B6D8" : "rgba(255,255,255,0.3)"), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "#fff", fontWeight: 800, fontSize: 14 } }, presente ? "\u2713" : ""),
+            /* @__PURE__ */ React.createElement(Av, { init: c.av, size: 34, color: "#38B6D8" }),
+            /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 700, fontSize: 15, flex: 1 } }, c.name),
+            !presente && /* @__PURE__ */ React.createElement("span", { style: { color: "#F59E0B", fontSize: 11, fontWeight: 700 } }, "faltou")
+          );
+        })
+      ),
+      /* @__PURE__ */ React.createElement("button", { onClick: function() {
+        confirmTeam([emp.id].concat(teamPresentes));
+      }, style: { width: "100%", maxWidth: 360, background: "#38B6D8", border: "none", borderRadius: 12, padding: "15px 0", color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer" } }, "Confirmar e continuar"),
+      colegas.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.35)", fontSize: 11, marginTop: 14, textAlign: "center", maxWidth: 320 } }, "Desmarca quem n\xE3o veio. A gest\xE3o \xE9 avisada para confirmar.")
+    );
   }
   if (phase === "job" && sJob) {
     let job = sJob;
