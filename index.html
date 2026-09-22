@@ -3691,8 +3691,14 @@ function Routes() {
       // Capacidade real: dias úteis da semana menos ausências, vezes as horas/dia do colaborador
       const hDia = horasDiaMap[e.id] || 8;
       const diasUteisSem = dates.filter(function(d) { var dw = new Date(d + "T12:00:00").getDay(); return dw !== 0 && dw !== 6; });
-      const diasDisp = diasUteisSem.filter(function(d) { return !isEmpAusente(e.id, d); });
-      const capacidade = diasDisp.length * hDia;
+      var horasAusParcialSem = 0;
+      const diasDisp = diasUteisSem.filter(function(d) {
+        var info = ausenciaDoDia(e.id, d);
+        if (info.diaInteiro) return false;
+        horasAusParcialSem += info.horasParcial;
+        return true;
+      });
+      const capacidade = Math.max(0, diasDisp.length * hDia - horasAusParcialSem);
       const pct = capacidade > 0 ? Math.round(horasSemana / capacidade * 100) : 0;
       const diasFora = diasUteisSem.length - diasDisp.length;
       const cor = capacidade === 0 ? "#94A3B8" : pct >= 90 ? "#16A34A" : pct >= 60 ? "#F59E0B" : "#EF4444";
