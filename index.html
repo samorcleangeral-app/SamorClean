@@ -143,7 +143,6 @@ function horasReais(t1, t2) {
   var toMin = function(t) { var p = (t || "0:0").split(":"); return parseInt(p[0]) * 60 + parseInt(p[1]); };
   var inicio = toMin(t1), fim = toMin(t2);
   var duracao = Math.max(0, fim - inicio);
-  if (inicio <= 12 * 60 && fim >= 13 * 60) duracao -= 60;
   return duracao / 60;
 }
 function localDateStr(d) {
@@ -3305,8 +3304,14 @@ function Routes() {
       const horasSemana = wJobs.filter(function(j) { return (j.team || []).indexOf(e.id) !== -1 && j.status !== "cancelado"; }).reduce(function(s, j) { return s + horasReais(j.t1, j.t2); }, 0);
       const hDia = horasDiaMap[e.id] || 8;
       const diasUteisSem = dates.filter(function(d) { var dw = new Date(d + "T12:00:00").getDay(); return dw !== 0 && dw !== 6; });
-      const diasDisp = diasUteisSem.filter(function(d) { return !isEmpAusente(e.id, d); });
-      const capacidade = diasDisp.length * hDia;
+      var horasAusParcial = 0;
+      const diasDisp = diasUteisSem.filter(function(d) {
+        var info = ausenciaDoDia(e.id, d);
+        if (info.diaInteiro) return false;
+        horasAusParcial += info.horasParcial;
+        return true;
+      });
+      const capacidade = Math.max(0, diasDisp.length * hDia - horasAusParcial);
       const diasFora = diasUteisSem.length - diasDisp.length;
       const pct = capacidade > 0 ? Math.round(horasSemana / capacidade * 100) : 0;
       const cor = capacidade === 0 ? "#94A3B8" : pct >= 90 ? "#16A34A" : pct >= 60 ? "#F59E0B" : "#EF4444";
