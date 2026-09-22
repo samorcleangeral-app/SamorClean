@@ -3727,8 +3727,7 @@ function Routes() {
         dates.map(function(d) {
           const ausInfo = ausenciaDoDia(e.id, d);
           const ausenteDia = ausInfo.diaInteiro;
-          const horasBrutas = wJobs.filter(function(j) { return j.date === d && (j.team || []).indexOf(e.id) !== -1; }).reduce(function(s, j) { return s + horasReais(j.t1, j.t2); }, 0);
-          const horasDia = Math.max(0, horasBrutas - (ausenteDia ? 0 : ausInfo.horasParcial));
+          const horasDia = wJobs.filter(function(j) { return j.date === d && (j.team || []).indexOf(e.id) !== -1; }).reduce(function(s, j) { return s + horasReais(j.t1, j.t2); }, 0);
           return /* @__PURE__ */ React.createElement("div", { key: d, style: { textAlign: "center", fontSize: 10, fontWeight: 600, color: ausenteDia ? "#EF4444" : horasDia > 0 ? empColor(e.id) : "#CBD5E1", background: ausenteDia ? "#FEE2E2" : horasDia > 0 ? empColor(e.id) + "15" : "transparent", borderRadius: 4, padding: "2px 0" } },
             ausenteDia ? "\u2014" : horasDia > 0 ? horasDia.toFixed(1) + "h" : ""
           );
