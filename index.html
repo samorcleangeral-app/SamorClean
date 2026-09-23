@@ -11352,6 +11352,100 @@ function NotaForm(props) {
     }
   ), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 12 } }, "Esta nota fica vis\xEDvel ao gestor durante 30 dias."), sent ? /* @__PURE__ */ React.createElement("div", { style: { background: "#DCFCE7", borderRadius: 10, padding: "14px", textAlign: "center", color: "#15803D", fontWeight: 700 } }, "Nota enviada com sucesso!") : /* @__PURE__ */ React.createElement("button", { onClick: enviarNota, disabled: !textoNota.trim(), style: { width: "100%", background: textoNota.trim() ? "#2E6DA4" : "#94A3B8", border: "none", borderRadius: 12, padding: "14px 0", color: "#fff", fontSize: 15, fontWeight: 700, cursor: textoNota.trim() ? "pointer" : "not-allowed" } }, "Enviar Nota"));
 }
+var LALF_GUIAO = [
+  { passo: "Limpar", instrucao: "remover p\xF3, detritos e res\xEDduos \xE0 superf\xEDcie" },
+  { passo: "Aspirar", instrucao: "aspirar ch\xE3o, cantos e t\xEAxteis" },
+  { passo: "Lavar", instrucao: "lavar com produto e \xE1gua as superf\xEDcies e o ch\xE3o" },
+  { passo: "Finalizar", instrucao: "verificar, repor e dar o acabamento final" }
+];
+function ChecklistLALF(props) {
+  const job = props.job;
+  const zonas = props.zonas || [];
+  const empId = props.empId;
+  const empsMap = props.empsMap || {};
+  const [marcacoes, setMarcacoes] = useState({});
+  const [zonaAberta, setZonaAberta] = useState(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(function() {
+    db.list("checklist_lalf_marcacoes", "?select=*&servico_id=eq." + encodeURIComponent(job.id)).then(function(rows) {
+      var m = {};
+      (rows || []).forEach(function(r) { m[r.zona + "|" + r.passo] = { feito: r.feito, por: r.funcionario_id }; });
+      setMarcacoes(m);
+      setLoading(false);
+    });
+  }, [job.id]);
+  function estaMarcado(zona, passo) { var k = marcacoes[zona + "|" + passo]; return k && k.feito; }
+  function quemMarcou(zona, passo) { var k = marcacoes[zona + "|" + passo]; return k ? k.por : null; }
+  async function marcarPasso(zona, passo, novoEstado) {
+    var chave = zona + "|" + passo;
+    var jaMarcado = marcacoes[chave];
+    if (novoEstado && jaMarcado && jaMarcado.feito && jaMarcado.por !== empId) {
+      var nomeOutro = empsMap[jaMarcado.por] ? empsMap[jaMarcado.por].name : "outro colega";
+      if (!window.confirm("Este passo j\xE1 foi marcado por " + nomeOutro + ". Queres marcar na mesma?")) return;
+    }
+    setMarcacoes(function(p) {
+      var u = Object.assign({}, p);
+      if (novoEstado) u[chave] = { feito: true, por: empId };
+      else delete u[chave];
+      return u;
+    });
+    try {
+      if (novoEstado) {
+        await fetch(SUPABASE_URL + "/rest/v1/checklist_lalf_marcacoes", {
+          method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "resolution=merge-duplicates" }),
+          body: JSON.stringify({ servico_id: job.id, client_id: job.client_id, zona: zona, passo: passo, feito: true, funcionario_id: empId })
+        });
+      } else {
+        await fetch(SUPABASE_URL + "/rest/v1/checklist_lalf_marcacoes?servico_id=eq." + encodeURIComponent(job.id) + "&zona=eq." + encodeURIComponent(zona) + "&passo=eq." + encodeURIComponent(passo), { method: "DELETE", headers: dbHeaders() });
+      }
+    } catch (e) { console.warn("marcar passo:", e); }
+  }
+  function zonaCompleta(zona) { return LALF_GUIAO.every(function(g) { return estaMarcado(zona, g.passo); }); }
+  async function marcarZonaToda(zona, novoEstado) {
+    for (var i = 0; i < LALF_GUIAO.length; i++) {
+      await marcarPasso(zona, LALF_GUIAO[i].passo, novoEstado);
+    }
+  }
+  if (loading) return /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8", textAlign: "center", padding: 16 } }, "A carregar checklist...");
+  var totalPassos = zonas.length * LALF_GUIAO.length;
+  var feitos = 0;
+  zonas.forEach(function(z) { LALF_GUIAO.forEach(function(g) { if (estaMarcado(z, g.passo)) feitos++; }); });
+  return /* @__PURE__ */ React.createElement("div", null,
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 } },
+      /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 13, color: "#1A3A5C" } }, "Checklist LALF"),
+      /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: feitos === totalPassos ? "#16A34A" : "#F59E0B" } }, feitos, "/", totalPassos)
+    ),
+    /* @__PURE__ */ React.createElement("div", { style: { background: "#E2EBF4", borderRadius: 4, height: 5, marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { background: feitos === totalPassos ? "#16A34A" : "#2E6DA4", height: "100%", borderRadius: 4, width: (totalPassos > 0 ? feitos / totalPassos * 100 : 0) + "%" } })),
+    zonas.map(function(zona) {
+      var aberta = zonaAberta === zona;
+      var completa = zonaCompleta(zona);
+      return /* @__PURE__ */ React.createElement("div", { key: zona, style: { border: "1.5px solid " + (completa ? "#BBF7D0" : "#E2EBF4"), borderRadius: 10, marginBottom: 8, overflow: "hidden" } },
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: completa ? "#F0FDF4" : "#fff" } },
+          /* @__PURE__ */ React.createElement("div", { onClick: function() { marcarZonaToda(zona, !completa); }, style: { width: 26, height: 26, borderRadius: 7, background: completa ? "#16A34A" : "transparent", border: "2px solid " + (completa ? "#16A34A" : "#CBD5E1"), display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, color: "#fff", fontWeight: 800, fontSize: 15 } }, completa ? "\u2713" : ""),
+          /* @__PURE__ */ React.createElement("div", { onClick: function() { setZonaAberta(aberta ? null : zona); }, style: { flex: 1, cursor: "pointer" } },
+            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C" } }, zona),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, LALF_GUIAO.filter(function(g) { return estaMarcado(zona, g.passo); }).length, "/4 passos")
+          ),
+          /* @__PURE__ */ React.createElement("span", { onClick: function() { setZonaAberta(aberta ? null : zona); }, style: { fontSize: 16, color: "#CBD5E1", cursor: "pointer" } }, aberta ? "\u25B4" : "\u25BE")
+        ),
+        aberta && /* @__PURE__ */ React.createElement("div", { style: { padding: "4px 14px 12px", background: "#F8FAFC" } }, LALF_GUIAO.map(function(g) {
+          var marcado = estaMarcado(zona, g.passo);
+          var quem = quemMarcou(zona, g.passo);
+          var nomeQuem = quem && empsMap[quem] ? empsMap[quem].name : null;
+          return /* @__PURE__ */ React.createElement("div", { key: g.passo, style: { display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 0", borderBottom: "1px solid #EEF2F6" } },
+            /* @__PURE__ */ React.createElement("div", { onClick: function() { marcarPasso(zona, g.passo, !marcado); }, style: { width: 22, height: 22, borderRadius: 6, background: marcado ? "#2E6DA4" : "transparent", border: "2px solid " + (marcado ? "#2E6DA4" : "#CBD5E1"), display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, color: "#fff", fontWeight: 800, fontSize: 13, marginTop: 1 } }, marcado ? "\u2713" : ""),
+            /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, g.passo),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, g.instrucao),
+              nomeQuem && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#2E6DA4", fontWeight: 600, marginTop: 2 } }, "\u2713 " + nomeQuem)
+            )
+          );
+        }))
+      );
+    })
+  );
+}
+
 function TeamConfirmContent(props) {
   const empId = props.empId;
   const clientId = props.clientId;
@@ -11608,15 +11702,25 @@ function ClientPortal(props) {
     }
   }
   const [notasPreload, setNotasPreload] = useState([]);
+  const [checklistLalfMap, setChecklistLalfMap] = useState({});
+  const [empsMapTeam, setEmpsMapTeam] = useState({});
   function loadTeamData(empId) {
     setLoadingTeam(true);
     var nowStr = new Date().toISOString();
     Promise.all([
       db.list("servicos", "?select=*&date=eq." + today + "&order=t1"),
-      db.list("client_notes", "?select=*&partilhada=is.true&servicos_restantes=gt.0&expires_at=gte." + nowStr)
+      db.list("client_notes", "?select=*&partilhada=is.true&servicos_restantes=gt.0&expires_at=gte." + nowStr),
+      db.list("clientes", "?select=id,checklist_lalf&checklist_lalf=not.is.null"),
+      db.list("funcionarios", "?select=id,name")
     ]).then(function(results) {
       const rows = results[0] || [];
       const notas = results[1] || [];
+      var lalfMap = {};
+      (results[2] || []).forEach(function(c) { lalfMap[c.id] = c.checklist_lalf; });
+      setChecklistLalfMap(lalfMap);
+      var em = {};
+      (results[3] || []).forEach(function(e) { em[e.id] = e; });
+      setEmpsMapTeam(em);
       setNotasPreload(notas);
       const myJobs = rows.filter(function(j) {
         return (j.team || []).indexOf(empId) !== -1;
@@ -12008,7 +12112,7 @@ function ClientPortal(props) {
           j._notasProv = r2 || [];
         }
         setPopupJob(j);
-      }, style: Object.assign({}, card, { padding: 16, marginBottom: 12, borderLeft: "4px solid " + (job.status === "completed" ? "#16A34A" : isInteractive ? "#2E6DA4" : "#94A3B8"), cursor: "pointer" }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, job.cn), job.obra_ref && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#2E6DA4", fontWeight: 700, marginTop: 1 } }, "\uD83D\uDCCD ", job.obra_ref), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, job.t1, " \u2014 ", job.t2), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } }, job.addr)), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 } }, /* @__PURE__ */ React.createElement(Bdg, { label: job.status === "completed" ? "Conclu\xEDdo" : isInteractive ? "Este local" : "Seguinte", bg: job.status === "completed" ? "#DCFCE7" : isInteractive ? "#EFF6FF" : "#F8FAFC", tx: job.status === "completed" ? "#15803D" : isInteractive ? "#2E6DA4" : "#64748B" }), (notasPreload || []).filter(function(n) { return n.client_id === job.client_id; }).length > 0 && /* @__PURE__ */ React.createElement("span", { style: { background: "#EF4444", color: "#fff", borderRadius: 10, padding: "2px 8px", fontSize: 10, fontWeight: 800 } }, "\u26A0 ", (notasPreload || []).filter(function(n) { return n.client_id === job.client_id; }).length))), /* @__PURE__ */ React.createElement("button", { onClick: function(e) { e.stopPropagation(); setFotosJob(job); }, style: { marginTop: 10, width: "100%", background: (job.fotos || []).length > 0 ? "#EFF6FF" : "#fff", border: "1.5px solid " + ((job.fotos || []).length > 0 ? "#2E6DA4" : "#CBD5E1"), color: (job.fotos || []).length > 0 ? "#2E6DA4" : "#64748B", borderRadius: 8, padding: "9px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" } }, "\uD83D\uDCF7 Fotos", (job.fotos || []).length > 0 ? " (" + (job.fotos || []).length + ")" : ""), isInteractive && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 8, padding: "8px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#64748B", fontWeight: 700, textTransform: "uppercase" } }, "Entrada"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: job.check_in ? "#16A34A" : "#CBD5E1" } }, job.check_in || "--:--")), /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 8, padding: "8px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#64748B", fontWeight: 700, textTransform: "uppercase" } }, "Sa\xEDda"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: job.check_out ? "#EF4444" : "#CBD5E1" } }, job.check_out || "--:--"))), !job.check_in && /* @__PURE__ */ React.createElement("button", { onClick: doCheckin, style: Object.assign({}, btnG, { width: "100%", marginBottom: 10, textAlign: "center" }) }, "Registar entrada"), cl.length > 0 && job.check_in && !job.check_out && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, "Checklist"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: checklistComplete ? "#16A34A" : "#F59E0B" } }, done, "/", cl.length)), /* @__PURE__ */ React.createElement("div", { style: { background: "#E2EBF4", borderRadius: 4, height: 5, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { background: checklistComplete ? "#16A34A" : "#2E6DA4", height: "100%", borderRadius: 4, width: pct + "%" } })), cl.map(function(task, i) {
+      }, style: Object.assign({}, card, { padding: 16, marginBottom: 12, borderLeft: "4px solid " + (job.status === "completed" ? "#16A34A" : isInteractive ? "#2E6DA4" : "#94A3B8"), cursor: "pointer" }) }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, job.cn), job.obra_ref && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#2E6DA4", fontWeight: 700, marginTop: 1 } }, "\uD83D\uDCCD ", job.obra_ref), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, job.t1, " \u2014 ", job.t2), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } }, job.addr)), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 } }, /* @__PURE__ */ React.createElement(Bdg, { label: job.status === "completed" ? "Conclu\xEDdo" : isInteractive ? "Este local" : "Seguinte", bg: job.status === "completed" ? "#DCFCE7" : isInteractive ? "#EFF6FF" : "#F8FAFC", tx: job.status === "completed" ? "#15803D" : isInteractive ? "#2E6DA4" : "#64748B" }), (notasPreload || []).filter(function(n) { return n.client_id === job.client_id; }).length > 0 && /* @__PURE__ */ React.createElement("span", { style: { background: "#EF4444", color: "#fff", borderRadius: 10, padding: "2px 8px", fontSize: 10, fontWeight: 800 } }, "\u26A0 ", (notasPreload || []).filter(function(n) { return n.client_id === job.client_id; }).length))), /* @__PURE__ */ React.createElement("button", { onClick: function(e) { e.stopPropagation(); setFotosJob(job); }, style: { marginTop: 10, width: "100%", background: (job.fotos || []).length > 0 ? "#EFF6FF" : "#fff", border: "1.5px solid " + ((job.fotos || []).length > 0 ? "#2E6DA4" : "#CBD5E1"), color: (job.fotos || []).length > 0 ? "#2E6DA4" : "#64748B", borderRadius: 8, padding: "9px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" } }, "\uD83D\uDCF7 Fotos", (job.fotos || []).length > 0 ? " (" + (job.fotos || []).length + ")" : ""), isInteractive && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 8, padding: "8px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#64748B", fontWeight: 700, textTransform: "uppercase" } }, "Entrada"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: job.check_in ? "#16A34A" : "#CBD5E1" } }, job.check_in || "--:--")), /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 8, padding: "8px 12px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#64748B", fontWeight: 700, textTransform: "uppercase" } }, "Sa\xEDda"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: job.check_out ? "#EF4444" : "#CBD5E1" } }, job.check_out || "--:--"))), !job.check_in && /* @__PURE__ */ React.createElement("button", { onClick: doCheckin, style: Object.assign({}, btnG, { width: "100%", marginBottom: 10, textAlign: "center" }) }, "Registar entrada"), (checklistLalfMap[job.client_id] && Array.isArray(checklistLalfMap[job.client_id]) && job.check_in && !job.check_out) ? /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement(ChecklistLALF, { job: job, zonas: checklistLalfMap[job.client_id], empId: currentEmp ? currentEmp.id : null, empsMap: empsMapTeam })) : cl.length > 0 && job.check_in && !job.check_out && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, "Checklist"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: checklistComplete ? "#16A34A" : "#F59E0B" } }, done, "/", cl.length)), /* @__PURE__ */ React.createElement("div", { style: { background: "#E2EBF4", borderRadius: 4, height: 5, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { background: checklistComplete ? "#16A34A" : "#2E6DA4", height: "100%", borderRadius: 4, width: pct + "%" } })), cl.map(function(task, i) {
         const ok = (job.done_tasks || []).indexOf(task) !== -1;
         return /* @__PURE__ */ React.createElement("div", { key: i, onClick: function() {
           togTask(task);
