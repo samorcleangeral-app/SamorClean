@@ -11615,6 +11615,8 @@ function ClientPortal(props) {
   const [loadingTeam, setLoadingTeam] = useState(false);
   const [popupJob, setPopupJob] = useState(null);
   const [checkedInThisSession, setCheckedInThisSession] = useState({});
+  const [valvulaLalf, setValvulaLalf] = useState(null);
+  const [valvulaJustif, setValvulaJustif] = useState("");
   const [confirmedMateId, setConfirmedMateId] = useState(null);
   const extras = ["Limpeza de estofos adicional", "Limpeza de vidros exteriores", "Limpeza de garagem", "Limpeza de varandas", "Desinfec\xE7\xE3o profunda", "Outro"];
   useEffect(function() {
@@ -12097,16 +12099,35 @@ function ClientPortal(props) {
           setTeamPhase("done");
         }
       }
-      async function doCheckout() {
+      async function doCheckout(justificacao) {
+        var zonasLalf = checklistLalfMap[job.client_id];
+        if (zonasLalf && Array.isArray(zonasLalf) && !justificacao) {
+          var totalEsperado = zonasLalf.length * 4;
+          try {
+            var marcs = await db.list("checklist_lalf_marcacoes", "?select=id&servico_id=eq." + encodeURIComponent(job.id) + "&feito=is.true");
+            if ((marcs || []).length < totalEsperado) {
+              setValvulaLalf({ job: job, feitos: (marcs || []).length, total: totalEsperado });
+              setValvulaJustif("");
+              return;
+            }
+          } catch (e) { console.warn("verificar checklist LALF:", e); }
+        }
         const time = (/* @__PURE__ */ new Date()).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
         const patch = { check_out: time, status: "completed" };
         if (!checklistComplete) patch.checklist_incomplete = true;
+        if (justificacao) {
+          patch.lalf_incompleto_justif = justificacao;
+          try {
+            await fetch(SUPABASE_URL + "/rest/v1/ausencias_confirmacao", { method: "POST", headers: dbHeaders(), body: JSON.stringify({ servico_id: job.id, servico_nome: job.cn || "", data: job.date, funcionario_ausente: null, confirmado_por: currentEmp ? currentEmp.id : null, tipo: "checklist_lalf", justificacao: justificacao, resolvido: false }) });
+          } catch (e) { console.warn("aviso lalf:", e); }
+        }
         const res = await fetch(SUPABASE_URL + "/rest/v1/servicos?id=eq." + encodeURIComponent(job.id), {
           method: "PATCH",
           headers: dbHeaders(),
           body: JSON.stringify(patch)
         });
         if (res.ok) {
+          setValvulaLalf(null);
           const updatedJob = Object.assign({}, job, patch);
           setTeamJobs(function(p) {
             return { current: p.current.map(function(j) {
@@ -12143,7 +12164,31 @@ function ClientPortal(props) {
     const nextJobs = Array.isArray(jobs) ? [] : jobs.next || [];
     const completedJobs = Array.isArray(jobs) ? [] : jobs.completed || [];
     const teamPopup = popupJob ? /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }, onClick: function() { setPopupJob(null); } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 18, width: "100%", maxWidth: 420, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }, onClick: function(e) { e.stopPropagation(); } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#1A3A5C", borderRadius: "18px 18px 0 0", padding: "18px 20px", position: "relative" } }, /* @__PURE__ */ React.createElement("button", { onClick: function() { setPopupJob(null); }, style: { position: "absolute", top: 12, right: 12, background: "rgba(255,255,255,0.2)", border: "none", borderRadius: "50%", width: 28, height: 28, color: "#fff", fontSize: 16, cursor: "pointer" } }, "\u2715"), /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 900, fontSize: 18, marginBottom: 2 } }, popupJob.cn), popupJob.obra_ref && /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.85)", fontSize: 12, fontWeight: 700, marginBottom: 2 } }, "\uD83D\uDCCD ", popupJob.obra_ref), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.7)", fontSize: 12 } }, new Date(popupJob.date + "T12:00:00").toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long" })), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.9)", fontSize: 13, fontWeight: 700, marginTop: 2 } }, popupJob.t1, " \u2014 ", popupJob.t2)), /* @__PURE__ */ React.createElement("div", { style: { padding: "16px 20px" } }, popupJob.addr && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 12 } }, "\uD83D\uDCCD ", popupJob.addr), popupJob.nota_interna && /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 10, padding: "12px 14px", marginBottom: 10, borderLeft: "4px solid #2E6DA4" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#2E6DA4", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "\uD83D\uDCCC Nota permanente"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#1A3A5C", lineHeight: 1.5 } }, popupJob.nota_interna)), (popupJob._notasProv || []).map(function(np, i) { return /* @__PURE__ */ React.createElement("div", { key: i, style: { background: "#FFF7ED", borderRadius: 10, padding: "12px 14px", marginBottom: 10, borderLeft: "4px solid #F59E0B" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#92400E", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "\u26A0 Nota do cliente"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#78350F", lineHeight: 1.5 } }, np.nota)); }), popupJob.notes && /* @__PURE__ */ React.createElement("div", { style: { background: "#F0FDF4", borderRadius: 10, padding: "12px 14px", marginBottom: 10, borderLeft: "4px solid #16A34A" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#15803D", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "\uD83D\uDCCB Nota da gest\xE3o"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#14532D", lineHeight: 1.5 } }, popupJob.notes)), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 10, padding: "10px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#64748B", fontWeight: 700, textTransform: "uppercase" } }, "Entrada"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: popupJob.check_in ? "#16A34A" : "#CBD5E1" } }, popupJob.check_in || "--:--")), /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 10, padding: "10px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#64748B", fontWeight: 700, textTransform: "uppercase" } }, "Sa\xEDda"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: popupJob.check_out ? "#EF4444" : "#CBD5E1" } }, popupJob.check_out || "--:--"))), /* @__PURE__ */ React.createElement("button", { onClick: function() { setPopupJob(null); }, style: { width: "100%", background: "#1A3A5C", border: "none", borderRadius: 10, padding: "12px", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" } }, "Fechar")))) : null;
-    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#F4F8FB", maxWidth: 500, margin: "0 auto" } }, teamPopup, /* @__PURE__ */ React.createElement("div", { style: { background: "#1A3A5C", padding: "20px 20px 24px" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ React.createElement("img", { src: "https://dtydrnezzaykiaglwxfv.supabase.co/storage/v1/object/public/formacao/samorclean_icon_hq.png", onError: function(e) {
+    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#F4F8FB", maxWidth: 500, margin: "0 auto" } }, teamPopup, valvulaLalf && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 600, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 18, width: "100%", maxWidth: 380, padding: 26 } },
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 30, textAlign: "center", marginBottom: 8 } }, "\u26A0\uFE0F"),
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 17, color: "#1A3A5C", textAlign: "center", marginBottom: 6 } }, "Checklist por completar"),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", textAlign: "center", marginBottom: 4, lineHeight: 1.5 } }, "Faltam ", valvulaLalf.total - valvulaLalf.feitos, " de ", valvulaLalf.total, " passos. A checklist deve estar completa antes de sair."),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", textAlign: "center", marginBottom: 16 } }, "Se n\xE3o foi poss\xEDvel completar, explica porqu\xEA para poderes sair. A gest\xE3o ser\xE1 avisada."),
+      /* @__PURE__ */ React.createElement("textarea", { value: valvulaJustif, onChange: function(e) { setValvulaJustif(e.target.value); }, placeholder: "Ex: quarto 2 sem acesso, faltou material...", style: { width: "100%", minHeight: 70, border: "1.5px solid #E2EBF4", borderRadius: 10, padding: 12, fontSize: 13, marginBottom: 14, boxSizing: "border-box", fontFamily: "inherit" } }),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10 } },
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setValvulaLalf(null); }, style: { flex: 1, background: "#F1F5F9", border: "none", borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 700, color: "#64748B", cursor: "pointer" } }, "Voltar \xE0 checklist"),
+        /* @__PURE__ */ React.createElement("button", { onClick: async function() {
+          if (!valvulaJustif.trim()) { window.alert("Escreve o motivo para poderes sair."); return; }
+          var jb = valvulaLalf.job;
+          var time = (/* @__PURE__ */ new Date()).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
+          try {
+            await fetch(SUPABASE_URL + "/rest/v1/ausencias_confirmacao", { method: "POST", headers: dbHeaders(), body: JSON.stringify({ servico_id: jb.id, servico_nome: jb.cn || "", data: jb.date, funcionario_ausente: null, confirmado_por: currentEmp ? currentEmp.id : null, tipo: "checklist_lalf", justificacao: valvulaJustif.trim(), resolvido: false }) });
+          } catch (e) { console.warn(e); }
+          var res = await fetch(SUPABASE_URL + "/rest/v1/servicos?id=eq." + encodeURIComponent(jb.id), { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ check_out: time, status: "completed", lalf_incompleto_justif: valvulaJustif.trim() }) });
+          if (res.ok) {
+            setTeamJobs(function(p) { return { current: p.current.map(function(j) { return j.id === jb.id ? Object.assign({}, j, { check_out: time, status: "completed" }) : j; }), next: p.next, completed: p.completed.concat([Object.assign({}, jb, { check_out: time })]) }; });
+            setValvulaLalf(null);
+            setDoneInfo({ tipo: "Sa\xEDda", cliente: jb.cn || "", hora: time });
+            setTeamPhase("done");
+          } else { window.alert("Erro ao registar sa\xEDda."); }
+        }, style: { flex: 1, background: "#DC2626", border: "none", borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 700, color: "#fff", cursor: "pointer" } }, "Sair mesmo assim")
+      )
+    )), /* @__PURE__ */ React.createElement("div", { style: { background: "#1A3A5C", padding: "20px 20px 24px" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ React.createElement("img", { src: "https://dtydrnezzaykiaglwxfv.supabase.co/storage/v1/object/public/formacao/samorclean_icon_hq.png", onError: function(e) {
       e.target.src = logoFallback;
     }, style: { width: 44, height: 44, borderRadius: 10, objectFit: "contain", background: "#fff" } }), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 14 } }, "SamorClean"), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.5)", fontSize: 11 } }, currentEmp ? currentEmp.name : ""))), /* @__PURE__ */ React.createElement("button", { onClick: function() {
       setPhase("welcome");
