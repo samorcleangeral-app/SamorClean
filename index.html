@@ -4944,10 +4944,11 @@ function FichaRH(props) {
     ["data_nascimento", "data_admissao", "carta_validade"].forEach(function(f) {
       if (patch[f] === "" || patch[f] === undefined) patch[f] = null;
     });
-    ["salario_base", "valor_dia", "horas_dia"].forEach(function(f) {
+    ["salario_base", "valor_dia", "horas_dia", "valor_alimentacao", "valor_ajudas_custo", "valor_premio_assiduidade"].forEach(function(f) {
       if (patch[f] === "" || patch[f] === undefined) patch[f] = null;
       else patch[f] = parseFloat(patch[f]) || null;
     });
+    if (patch.categoria_id === "" || patch.categoria_id === undefined) patch.categoria_id = null;
     if (rh) {
       const res = await fetch(SUPABASE_URL + "/rest/v1/funcionarios_rh?id=eq." + rh.id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify(patch) });
       if (res.ok) {
