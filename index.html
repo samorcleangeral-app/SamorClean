@@ -4759,6 +4759,87 @@ function Clients() {
   }
   return null;
 }
+function GestaoCategorias(props) {
+  const onBack = props.onBack;
+  const [cats, setCats] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [edit, setEdit] = useState(null);
+  useEffect(function() {
+    db.list("categorias_colaborador", "?select=*&order=nome").then(function(rows) { setCats(rows || []); setLoading(false); });
+  }, []);
+  function novaCat() {
+    setEdit({ nome: "", vinculo: "Contrato", ordenado_base: "", tem_alimentacao: false, valor_alimentacao: "", tem_ajudas_custo: false, valor_ajudas_custo: "", tem_sub_natal: true, tem_sub_ferias: true, tem_premio_assiduidade: false, valor_premio_assiduidade: "", tem_premio_produtividade: false, ativa: true });
+  }
+  async function guardar() {
+    if (!edit.nome || !edit.nome.trim()) { window.alert("D\xE1 um nome \xE0 categoria."); return; }
+    var payload = Object.assign({}, edit);
+    ["ordenado_base", "valor_alimentacao", "valor_ajudas_custo", "valor_premio_assiduidade"].forEach(function(k) { payload[k] = parseFloat(payload[k]) || 0; });
+    try {
+      if (edit.id) {
+        await fetch(SUPABASE_URL + "/rest/v1/categorias_colaborador?id=eq." + edit.id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify(payload) });
+        setCats(function(p) { return p.map(function(c) { return c.id === edit.id ? Object.assign({}, c, payload) : c; }); });
+      } else {
+        var res = await fetch(SUPABASE_URL + "/rest/v1/categorias_colaborador", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }), body: JSON.stringify(payload) });
+        var novo = await res.json();
+        if (novo && novo[0]) setCats(function(p) { return p.concat([novo[0]]); });
+      }
+      setEdit(null);
+    } catch (e) { window.alert("Erro ao guardar: " + e.message); }
+  }
+  var isRV = edit && edit.vinculo === "Recibo Verde";
+  function campoValor(label, campoTem, campoValor2, taxado) {
+    return /* @__PURE__ */ React.createElement("div", { style: { borderBottom: "1px solid #F1F5F9", padding: "10px 0" } },
+      /* @__PURE__ */ React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginBottom: edit[campoTem] ? 8 : 0 } },
+        /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: !!edit[campoTem], onChange: function(e) { setEdit(Object.assign({}, edit, { [campoTem]: e.target.checked })); } }),
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, label),
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: taxado ? "#DC2626" : "#16A34A", fontWeight: 700 } }, taxado ? "taxado SS" : "n\xE3o taxado")
+      ),
+      edit[campoTem] && campoValor2 && /* @__PURE__ */ React.createElement("input", { type: "number", step: "0.01", value: edit[campoValor2] || "", placeholder: "Valor \u20AC", onFocus: function(e) { e.target.select(); }, onChange: function(e) { setEdit(Object.assign({}, edit, { [campoValor2]: e.target.value })); }, style: { width: "100%", padding: "8px 10px", border: "1.5px solid #E2EBF4", borderRadius: 8, fontSize: 13, boxSizing: "border-box" } })
+    );
+  }
+  if (edit) {
+    return /* @__PURE__ */ React.createElement("div", { style: { maxWidth: 480, margin: "0 auto", padding: 16 } },
+      /* @__PURE__ */ React.createElement("button", { onClick: function() { setEdit(null); }, style: { background: "none", border: "none", color: "#64748B", fontSize: 14, cursor: "pointer", marginBottom: 12 } }, "\u2190 Voltar"),
+      /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 22, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 17, color: "#1A3A5C", marginBottom: 16 } }, edit.id ? "Editar categoria" : "Nova categoria"),
+        /* @__PURE__ */ React.createElement("label", { style: { fontSize: 12, fontWeight: 700, color: "#64748B" } }, "Nome da categoria"),
+        /* @__PURE__ */ React.createElement("input", { value: edit.nome, placeholder: "Ex: T\xE9cnico de Limpeza", onChange: function(e) { setEdit(Object.assign({}, edit, { nome: e.target.value })); }, style: { width: "100%", padding: "10px", border: "1.5px solid #E2EBF4", borderRadius: 8, fontSize: 14, boxSizing: "border-box", marginTop: 4, marginBottom: 14 } }),
+        /* @__PURE__ */ React.createElement("label", { style: { fontSize: 12, fontWeight: 700, color: "#64748B" } }, "V\xEDnculo"),
+        /* @__PURE__ */ React.createElement("select", { value: edit.vinculo, onChange: function(e) { setEdit(Object.assign({}, edit, { vinculo: e.target.value })); }, style: { width: "100%", padding: "10px", border: "1.5px solid #E2EBF4", borderRadius: 8, fontSize: 14, boxSizing: "border-box", marginTop: 4, marginBottom: 16 } },
+          /* @__PURE__ */ React.createElement("option", { value: "Contrato" }, "Contrato de Trabalho"),
+          /* @__PURE__ */ React.createElement("option", { value: "Recibo Verde" }, "Recibo Verde / Independente")
+        ),
+        /* @__PURE__ */ React.createElement("label", { style: { fontSize: 12, fontWeight: 700, color: "#64748B" } }, isRV ? "Valor por m\xEAs (\u20AC)" : "Ordenado base (\u20AC)"),
+        /* @__PURE__ */ React.createElement("input", { type: "number", step: "0.01", value: edit.ordenado_base || "", placeholder: "Ex: 920.00", onFocus: function(e) { e.target.select(); }, onChange: function(e) { setEdit(Object.assign({}, edit, { ordenado_base: e.target.value })); }, style: { width: "100%", padding: "10px", border: "1.5px solid #E2EBF4", borderRadius: 8, fontSize: 14, boxSizing: "border-box", marginTop: 4, marginBottom: 16 } }),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", marginBottom: 4 } }, "Parcelas"),
+        campoValor("Subs\xEDdio de alimenta\xE7\xE3o", "tem_alimentacao", "valor_alimentacao", false),
+        campoValor("Ajudas de custo nacional", "tem_ajudas_custo", "valor_ajudas_custo", false),
+        !isRV && campoValor("Subs\xEDdio de Natal (duod\xE9cimos)", "tem_sub_natal", null, true),
+        !isRV && campoValor("Subs\xEDdio de f\xE9rias", "tem_sub_ferias", null, true),
+        campoValor("Pr\xE9mio de assiduidade", "tem_premio_assiduidade", "valor_premio_assiduidade", true),
+        campoValor("Pr\xE9mio de produtividade (das avalia\xE7\xF5es)", "tem_premio_produtividade", null, true),
+        /* @__PURE__ */ React.createElement("button", { onClick: guardar, style: { width: "100%", background: "#16A34A", border: "none", borderRadius: 10, padding: "13px", color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer", marginTop: 18 } }, "Guardar categoria")
+      )
+    );
+  }
+  return /* @__PURE__ */ React.createElement("div", { style: { maxWidth: 620, margin: "0 auto", padding: 16 } },
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 18 } },
+      /* @__PURE__ */ React.createElement("button", { onClick: onBack, style: { background: "none", border: "none", color: "#64748B", fontSize: 14, cursor: "pointer" } }, "\u2190 Voltar"),
+      /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 20, fontWeight: 800, color: "#1A3A5C", margin: 0, flex: 1 } }, "Categorias de colaborador"),
+      /* @__PURE__ */ React.createElement("button", { onClick: novaCat, style: { background: "#2E6DA4", border: "none", borderRadius: 8, padding: "8px 14px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" } }, "+ Nova")
+    ),
+    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", marginBottom: 14 } }, "Os moldes que definem o que cada tipo de colaborador recebe. As fichas herdam da categoria e podem ajustar."),
+    loading ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 30 } }, "A carregar...") : cats.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 30, fontSize: 13 } }, "Ainda n\xE3o h\xE1 categorias. Cria a primeira.") : cats.map(function(c) {
+      return /* @__PURE__ */ React.createElement("div", { key: c.id, onClick: function() { setEdit(Object.assign({}, c)); }, style: { background: "#fff", border: "1.5px solid #E2EBF4", borderRadius: 12, padding: "14px 18px", marginBottom: 10, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" } },
+        /* @__PURE__ */ React.createElement("div", null,
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, c.nome),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, c.vinculo, " \xB7 ", (parseFloat(c.ordenado_base) || 0).toFixed(0), "\u20AC base", c.tem_premio_assiduidade ? " \xB7 assid." : "", c.tem_premio_produtividade ? " \xB7 produt." : "")
+        ),
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 16, color: "#CBD5E1" } }, "\u203A")
+      );
+    })
+  );
+}
 function FichaRH(props) {
   const sel = props.sel;
   const editForm = props.editForm;
@@ -5678,7 +5759,7 @@ function Employees() {
     win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Faltas \u2014 " + mesLabel + "</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#1A3A5C}h1{margin-bottom:2px}h2{color:#64748B;font-weight:normal;margin-top:0;margin-bottom:24px}table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;padding:8px 10px;background:#1A3A5C;color:#fff;font-size:11px;text-transform:uppercase}tr{border-bottom:1px solid #E2EBF4}@media print{body{padding:15px}}</style></head><body><h1>SamorClean</h1><h2>Relat\xF3rio de Aus\xEAncias \u2014 " + mesLabel + (soContrato ? " (colaboradores a contrato)" : "") + "</h2><table><thead><tr><th>Colaborador</th><th>Tipo</th><th>Per\xEDodo</th><th>Dias</th></tr></thead><tbody>" + linhas + "</tbody></table><script>window.onload=function(){window.print();}<\/script></body></html>");
     win.document.close();
   }
-    return /* @__PURE__ */ React.createElement("div", null, pinRecemGerado && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 28, maxWidth: 360, width: "100%", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, marginBottom: 12 } }, "\uD83D\uDD11"), /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 4 } }, "PIN de ", pinRecemGerado.nome), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 36, fontWeight: 900, color: "#2E6DA4", fontFamily: "monospace", letterSpacing: 4, margin: "16px 0" } }, pinRecemGerado.pin), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#EF4444", fontWeight: 700, marginBottom: 20 } }, "\u26A0 Anota agora \u2014 n\xE3o voltar\xE1 a aparecer."), /* @__PURE__ */ React.createElement("button", { onClick: function() { setPinRecemGerado(null); }, style: Object.assign({}, btnG, { width: "100%", textAlign: "center" }) }, "Ok, j\xE1 anotei"))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 10 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Colaboradores"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, emps.length, " registados")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ React.createElement("button", { style: btnO, onClick: function() { exportarFaltasMes(false); } }, "\uD83D\uDCC4 Faltas do M\xEAs (Todos)"), /* @__PURE__ */ React.createElement("button", { style: btnO, onClick: function() { exportarFaltasMes(true); } }, "\uD83D\uDCC4 Faltas (s\xF3 Contrato)"), /* @__PURE__ */ React.createElement("button", { style: btn, onClick: function() {
+    return /* @__PURE__ */ React.createElement("div", null, pinRecemGerado && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 28, maxWidth: 360, width: "100%", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, marginBottom: 12 } }, "\uD83D\uDD11"), /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 4 } }, "PIN de ", pinRecemGerado.nome), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 36, fontWeight: 900, color: "#2E6DA4", fontFamily: "monospace", letterSpacing: 4, margin: "16px 0" } }, pinRecemGerado.pin), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#EF4444", fontWeight: 700, marginBottom: 20 } }, "\u26A0 Anota agora \u2014 n\xE3o voltar\xE1 a aparecer."), /* @__PURE__ */ React.createElement("button", { onClick: function() { setPinRecemGerado(null); }, style: Object.assign({}, btnG, { width: "100%", textAlign: "center" }) }, "Ok, j\xE1 anotei"))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 10 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Colaboradores"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, emps.length, " registados")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ React.createElement("button", { style: btnO, onClick: function() { if (props.onIrCategorias) props.onIrCategorias(); } }, "\uD83C\uDFF7\uFE0F Categorias"), /* @__PURE__ */ React.createElement("button", { style: btnO, onClick: function() { exportarFaltasMes(false); } }, "\uD83D\uDCC4 Faltas do M\xEAs (Todos)"), /* @__PURE__ */ React.createElement("button", { style: btnO, onClick: function() { exportarFaltasMes(true); } }, "\uD83D\uDCC4 Faltas (s\xF3 Contrato)"), /* @__PURE__ */ React.createElement("button", { style: btn, onClick: function() {
       setNewForm({ id: "", name: "", role: "T\xE9cnico", pin: "", av: "" });
       setErrMsg("");
       setView("new");
@@ -10237,7 +10318,7 @@ function Manager(props) {
     return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: i === 0 ? "#F59E0B" : i === 1 ? "#94A3B8" : "#CD7C54", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 11, flexShrink: 0 } }, i + 1), /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 30, color: ["#2E6DA4", "#0F766E", "#7C3AED", "#C2410C"][i] || "#64748B" }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, e.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, e.role)), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right" } }, rankingModo === "mes" ? (rMes ? /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end" } }, /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 900, fontSize: 15, color: "#2E6DA4" } }, rMes.media), /* @__PURE__ */ React.createElement("span", { style: { color: "#F59E0B" } }, "\u2605"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: "#94A3B8" } }, "(", rMes.count, ")")) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#CBD5E1", fontWeight: 700 } }, "Sem avalia\xE7\xF5es este m\xEAs")) : (e.rating ? /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end" } }, /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 900, fontSize: 15, color: "#2E6DA4" } }, e.rating), /* @__PURE__ */ React.createElement("span", { style: { color: "#F59E0B" } }, "\u2605")), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 2 } }, /* @__PURE__ */ React.createElement(Stars, { r: e.rating }))) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#CBD5E1", fontWeight: 700 } }, "Sem avalia\xE7\xF5es"))));
   })))) : null, view === "quadro_op" ? /* @__PURE__ */ React.createElement(QuadroOperacional, null) : null, view === "notas_op" ? /* @__PURE__ */ React.createElement(NotasOperacionais, null) : null, view === "finance" ? /* @__PURE__ */ React.createElement(Finance, null) : null, view === "routes" ? /* @__PURE__ */ React.createElement(Routes, null) : null, view === "clients" ? /* @__PURE__ */ React.createElement(Clients, null) : null, view === "fornecedores" ? /* @__PURE__ */ React.createElement(Fornecedores, null) : null, view === "pedidos_colab" ? /* @__PURE__ */ React.createElement(PedidosColab, { onUpdate: function(n) {
     setPedidosColabPendentes(n);
-  } }) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "leads" ? /* @__PURE__ */ React.createElement(Leads, null) : null, view === "recrutamento" ? /* @__PURE__ */ React.createElement(Recrutamento, null) : null, view === "avaliacoes" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "formacao" ? /* @__PURE__ */ React.createElement(Formacao, null) : null, view === "relatorio" ? /* @__PURE__ */ React.createElement(RelatorioMensal, null) : null, view === "gestores" ? /* @__PURE__ */ React.createElement(GestoresAdmin, null) : null, view === "armazem_qr" ? /* @__PURE__ */ React.createElement(QRArmazem, null) : null, view === "auditoria_qr" ? /* @__PURE__ */ React.createElement(AuditoriaQR, null) : null, view === "stock" ? /* @__PURE__ */ React.createElement(Stock, { onIrParaFornecedores: function() { setView("fornecedores"); } }) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, null) : null));
+  } }) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "leads" ? /* @__PURE__ */ React.createElement(Leads, null) : null, view === "recrutamento" ? /* @__PURE__ */ React.createElement(Recrutamento, null) : null, view === "avaliacoes" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "formacao" ? /* @__PURE__ */ React.createElement(Formacao, null) : null, view === "relatorio" ? /* @__PURE__ */ React.createElement(RelatorioMensal, null) : null, view === "gestores" ? /* @__PURE__ */ React.createElement(GestoresAdmin, null) : null, view === "armazem_qr" ? /* @__PURE__ */ React.createElement(QRArmazem, null) : null, view === "auditoria_qr" ? /* @__PURE__ */ React.createElement(AuditoriaQR, null) : null, view === "stock" ? /* @__PURE__ */ React.createElement(Stock, { onIrParaFornecedores: function() { setView("fornecedores"); } }) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, { onIrCategorias: function() { setView("categorias"); } }) : null, view === "categorias" ? /* @__PURE__ */ React.createElement(GestaoCategorias, { onBack: function() { setView("employees"); } }) : null));
 }
 function EmpPedidos(props) {
   const empId = props.empId;
