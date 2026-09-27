@@ -4812,13 +4812,14 @@ function GestaoCategorias(props) {
         /* @__PURE__ */ React.createElement("label", { style: { fontSize: 12, fontWeight: 700, color: "#64748B" } }, isRV ? "Valor por m\xEAs (\u20AC)" : "Ordenado base (\u20AC)"),
         /* @__PURE__ */ React.createElement("input", { type: "number", step: "0.01", value: edit.ordenado_base || "", placeholder: "Ex: 920.00", onFocus: function(e) { e.target.select(); }, onChange: function(e) { setEdit(Object.assign({}, edit, { ordenado_base: e.target.value })); }, style: { width: "100%", padding: "10px", border: "1.5px solid #E2EBF4", borderRadius: 8, fontSize: 14, boxSizing: "border-box", marginTop: 4, marginBottom: 16 } }),
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", marginBottom: 4 } }, "Parcelas"),
-        campoValor("Subs\xEDdio de alimenta\xE7\xE3o", "tem_alimentacao", "valor_alimentacao", false),
-        campoValor("Ajudas de custo nacional", "tem_ajudas_custo", "valor_ajudas_custo", false),
+        !isRV && campoValor("Subs\xEDdio de alimenta\xE7\xE3o", "tem_alimentacao", "valor_alimentacao", false),
+        !isRV && campoValor("Ajudas de custo nacional", "tem_ajudas_custo", "valor_ajudas_custo", false),
         !isRV && campoValor("Subs\xEDdio de Natal (duod\xE9cimos)", "tem_sub_natal", null, true),
         !isRV && campoValor("Subs\xEDdio de f\xE9rias", "tem_sub_ferias", null, true),
-        campoValor("Pr\xE9mio de assiduidade", "tem_premio_assiduidade", "valor_premio_assiduidade", true),
-        campoValor("Pr\xE9mio de produtividade (das avalia\xE7\xF5es)", "tem_premio_produtividade", null, true),
-        /* @__PURE__ */ React.createElement("button", { onClick: guardar, style: { width: "100%", background: "#16A34A", border: "none", borderRadius: 10, padding: "13px", color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer", marginTop: 18 } }, "Guardar categoria")
+        campoValor("Pr\xE9mio de assiduidade", "tem_premio_assiduidade", "valor_premio_assiduidade", !isRV),
+        campoValor("Pr\xE9mio de produtividade (das avalia\xE7\xF5es)", "tem_premio_produtividade", null, !isRV),
+        /* @__PURE__ */ React.createElement("button", { onClick: guardar, style: { width: "100%", background: "#16A34A", border: "none", borderRadius: 10, padding: "13px", color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer", marginTop: 18 } }, "Guardar categoria"),
+        edit.id && /* @__PURE__ */ React.createElement("button", { onClick: async function() { if (!window.confirm("Apagar a categoria \"" + edit.nome + "\"? Os colaboradores que a tenham ficam sem categoria (os dados deles mant\xEAm-se).")) return; try { await fetch(SUPABASE_URL + "/rest/v1/categorias_colaborador?id=eq." + edit.id, { method: "DELETE", headers: dbHeaders() }); setCats(function(p) { return p.filter(function(c) { return c.id !== edit.id; }); }); setEdit(null); } catch (e) { window.alert("Erro ao apagar: " + e.message); } }, style: { width: "100%", background: "transparent", border: "none", color: "#DC2626", fontSize: 13, fontWeight: 700, cursor: "pointer", marginTop: 10 } }, "\uD83D\uDDD1\uFE0F Apagar categoria")
       )
     );
   }
