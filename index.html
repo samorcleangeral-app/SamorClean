@@ -9966,7 +9966,7 @@ function Manager(props) {
         var fim = a.data_fim || a.data_inicio;
         return fim >= semSegunda && (a.data_inicio || "") <= semDomingo;
       }).map(function(a) {
-        return { funcionario_id: a.funcionario_id, nome: nomesEmp[a.funcionario_id] || "\u2014", tipo: a.tipo, data_inicio: a.data_inicio, data_fim: a.data_fim || a.data_inicio, estaSemana: (a.data_inicio || "") <= fimEstaSemana };
+        return { funcionario_id: a.funcionario_id, nome: nomesEmp[a.funcionario_id] || "\u2014", tipo: a.tipo, data_inicio: a.data_inicio, data_fim: a.data_fim || a.data_inicio, parcial: a.parcial, hora_inicio: a.hora_inicio, hora_fim: a.hora_fim, estaSemana: (a.data_inicio || "") <= fimEstaSemana };
       });
       setAusenciasSemana(ausSem);
       setTodasAusencias(results[16] || []);
@@ -10183,7 +10183,7 @@ function Manager(props) {
       var d = contaDias(a);
       if (a.data_inicio === a.data_fim) {
         var base = ini.toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "short" });
-        return a.parcial ? base + " \xB7 parcial" : base + " \xB7 1 dia";
+        return a.parcial ? (a.hora_inicio && a.hora_fim ? base + " \xB7 parcial (" + a.hora_inicio + "\u2013" + a.hora_fim + ")" : base + " \xB7 parcial") : base + " \xB7 1 dia";
       }
       return ini.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric" }) + " \u2192 " + fim.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" }) + " \xB7 " + d + " dias";
     }
