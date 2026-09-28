@@ -9954,6 +9954,7 @@ function Manager(props) {
   const [pedidosPendentesLista, setPedidosPendentesLista] = useState([]);
   const [ausenciasConfirmadas, setAusenciasConfirmadas] = useState([]);
   const [showChecklistAvisos, setShowChecklistAvisos] = useState(false);
+  const [showAusenciaAvisos, setShowAusenciaAvisos] = useState(false);
   const [nomesEmpMap, setNomesEmpMap] = useState({});
   const [ausenciasSemana, setAusenciasSemana] = useState([]);
   const [todasAusencias, setTodasAusencias] = useState([]);
@@ -10242,7 +10243,7 @@ function Manager(props) {
     if (outrosPedidos.length > 0) lembretes.push({ cor: "#7C3AED", icon: "\uD83D\uDCE6", txt: outrosPedidos.length + (outrosPedidos.length === 1 ? " outro pedido" : " outros pedidos") + " (fardamento/material) por responder", go: function() { setView("pedidos_colab"); } });
     var avisosAusenciaEquipa = ausenciasConfirmadas.filter(function(a) { return a.tipo !== "checklist_lalf"; });
     var avisosChecklistLalf = ausenciasConfirmadas.filter(function(a) { return a.tipo === "checklist_lalf"; });
-    if (avisosAusenciaEquipa.length > 0) lembretes.push({ cor: "#DC2626", icon: "\uD83D\uDC64", txt: avisosAusenciaEquipa.length + (avisosAusenciaEquipa.length === 1 ? " colaborador marcado como ausente" : " colaboradores marcados como ausentes") + " num servi\xE7o \u2014 confirmar", go: function() { setView("auditoria_qr"); } });
+    if (avisosAusenciaEquipa.length > 0) lembretes.push({ cor: "#DC2626", icon: "\uD83D\uDC64", txt: avisosAusenciaEquipa.length + (avisosAusenciaEquipa.length === 1 ? " colaborador marcado como ausente" : " colaboradores marcados como ausentes") + " num servi\xE7o \u2014 ver", go: function() { setShowAusenciaAvisos(true); } });
     if (avisosChecklistLalf.length > 0) lembretes.push({ cor: "#EA580C", icon: "\uD83E\uDDF9", txt: avisosChecklistLalf.length + (avisosChecklistLalf.length === 1 ? " servi\xE7o terminado com checklist incompleta" : " servi\xE7os terminados com checklist incompleta") + " \u2014 ver", go: function() { setShowChecklistAvisos(true); } });
     if (lembretes.length === 0) return null;
     return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, borderLeft: "3px solid #F59E0B" }) },
@@ -10254,6 +10255,37 @@ function Manager(props) {
           /* @__PURE__ */ React.createElement("span", { style: { fontSize: 16, color: "#CBD5E1" } }, "\u203A")
         );
       }))
+    );
+  })(), showAusenciaAvisos && (function() {
+    var avisos = ausenciasConfirmadas.filter(function(a) { return a.tipo !== "checklist_lalf"; }).sort(function(a, b) { return (b.created_at || b.data || "") < (a.created_at || a.data || "") ? -1 : 1; });
+    async function resolver(av) {
+      try { await fetch(SUPABASE_URL + "/rest/v1/ausencias_confirmacao?id=eq." + encodeURIComponent(av.id), { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ resolvido: true }) }); } catch (e) { console.warn(e); }
+      setAusenciasConfirmadas(function(p) { return p.filter(function(x) { return x.id !== av.id; }); });
+    }
+    return /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 600, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }, onClick: function() { setShowAusenciaAvisos(false); } },
+      /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 18, width: "100%", maxWidth: 460, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }, onClick: function(e) { e.stopPropagation(); } },
+        /* @__PURE__ */ React.createElement("div", { style: { background: "#DC2626", borderRadius: "18px 18px 0 0", padding: "18px 22px", position: "relative" } },
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowAusenciaAvisos(false); }, style: { position: "absolute", top: 12, right: 12, background: "rgba(255,255,255,0.2)", border: "none", borderRadius: "50%", width: 28, height: 28, color: "#fff", fontSize: 16, cursor: "pointer" } }, "\u2715"),
+          /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 900, fontSize: 17 } }, "\uD83D\uDC64 Colaboradores marcados como ausentes"),
+          /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.85)", fontSize: 12, marginTop: 2 } }, avisos.length, avisos.length === 1 ? " situa\xE7\xE3o para verificar" : " situa\xE7\xF5es para verificar")
+        ),
+        /* @__PURE__ */ React.createElement("div", { style: { padding: "16px 20px" } },
+          avisos.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 20, fontSize: 13 } }, "Nada por resolver.") : avisos.map(function(av) {
+            var nomeAusente = nomesEmpMap[av.funcionario_ausente] || av.funcionario_ausente || "\u2014";
+            var nomeConfirmou = nomesEmpMap[av.confirmado_por] || av.confirmado_por || "\u2014";
+            return /* @__PURE__ */ React.createElement("div", { key: av.id, style: { border: "1.5px solid #FECACA", borderRadius: 12, padding: 16, marginBottom: 12 } },
+              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 } },
+                /* @__PURE__ */ React.createElement("div", null,
+                  /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, av.servico_nome || "Servi\xE7o"),
+                  /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", marginTop: 1 } }, av.data ? new Date(av.data + "T12:00:00").toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long" }) : "")
+                ),
+                /* @__PURE__ */ React.createElement("button", { onClick: function() { resolver(av); }, style: { background: "#16A34A", border: "none", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0 } }, "\u2713 Resolvido")
+              ),
+              /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF2F2", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#7F1D1D", lineHeight: 1.5 } }, /* @__PURE__ */ React.createElement("b", null, nomeConfirmou), " confirmou a equipa e indicou que ", /* @__PURE__ */ React.createElement("b", null, nomeAusente), " n\xE3o estava presente neste servi\xE7o.")
+            );
+          })
+        )
+      )
     );
   })(), showChecklistAvisos && (function() {
     var avisos = ausenciasConfirmadas.filter(function(a) { return a.tipo === "checklist_lalf"; }).sort(function(a, b) { return (b.created_at || b.data || "") < (a.created_at || a.data || "") ? -1 : 1; });
