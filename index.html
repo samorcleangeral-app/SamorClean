@@ -9814,6 +9814,88 @@ function PedidosExtra() {
   );
 }
 
+function QuadroEsquecimentos(props) {
+  const [mesRef, setMesRef] = useState(function() { var n = new Date(); return n.getFullYear() + "-" + String(n.getMonth() + 1).padStart(2, "0"); });
+  const [dados, setDados] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [aberto, setAberto] = useState(null);
+  useEffect(function() {
+    setLoading(true);
+    var partes = mesRef.split("-");
+    var ano = parseInt(partes[0]), mesIdx = parseInt(partes[1]) - 1;
+    var mStart = ano + "-" + String(mesIdx + 1).padStart(2, "0") + "-01";
+    var ultimoDia = new Date(ano, mesIdx + 1, 0).getDate();
+    var mEnd = ano + "-" + String(mesIdx + 1).padStart(2, "0") + "-" + String(ultimoDia).padStart(2, "0");
+    Promise.all([
+      db.list("funcionarios", "?select=*"),
+      db.list("servicos", "?select=id,cn,date,t1,team,check_in,check_out,status&date=gte." + mStart + "&date=lte." + mEnd + "&status=eq.completed"),
+      db.list("picagens_armazem", "?select=funcionario_id,tipo,created_at&created_at=gte." + mStart + "T00:00:00&created_at=lte." + mEnd + "T23:59:59")
+    ]).then(function(res) {
+      var emps = (res[0] || []).filter(function(e) { return e.ativo !== false; });
+      var servicos = res[1] || [];
+      var picArm = res[2] || [];
+      var lista = emps.map(function(e) {
+        var faltasServ = [];
+        servicos.forEach(function(j) {
+          if ((j.team || []).indexOf(e.id) === -1) return;
+          if (!j.check_in) faltasServ.push({ cn: j.cn, date: j.date, t1: j.t1, tipo: "entrada" });
+          if (!j.check_out) faltasServ.push({ cn: j.cn, date: j.date, t1: j.t1, tipo: "sa\xEDda" });
+        });
+        var diasComEntradaArm = {};
+        picArm.forEach(function(p) { if (p.funcionario_id === e.id && p.tipo === "entrada") { diasComEntradaArm[(p.created_at || "").slice(0, 10)] = true; } });
+        var esqArm = (e.esquecimentos_armazem_manual != null) ? e.esquecimentos_armazem_manual : 0;
+        return { id: e.id, nome: e.name, av: e.av, esqServ: faltasServ.length, detalheServ: faltasServ, esqArm: esqArm };
+      }).sort(function(a, b) { return (b.esqServ + b.esqArm) - (a.esqServ + a.esqArm); });
+      setDados(lista);
+      setLoading(false);
+    });
+  }, [mesRef]);
+  function mudarMes(delta) {
+    var partes = mesRef.split("-");
+    var d = new Date(parseInt(partes[0]), parseInt(partes[1]) - 1 + delta, 1);
+    setMesRef(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"));
+    setAberto(null);
+  }
+  var mesLabel = (function() { var p = mesRef.split("-"); return new Date(parseInt(p[0]), parseInt(p[1]) - 1, 1).toLocaleDateString("pt-PT", { month: "long", year: "numeric" }); })();
+  return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } },
+      /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "\uD83D\uDCCB Esquecimentos de picagem"),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { mudarMes(-1); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, width: 26, height: 26, cursor: "pointer", fontWeight: 800, color: "#64748B" } }, "\u2039"),
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: "#64748B", minWidth: 90, textAlign: "center", textTransform: "capitalize" } }, mesLabel),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { mudarMes(1); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, width: 26, height: 26, cursor: "pointer", fontWeight: 800, color: "#64748B" } }, "\u203A")
+      )
+    ),
+    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 12 } }, "Servi\xE7o: perde o pr\xE9mio com mais de 10 \xB7 Armaz\xE9m: com 5 ou mais"),
+    loading ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 20, fontSize: 13 } }, "A carregar...") : dados.map(function(d) {
+      var perde = d.esqServ > 10 || d.esqArm >= 5;
+      var perto = !perde && (d.esqServ >= 7 || d.esqArm >= 3);
+      var cor = perde ? "#DC2626" : perto ? "#F59E0B" : "#16A34A";
+      var estaAberto = aberto === d.id;
+      return /* @__PURE__ */ React.createElement("div", { key: d.id, style: { borderBottom: "1px solid #F1F5F9" } },
+        /* @__PURE__ */ React.createElement("div", { onClick: function() { setAberto(estaAberto ? null : d.id); }, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 0", cursor: d.esqServ > 0 ? "pointer" : "default" } },
+          /* @__PURE__ */ React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: cor, flexShrink: 0 } }),
+          e_av(d.av, cor),
+          /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } },
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, d.nome),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, d.esqServ, " no servi\xE7o \xB7 ", d.esqArm, " no armaz\xE9m")
+          ),
+          perde ? /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 700, color: "#fff", background: "#DC2626", borderRadius: 6, padding: "3px 8px" } }, "perde pr\xE9mio") : null,
+          d.esqServ > 0 ? /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#CBD5E1" } }, estaAberto ? "\u25B4" : "\u25BE") : null
+        ),
+        estaAberto && d.detalheServ.length > 0 ? /* @__PURE__ */ React.createElement("div", { style: { padding: "0 0 10px 26px" } }, d.detalheServ.slice().sort(function(a, b) { return a.date < b.date ? -1 : 1; }).map(function(f, i) {
+          return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", fontSize: 11.5, color: "#64748B", padding: "3px 0" } },
+            /* @__PURE__ */ React.createElement("span", null, f.date ? new Date(f.date + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) : "", " \xB7 ", f.cn || ""),
+            /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, color: "#DC2626" } }, "faltou ", f.tipo)
+          );
+        })) : null
+      );
+    })
+  );
+}
+function e_av(init, cor) {
+  return /* @__PURE__ */ React.createElement("div", { style: { width: 30, height: 30, borderRadius: "50%", background: (cor || "#2E6DA4") + "22", color: cor || "#2E6DA4", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12, flexShrink: 0 } }, init || "?");
+}
 function Manager(props) {
   const onExit = props.onExit;
   const gestor = props.gestor || { nivel: "director", menus: ["home", "finance", "routes", "clients", "pedidos", "avaliacoes", "formacao", "relatorio", "employees"] };
@@ -10220,7 +10302,7 @@ function Manager(props) {
       grupo("Esta semana", estaSem, "#DC2626"),
       grupo("Próxima semana", proxSem, "#F59E0B")
     );
-  })(), (function() {
+  })(), /* @__PURE__ */ React.createElement(QuadroEsquecimentos, null), (function() {
     var ymAbs = mesAbsentismo;
     var partesAbs = ymAbs.split("-");
     var anoAbs = parseInt(partesAbs[0]), mesIdxAbs = parseInt(partesAbs[1]) - 1;
