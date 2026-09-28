@@ -332,7 +332,7 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
   });
   // Esquecimentos de armazém (só entrada) — vêm de fora
   var esquecimentosArmazem = (dadosProdutividade && dadosProdutividade.esquecimentosArmazem) || 0;
-  var perdePorPicagem = esquecimentosServico > 10 || esquecimentosArmazem >= 5;
+  var perdePorPicagem = esquecimentosServico >= 10 || esquecimentosArmazem >= 5;
   var premio = (temAusencia || diasFerias > 0 || perdePorPicagem) ? 0 : 50;
   if (tipo === "Recibo Verde") {
     premio = (premiosOpcionais && premiosOpcionais[emp.id]) || 0;
@@ -387,7 +387,7 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
   }
   var labelAssid = tipo === "Recibo Verde" ? "Prémio assiduidade (opcional, decidido pela gest\xE3o)" : "Prémio assiduidade";
   if (premio === 0 && perdePorPicagem && !temAusencia && diasFerias === 0) {
-    if (esquecimentosServico > 10) labelAssid += " (\u26A0 " + esquecimentosServico + " picagens em falta)";
+    if (esquecimentosServico >= 10) labelAssid += " (\u26A0 " + esquecimentosServico + " picagens em falta)";
     else if (esquecimentosArmazem >= 5) labelAssid += " (\u26A0 " + esquecimentosArmazem + " faltas de picagem no armaz\xE9m)";
   }
   detalhe.push({ l: labelAssid, v: premio });
@@ -6229,8 +6229,9 @@ function QuadroOperacional() {
                   );
                 })
               ),
-              j.check_in && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } },
+              j.check_in && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" } },
                 /* @__PURE__ */ React.createElement("div", { style: { background: "#DCFCE7", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700, color: "#15803D" } }, "\u23F1 ", j.check_in),
+                j.check_in_emp && (function() { var q = emps.find(function(e) { return e.id === j.check_in_emp; }); return /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10.5, color: "#64748B", fontWeight: 600 } }, "\uD83D\uDCF1 picou: ", q ? q.name : j.check_in_emp); })(),
                 j.check_out && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700, color: "#DC2626" } }, "\u23F9 ", j.check_out)
               )
             )
@@ -9820,6 +9821,7 @@ function QuadroEsquecimentos(props) {
   const [anulados, setAnulados] = useState({});
   const [loading, setLoading] = useState(true);
   const [aberto, setAberto] = useState(null);
+  const [anularModal, setAnularModal] = useState(null);
   function chaveAnul(fid, sid, tipo) { return fid + "|" + sid + "|" + tipo; }
   function carregar() {
     setLoading(true);
@@ -9854,11 +9856,13 @@ function QuadroEsquecimentos(props) {
     });
   }
   useEffect(function() { carregar(); }, [mesRef]);
-  async function anular(fid, f) {
-    var motivo = window.prompt("Motivo da anula\xE7\xE3o (ex: QR sem rede, falha t\xE9cnica):", "");
-    if (motivo === null) return;
+  function anular(fid, f) { setAnularModal({ fid: fid, f: f }); }
+  async function confirmarAnular(motivo) {
+    var m = anularModal;
+    if (!m) return;
     try {
-      await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "resolution=merge-duplicates" }), body: JSON.stringify({ funcionario_id: fid, servico_id: f.sid, tipo_picagem: f.tipo, motivo: motivo.trim() || "sem motivo" }) });
+      await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "resolution=merge-duplicates" }), body: JSON.stringify({ funcionario_id: m.fid, servico_id: m.f.sid, tipo_picagem: m.f.tipo, motivo: motivo }) });
+      setAnularModal(null);
       carregar();
     } catch (e) { window.alert("Erro ao anular: " + e.message); }
   }
@@ -9886,7 +9890,7 @@ function QuadroEsquecimentos(props) {
     ),
     /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 12 } }, "Servi\xE7o: perde o pr\xE9mio com mais de 10 \xB7 Armaz\xE9m: com 5 ou mais"),
     loading ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 20, fontSize: 13 } }, "A carregar...") : dados.map(function(d) {
-      var perde = d.esqServ > 10 || d.esqArm >= 5;
+      var perde = d.esqServ >= 10 || d.esqArm >= 5;
       var perto = !perde && (d.esqServ >= 7 || d.esqArm >= 3);
       var cor = perde ? "#DC2626" : perto ? "#F59E0B" : "#16A34A";
       var estaAberto = aberto === d.id;
@@ -9909,7 +9913,17 @@ function QuadroEsquecimentos(props) {
           );
         })) : null
       );
-    })
+    }),
+    anularModal && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 600, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }, onClick: function() { setAnularModal(null); } },
+      /* @__PURE__ */ React.createElement("div", { onClick: function(e) { e.stopPropagation(); }, style: { background: "#fff", borderRadius: 16, width: "100%", maxWidth: 340, padding: 22 } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C", marginBottom: 4 } }, "Anular esquecimento"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", marginBottom: 16 } }, "Porque \xE9 que este esquecimento n\xE3o deve contar?"),
+        ["QR n\xE3o funcionava", "Sem rede", "Outro"].map(function(cat) {
+          return /* @__PURE__ */ React.createElement("button", { key: cat, onClick: function() { if (cat === "Outro") { var t = window.prompt("Descreve o motivo:", ""); if (t === null) return; confirmarAnular(t.trim() || "Outro"); } else { confirmarAnular(cat); } }, style: { width: "100%", background: "#F6FAFD", border: "1.5px solid #E2EBF4", borderRadius: 10, padding: "13px", fontSize: 14, fontWeight: 700, color: "#1A3A5C", cursor: "pointer", marginBottom: 8, textAlign: "left" } }, cat);
+        }),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { setAnularModal(null); }, style: { width: "100%", background: "transparent", border: "none", color: "#94A3B8", fontSize: 13, cursor: "pointer", marginTop: 4 } }, "Cancelar")
+      )
+    )
   );
 }
 
@@ -10945,7 +10959,7 @@ function Employee(props) {
         var esquecimentosArmazem = 0;
         Object.keys(diasComServico2).forEach(function(dia) { if (!diasComServico2[dia] && !diasComPicagem2[dia] && dia < today && dia >= firstDayMonthStr) esquecimentosArmazem++; });
         const temAusenciaPenalizanteMes = ausencias.some(function(a) { if ((a.tipo || "").toLowerCase() === "férias") return false; var start = a.data_inicio; var end = a.data_fim || a.data_inicio; return start <= today && end >= firstDayMonthStr; });
-        var perdeuPremio = temAusenciaPenalizanteMes || esquecimentosArmazem >= 5 || faltasServico > 10;
+        var perdeuPremio = temAusenciaPenalizanteMes || esquecimentosArmazem >= 5 || faltasServico >= 10;
         const faltas = myPast.filter(function(j) { return !j.check_in && j.status === "completed"; }).length;
         const parciais = myPast.filter(function(j) { return j.early_leave && j.early_leave.indexOf && j.early_leave.indexOf(emp.id) !== -1; }).length;
         setAbsStats({ total: myPast.length, faltas, parciais, temAusenciaPenalizanteMes, faltasServico, esquecimentosArmazem, perdeuPremio });
