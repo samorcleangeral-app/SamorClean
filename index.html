@@ -9817,9 +9817,11 @@ function PedidosExtra() {
 function QuadroEsquecimentos(props) {
   const [mesRef, setMesRef] = useState(function() { var n = new Date(); return n.getFullYear() + "-" + String(n.getMonth() + 1).padStart(2, "0"); });
   const [dados, setDados] = useState([]);
+  const [anulados, setAnulados] = useState({});
   const [loading, setLoading] = useState(true);
   const [aberto, setAberto] = useState(null);
-  useEffect(function() {
+  function chaveAnul(fid, sid, tipo) { return fid + "|" + sid + "|" + tipo; }
+  function carregar() {
     setLoading(true);
     var partes = mesRef.split("-");
     var ano = parseInt(partes[0]), mesIdx = parseInt(partes[1]) - 1;
@@ -9829,27 +9831,43 @@ function QuadroEsquecimentos(props) {
     Promise.all([
       db.list("funcionarios", "?select=*"),
       db.list("servicos", "?select=id,cn,date,t1,team,check_in,check_out,status&date=gte." + mStart + "&date=lte." + mEnd + "&status=eq.completed"),
-      db.list("picagens_armazem", "?select=funcionario_id,tipo,created_at&created_at=gte." + mStart + "T00:00:00&created_at=lte." + mEnd + "T23:59:59")
+      db.list("picagens_armazem", "?select=funcionario_id,tipo,created_at&created_at=gte." + mStart + "T00:00:00&created_at=lte." + mEnd + "T23:59:59"),
+      db.list("esquecimentos_anulados", "?select=*")
     ]).then(function(res) {
       var emps = (res[0] || []).filter(function(e) { return e.ativo !== false; });
       var servicos = res[1] || [];
-      var picArm = res[2] || [];
+      var anulMap = {};
+      (res[3] || []).forEach(function(a) { anulMap[chaveAnul(a.funcionario_id, a.servico_id, a.tipo_picagem)] = a.motivo || "sem motivo"; });
+      setAnulados(anulMap);
       var lista = emps.map(function(e) {
         var faltasServ = [];
         servicos.forEach(function(j) {
           if ((j.team || []).indexOf(e.id) === -1) return;
-          if (!j.check_in) faltasServ.push({ cn: j.cn, date: j.date, t1: j.t1, tipo: "entrada" });
-          if (!j.check_out) faltasServ.push({ cn: j.cn, date: j.date, t1: j.t1, tipo: "sa\xEDda" });
+          if (!j.check_in) faltasServ.push({ sid: j.id, cn: j.cn, date: j.date, t1: j.t1, tipo: "entrada" });
+          if (!j.check_out) faltasServ.push({ sid: j.id, cn: j.cn, date: j.date, t1: j.t1, tipo: "sa\xEDda" });
         });
-        var diasComEntradaArm = {};
-        picArm.forEach(function(p) { if (p.funcionario_id === e.id && p.tipo === "entrada") { diasComEntradaArm[(p.created_at || "").slice(0, 10)] = true; } });
-        var esqArm = (e.esquecimentos_armazem_manual != null) ? e.esquecimentos_armazem_manual : 0;
-        return { id: e.id, nome: e.name, av: e.av, esqServ: faltasServ.length, detalheServ: faltasServ, esqArm: esqArm };
+        var contam = faltasServ.filter(function(f) { return !anulMap[chaveAnul(e.id, f.sid, f.tipo)]; });
+        return { id: e.id, nome: e.name, av: e.av, esqServ: contam.length, detalheServ: faltasServ, esqArm: (e.esquecimentos_armazem_manual != null ? e.esquecimentos_armazem_manual : 0) };
       }).sort(function(a, b) { return (b.esqServ + b.esqArm) - (a.esqServ + a.esqArm); });
       setDados(lista);
       setLoading(false);
     });
-  }, [mesRef]);
+  }
+  useEffect(function() { carregar(); }, [mesRef]);
+  async function anular(fid, f) {
+    var motivo = window.prompt("Motivo da anula\xE7\xE3o (ex: QR sem rede, falha t\xE9cnica):", "");
+    if (motivo === null) return;
+    try {
+      await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "resolution=merge-duplicates" }), body: JSON.stringify({ funcionario_id: fid, servico_id: f.sid, tipo_picagem: f.tipo, motivo: motivo.trim() || "sem motivo" }) });
+      carregar();
+    } catch (e) { window.alert("Erro ao anular: " + e.message); }
+  }
+  async function reativar(fid, f) {
+    try {
+      await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados?funcionario_id=eq." + encodeURIComponent(fid) + "&servico_id=eq." + encodeURIComponent(f.sid) + "&tipo_picagem=eq." + encodeURIComponent(f.tipo), { method: "DELETE", headers: dbHeaders() });
+      carregar();
+    } catch (e) { window.alert("Erro: " + e.message); }
+  }
   function mudarMes(delta) {
     var partes = mesRef.split("-");
     var d = new Date(parseInt(partes[0]), parseInt(partes[1]) - 1 + delta, 1);
@@ -9873,7 +9891,7 @@ function QuadroEsquecimentos(props) {
       var cor = perde ? "#DC2626" : perto ? "#F59E0B" : "#16A34A";
       var estaAberto = aberto === d.id;
       return /* @__PURE__ */ React.createElement("div", { key: d.id, style: { borderBottom: "1px solid #F1F5F9" } },
-        /* @__PURE__ */ React.createElement("div", { onClick: function() { setAberto(estaAberto ? null : d.id); }, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 0", cursor: d.esqServ > 0 ? "pointer" : "default" } },
+        /* @__PURE__ */ React.createElement("div", { onClick: function() { setAberto(estaAberto ? null : d.id); }, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 0", cursor: d.detalheServ.length > 0 ? "pointer" : "default" } },
           /* @__PURE__ */ React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: cor, flexShrink: 0 } }),
           e_av(d.av, cor),
           /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } },
@@ -9881,18 +9899,20 @@ function QuadroEsquecimentos(props) {
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, d.esqServ, " no servi\xE7o \xB7 ", d.esqArm, " no armaz\xE9m")
           ),
           perde ? /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 700, color: "#fff", background: "#DC2626", borderRadius: 6, padding: "3px 8px" } }, "perde pr\xE9mio") : null,
-          d.esqServ > 0 ? /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#CBD5E1" } }, estaAberto ? "\u25B4" : "\u25BE") : null
+          d.detalheServ.length > 0 ? /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#CBD5E1" } }, estaAberto ? "\u25B4" : "\u25BE") : null
         ),
         estaAberto && d.detalheServ.length > 0 ? /* @__PURE__ */ React.createElement("div", { style: { padding: "0 0 10px 26px" } }, d.detalheServ.slice().sort(function(a, b) { return a.date < b.date ? -1 : 1; }).map(function(f, i) {
-          return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", fontSize: 11.5, color: "#64748B", padding: "3px 0" } },
-            /* @__PURE__ */ React.createElement("span", null, f.date ? new Date(f.date + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) : "", " \xB7 ", f.cn || ""),
-            /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, color: "#DC2626" } }, "faltou ", f.tipo)
+          var anulado = anulados[chaveAnul(d.id, f.sid, f.tipo)];
+          return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11.5, padding: "4px 0", opacity: anulado ? 0.55 : 1 } },
+            /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B", flex: 1 } }, f.date ? new Date(f.date + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) : "", " \xB7 ", f.cn || "", " \xB7 ", /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, color: anulado ? "#94A3B8" : "#DC2626", textDecoration: anulado ? "line-through" : "none" } }, "faltou ", f.tipo), anulado ? /* @__PURE__ */ React.createElement("span", { style: { color: "#16A34A", fontStyle: "italic" } }, " \u2014 anulado: ", anulado) : null),
+            anulado ? /* @__PURE__ */ React.createElement("button", { onClick: function() { reativar(d.id, f); }, style: { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline" } }, "reativar") : /* @__PURE__ */ React.createElement("button", { onClick: function() { anular(d.id, f); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, color: "#2E6DA4", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "3px 10px", flexShrink: 0 } }, "anular")
           );
         })) : null
       );
     })
   );
 }
+
 function e_av(init, cor) {
   return /* @__PURE__ */ React.createElement("div", { style: { width: 30, height: 30, borderRadius: "50%", background: (cor || "#2E6DA4") + "22", color: cor || "#2E6DA4", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12, flexShrink: 0 } }, init || "?");
 }
