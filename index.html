@@ -6676,6 +6676,9 @@ function StockAnalise(props) {
   const [pergunta, setPergunta] = useState("pessoas");
   const [produtoSel, setProdutoSel] = useState("");
   const [periodoAnalise, setPeriodoAnalise] = useState(6);
+  const [compProdutos, setCompProdutos] = useState([]);
+  const [compColabs, setCompColabs] = useState([]);
+  const [compModo, setCompModo] = useState("custo");
   function precoDe(nomeItem) {
     var chave = normalizarItemStock(nomeItem);
     var pr = produtos.find(function(p) { return normalizarItemStock(p.nome) === chave; });
@@ -6843,11 +6846,69 @@ function StockAnalise(props) {
     );
   }
 
+  function vistaComparar() {
+    var nomesProd = [];
+    consumos.forEach(function(c) { if (c.item && nomesProd.indexOf(c.item) === -1) nomesProd.push(c.item); });
+    nomesProd.sort();
+    var colabsSet = {};
+    consumos.forEach(function(c) { var k = c.funcionario_nome || c.funcionario_id; if (k) colabsSet[k] = true; });
+    var nomesColab = Object.keys(colabsSet).sort();
+    function toggle(lista, setLista, val) { setLista(lista.indexOf(val) !== -1 ? lista.filter(function(x) { return x !== val; }) : lista.concat([val])); }
+    // Construir as linhas: uma por combinação produto x colaborador
+    var series = [];
+    compProdutos.forEach(function(prod) {
+      compColabs.forEach(function(colab) {
+        var porMes = {};
+        meses.forEach(function(m) { porMes[m] = 0; });
+        consumos.forEach(function(c) {
+          var k = c.funcionario_nome || c.funcionario_id;
+          if (c.item === prod && k === colab) { var m = mesDe(c); if (m in porMes) { porMes[m] += (compModo === "custo" ? custoDe(c) : (parseFloat(c.quantidade) || 0)); } }
+        });
+        series.push({ label: prod + " \u2014 " + colab, valores: meses.map(function(m) { return porMes[m]; }) });
+      });
+    });
+    var maxV = 1;
+    series.forEach(function(s) { s.valores.forEach(function(v) { if (v > maxV) maxV = v; }); });
+    var W = 560, H = 240, pL = 40, pB = 28, pT = 12, pR = 12;
+    var plotW = W - pL - pR, plotH = H - pT - pB;
+    function px(i) { return pL + (meses.length <= 1 ? plotW / 2 : (i / (meses.length - 1)) * plotW); }
+    function py(v) { return pT + plotH - (v / maxV) * plotH; }
+    var chipProd = function(n) { var on = compProdutos.indexOf(n) !== -1; return React.createElement("button", { key: "p" + n, onClick: function() { toggle(compProdutos, setCompProdutos, n); }, style: { background: on ? "#2E6DA4" : "#fff", color: on ? "#fff" : "#64748B", border: "1.5px solid " + (on ? "#2E6DA4" : "#E2EBF4"), borderRadius: 16, padding: "5px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", margin: 2 } }, n); };
+    var chipColab = function(n) { var on = compColabs.indexOf(n) !== -1; return React.createElement("button", { key: "c" + n, onClick: function() { toggle(compColabs, setCompColabs, n); }, style: { background: on ? "#16A34A" : "#fff", color: on ? "#fff" : "#64748B", border: "1.5px solid " + (on ? "#16A34A" : "#E2EBF4"), borderRadius: 16, padding: "5px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", margin: 2 } }, n); };
+    return React.createElement("div", { style: Object.assign({}, card, { marginBottom: 0 }) },
+      React.createElement("div", { style: { fontSize: 11, fontWeight: 800, color: "#64748B", textTransform: "uppercase", marginBottom: 6 } }, "Produtos"),
+      React.createElement("div", { style: { display: "flex", flexWrap: "wrap", marginBottom: 12 } }, nomesProd.length === 0 ? React.createElement("span", { style: { fontSize: 12, color: "#94A3B8" } }, "Sem produtos.") : nomesProd.map(chipProd)),
+      React.createElement("div", { style: { fontSize: 11, fontWeight: 800, color: "#64748B", textTransform: "uppercase", marginBottom: 6 } }, "Colaboradores"),
+      React.createElement("div", { style: { display: "flex", flexWrap: "wrap", marginBottom: 12 } }, nomesColab.length === 0 ? React.createElement("span", { style: { fontSize: 12, color: "#94A3B8" } }, "Sem dados.") : nomesColab.map(chipColab)),
+      React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 14 } },
+        ["custo", "quantidade"].map(function(mo) { var on = compModo === mo; return React.createElement("button", { key: mo, onClick: function() { setCompModo(mo); }, style: { background: on ? "#7C3AED" : "#fff", color: on ? "#fff" : "#64748B", border: "1.5px solid " + (on ? "#7C3AED" : "#E2EBF4"), borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, mo === "custo" ? "Custo (\u20AC)" : "Quantidade"); })
+      ),
+      series.length === 0 ? React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 40, fontSize: 13 } }, "Escolhe pelo menos um produto e um colaborador para comparar.") :
+      React.createElement("div", null,
+        React.createElement("svg", { viewBox: "0 0 " + W + " " + H, width: "100%" },
+          [0, 0.5, 1].map(function(f, i) { var y = pT + plotH - f * plotH; return React.createElement("g", { key: "g" + i }, React.createElement("line", { x1: pL, y1: y, x2: W - pR, y2: y, stroke: "#F1F5F9", strokeWidth: 1 }), React.createElement("text", { x: pL - 5, y: y + 3, textAnchor: "end", fontSize: 8, fill: "#94A3B8" }, compModo === "custo" ? fmt(maxV * f) : Math.round(maxV * f))); }),
+          meses.map(function(m, i) { return React.createElement("text", { key: "m" + i, x: px(i), y: H - 8, textAnchor: "middle", fontSize: 8, fill: "#94A3B8" }, m.slice(5) + "/" + m.slice(2, 4)); }),
+          series.map(function(s, si) {
+            var cor = CORES[si % CORES.length];
+            var pts = s.valores.map(function(v, i) { return px(i) + "," + py(v); }).join(" ");
+            return React.createElement("g", { key: "s" + si },
+              React.createElement("polyline", { points: pts, fill: "none", stroke: cor, strokeWidth: 2 }),
+              s.valores.map(function(v, i) { return React.createElement("circle", { key: i, cx: px(i), cy: py(v), r: 2.5, fill: cor }); })
+            );
+          })
+        ),
+        React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 10, marginTop: 10 } },
+          series.map(function(s, si) { var cor = CORES[si % CORES.length]; return React.createElement("div", { key: "l" + si, style: { display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#64748B" } }, React.createElement("div", { style: { width: 12, height: 3, background: cor, borderRadius: 2 } }), s.label); })
+        )
+      )
+    );
+  }
   var PERGUNTAS = [
     ["pessoas", "\uD83D\uDC65", "Quem gasta mais?"],
     ["produto", "\uD83D\uDCE6", "Vigiar um produto"],
     ["equipa", "\uD83D\uDCC8", "Tend\xEAncia da equipa"],
-    ["controlo", "\u2713", "Est\xE1 tudo controlado?"]
+    ["controlo", "\u2713", "Est\xE1 tudo controlado?"],
+    ["comparar", "\uD83D\uDD0D", "Comparar \xE0 medida"]
   ];
   return React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
     React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 20 } },
@@ -6859,7 +6920,7 @@ function StockAnalise(props) {
         );
       })
     ),
-    (pergunta === "produto" || pergunta === "equipa") && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } },
+    (pergunta === "produto" || pergunta === "equipa" || pergunta === "comparar") && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } },
       /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#64748B", fontWeight: 600 } }, "Per\xEDodo:"),
       [[3, "3 meses"], [6, "6 meses"], [12, "12 meses"], ["tudo", "Tudo"]].map(function(opt) {
         var ativo = periodoAnalise === opt[0];
@@ -6869,7 +6930,8 @@ function StockAnalise(props) {
     pergunta === "pessoas" && vistaPessoas(),
     pergunta === "produto" && vistaProduto(),
     pergunta === "equipa" && vistaEquipa(),
-    pergunta === "controlo" && vistaControlo()
+    pergunta === "controlo" && vistaControlo(),
+    pergunta === "comparar" && vistaComparar()
   );
 }
 
