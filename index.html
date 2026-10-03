@@ -6675,6 +6675,7 @@ function StockAnalise(props) {
   const consumos = props.consumos, produtos = props.produtos;
   const [pergunta, setPergunta] = useState("pessoas");
   const [produtoSel, setProdutoSel] = useState("");
+  const [periodoAnalise, setPeriodoAnalise] = useState(6);
   function precoDe(nomeItem) {
     var chave = normalizarItemStock(nomeItem);
     var pr = produtos.find(function(p) { return normalizarItemStock(p.nome) === chave; });
@@ -6689,7 +6690,8 @@ function StockAnalise(props) {
   // Meses presentes nos dados, ordenados
   var mesesSet = {};
   consumos.forEach(function(c) { var m = mesDe(c); if (m) mesesSet[m] = true; });
-  var meses = Object.keys(mesesSet).sort();
+  var mesesTodos = Object.keys(mesesSet).sort();
+  var meses = (periodoAnalise === "tudo" || mesesTodos.length <= periodoAnalise) ? mesesTodos : mesesTodos.slice(-periodoAnalise);
 
   // ---- PERGUNTA 1: quem gasta mais (ranking do mês atual) ----
   function vistaPessoas() {
@@ -6855,6 +6857,13 @@ function StockAnalise(props) {
           React.createElement("div", { style: { fontSize: 20, marginBottom: 4 } }, p[1]),
           React.createElement("div", { style: { fontSize: 12, fontWeight: 600, color: isActive ? "#1A3A5C" : "#64748B", lineHeight: 1.3 } }, p[2])
         );
+      })
+    ),
+    (pergunta === "produto" || pergunta === "equipa") && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } },
+      /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#64748B", fontWeight: 600 } }, "Per\xEDodo:"),
+      [[3, "3 meses"], [6, "6 meses"], [12, "12 meses"], ["tudo", "Tudo"]].map(function(opt) {
+        var ativo = periodoAnalise === opt[0];
+        return /* @__PURE__ */ React.createElement("button", { key: String(opt[0]), onClick: function() { setPeriodoAnalise(opt[0]); }, style: { background: ativo ? "#7C3AED" : "#fff", color: ativo ? "#fff" : "#64748B", border: "1.5px solid " + (ativo ? "#7C3AED" : "#E2EBF4"), borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, opt[1]);
       })
     ),
     pergunta === "pessoas" && vistaPessoas(),
