@@ -7090,6 +7090,7 @@ function Stock(props) {
   const [entradaPrecoEdit, setEntradaPrecoEdit] = useState("");
   // Vista única do módulo: só uma de stock/analise/historico visível de cada vez (Fase 2).
   const [vista, setVista] = useState("stock");
+  const [stockMes, setStockMes] = useState(localDateStr().slice(0, 7));
   // Filtro do gráfico de níveis (Fase 3): abaixo do mínimo por defeito — é o que interessa para encomendar.
   const [filtroNivel, setFiltroNivel] = useState("abaixo");
   // Consulta de histórico por colaborador (Fase 4): período e colaborador expandido.
@@ -7516,9 +7517,11 @@ function Stock(props) {
       }
       var valorTotal = (produtos || []).reduce(function(a, p2) { return a + (parseFloat(p2.quantidade) || 0) * custoUnitProd(p2); }, 0);
       var semPreco = (produtos || []).filter(function(p2) { return !(custoUnitProd(p2) > 0); });
-      var mesAct = localDateStr().slice(0, 7);
+      var mesAct = stockMes;
       var custoMes = (movimentos || []).filter(function(m) { return m.tipo === "saida" && (m.created_at || "").slice(0, 7) === mesAct; })
         .reduce(function(a, m) { return a + (parseFloat(m.quantidade) || 0) * (parseFloat(m.valor_unitario) || 0); }, 0);
+      function mudarStockMes(delta) { var d = new Date(stockMes + "-01T12:00:00"); d.setMonth(d.getMonth() + delta); setStockMes(localDateStr(new Date(d.getFullYear(), d.getMonth(), 1)).slice(0, 7)); }
+      var stockMesLabel = new Date(stockMes + "-01T12:00:00").toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
       var divergentes = (produtos || []).map(function(p2) {
         var soma = (movimentos || []).filter(function(m) { return m.produto_id === p2.id; })
           .reduce(function(a, m) { return a + (m.tipo === "saida" ? -1 : 1) * (parseFloat(m.quantidade) || 0); }, 0);
@@ -7532,7 +7535,14 @@ function Stock(props) {
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 4 } }, (produtos || []).length, " produtos")
           ),
           /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 0, padding: 14, borderTop: "3px solid #DC2626" }) },
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 6 } }, "Consumido este mês"),
+            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, "Consumido"),
+              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4 } },
+                /* @__PURE__ */ React.createElement("button", { onClick: function() { mudarStockMes(-1); }, style: { background: "#F1F5F9", border: "none", borderRadius: 5, width: 20, height: 20, cursor: "pointer", fontWeight: 800, color: "#64748B", lineHeight: 1 } }, "\u2039"),
+                /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 700, color: "#64748B", minWidth: 68, textAlign: "center", textTransform: "capitalize" } }, stockMesLabel),
+                /* @__PURE__ */ React.createElement("button", { onClick: function() { mudarStockMes(1); }, style: { background: "#F1F5F9", border: "none", borderRadius: 5, width: 20, height: 20, cursor: "pointer", fontWeight: 800, color: "#64748B", lineHeight: 1 } }, "\u203A")
+              )
+            ),
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 900, color: "#DC2626" } }, fmt(custoMes)),
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 4 } }, "ao preço da data de saída")
           )
