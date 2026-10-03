@@ -6679,6 +6679,9 @@ function StockAnalise(props) {
   const [compProdutos, setCompProdutos] = useState([]);
   const [compColabs, setCompColabs] = useState([]);
   const [compModo, setCompModo] = useState("custo");
+  const [compAberto, setCompAberto] = useState(true);
+  const [compQProd, setCompQProd] = useState("");
+  const [compQColab, setCompQColab] = useState("");
   function precoDe(nomeItem) {
     var chave = normalizarItemStock(nomeItem);
     var pr = produtos.find(function(p) { return normalizarItemStock(p.nome) === chave; });
@@ -6874,13 +6877,33 @@ function StockAnalise(props) {
     var plotW = W - pL - pR, plotH = H - pT - pB;
     function px(i) { return pL + (meses.length <= 1 ? plotW / 2 : (i / (meses.length - 1)) * plotW); }
     function py(v) { return pT + plotH - (v / maxV) * plotH; }
-    var chipProd = function(n) { var on = compProdutos.indexOf(n) !== -1; return React.createElement("button", { key: "p" + n, onClick: function() { toggle(compProdutos, setCompProdutos, n); }, style: { background: on ? "#2E6DA4" : "#fff", color: on ? "#fff" : "#64748B", border: "1.5px solid " + (on ? "#2E6DA4" : "#E2EBF4"), borderRadius: 16, padding: "5px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", margin: 2 } }, n); };
-    var chipColab = function(n) { var on = compColabs.indexOf(n) !== -1; return React.createElement("button", { key: "c" + n, onClick: function() { toggle(compColabs, setCompColabs, n); }, style: { background: on ? "#16A34A" : "#fff", color: on ? "#fff" : "#64748B", border: "1.5px solid " + (on ? "#16A34A" : "#E2EBF4"), borderRadius: 16, padding: "5px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", margin: 2 } }, n); };
+    function linhaCheck(n, lista, setLista, cor, key) {
+      var on = lista.indexOf(n) !== -1;
+      return React.createElement("label", { key: key + n, onClick: function() { toggle(lista, setLista, n); }, style: { display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: on ? "#1A3A5C" : "#64748B", padding: "5px 2px", cursor: "pointer" } },
+        React.createElement("span", { style: { width: 16, height: 16, borderRadius: 4, flexShrink: 0, background: on ? cor : "#fff", border: on ? "none" : "1.5px solid #CBD5E1", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 900 } }, on ? "\u2713" : ""),
+        n);
+    }
+    var prodFiltrados = nomesProd.filter(function(n) { return n.toLowerCase().indexOf(compQProd.toLowerCase()) !== -1; });
+    var colabFiltrados = nomesColab.filter(function(n) { return n.toLowerCase().indexOf(compQColab.toLowerCase()) !== -1; });
+    var inpBusca = { width: "100%", padding: "6px 10px", border: "1.5px solid #E2EBF4", borderRadius: 8, fontSize: 12, boxSizing: "border-box", marginBottom: 8 };
     return React.createElement("div", { style: Object.assign({}, card, { marginBottom: 0 }) },
-      React.createElement("div", { style: { fontSize: 11, fontWeight: 800, color: "#64748B", textTransform: "uppercase", marginBottom: 6 } }, "Produtos"),
-      React.createElement("div", { style: { display: "flex", flexWrap: "wrap", marginBottom: 12 } }, nomesProd.length === 0 ? React.createElement("span", { style: { fontSize: 12, color: "#94A3B8" } }, "Sem produtos.") : nomesProd.map(chipProd)),
-      React.createElement("div", { style: { fontSize: 11, fontWeight: 800, color: "#64748B", textTransform: "uppercase", marginBottom: 6 } }, "Colaboradores"),
-      React.createElement("div", { style: { display: "flex", flexWrap: "wrap", marginBottom: 12 } }, nomesColab.length === 0 ? React.createElement("span", { style: { fontSize: 12, color: "#94A3B8" } }, "Sem dados.") : nomesColab.map(chipColab)),
+      React.createElement("button", { onClick: function() { setCompAberto(!compAberto); }, style: { width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#F6FAFD", border: "1.5px solid #E2EBF4", borderRadius: 10, padding: "10px 14px", fontSize: 13, fontWeight: 700, color: "#1A3A5C", cursor: "pointer", marginBottom: compAberto ? 12 : 14 } },
+        React.createElement("span", null, "Escolher produtos e colaboradores", (compProdutos.length + compColabs.length > 0) ? React.createElement("span", { style: { color: "#94A3B8", fontWeight: 500 } }, "  \u2014 " + compProdutos.length + " produto(s), " + compColabs.length + " colaborador(es)") : null),
+        React.createElement("span", { style: { color: "#94A3B8" } }, compAberto ? "\u25B4" : "\u25BE")
+      ),
+      compAberto && React.createElement("div", { style: { display: "flex", gap: 14, marginBottom: 12 } },
+        React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+          React.createElement("div", { style: { fontSize: 11, fontWeight: 800, color: "#64748B", textTransform: "uppercase", marginBottom: 6 } }, "Produtos"),
+          React.createElement("input", { style: inpBusca, placeholder: "Pesquisar produto...", value: compQProd, onChange: function(e) { setCompQProd(e.target.value); } }),
+          React.createElement("div", { style: { maxHeight: 180, overflowY: "auto" } }, prodFiltrados.length === 0 ? React.createElement("span", { style: { fontSize: 12, color: "#94A3B8" } }, "Nada encontrado.") : prodFiltrados.map(function(n) { return linhaCheck(n, compProdutos, setCompProdutos, "#2E6DA4", "p"); }))
+        ),
+        React.createElement("div", { style: { width: "0.5px", background: "#E2EBF4" } }),
+        React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+          React.createElement("div", { style: { fontSize: 11, fontWeight: 800, color: "#64748B", textTransform: "uppercase", marginBottom: 6 } }, "Colaboradores"),
+          React.createElement("input", { style: inpBusca, placeholder: "Pesquisar colaborador...", value: compQColab, onChange: function(e) { setCompQColab(e.target.value); } }),
+          React.createElement("div", { style: { maxHeight: 180, overflowY: "auto" } }, colabFiltrados.length === 0 ? React.createElement("span", { style: { fontSize: 12, color: "#94A3B8" } }, "Nada encontrado.") : colabFiltrados.map(function(n) { return linhaCheck(n, compColabs, setCompColabs, "#16A34A", "c"); }))
+        )
+      ),
       React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 14 } },
         ["custo", "quantidade"].map(function(mo) { var on = compModo === mo; return React.createElement("button", { key: mo, onClick: function() { setCompModo(mo); }, style: { background: on ? "#7C3AED" : "#fff", color: on ? "#fff" : "#64748B", border: "1.5px solid " + (on ? "#7C3AED" : "#E2EBF4"), borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, mo === "custo" ? "Custo (\u20AC)" : "Quantidade"); })
       ),
