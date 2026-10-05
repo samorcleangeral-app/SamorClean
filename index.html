@@ -6679,7 +6679,8 @@ function StockAnalise(props) {
   const [compProdutos, setCompProdutos] = useState([]);
   const [compColabs, setCompColabs] = useState([]);
   const [compModo, setCompModo] = useState("custo");
-  const [compAberto, setCompAberto] = useState(true);
+  const [compListaProd, setCompListaProd] = useState(false);
+  const [compListaColab, setCompListaColab] = useState(false);
   const [compQProd, setCompQProd] = useState("");
   const [compQColab, setCompQColab] = useState("");
   function precoDe(nomeItem) {
@@ -6851,14 +6852,11 @@ function StockAnalise(props) {
 
   function vistaComparar() {
     var CORES = ["#7C3AED", "#2E6DA4", "#16A34A", "#F59E0B", "#EF4444", "#DB2777", "#0891B2", "#65A30D"];
-    var nomesProd = [];
-    consumos.forEach(function(c) { if (c.item && nomesProd.indexOf(c.item) === -1) nomesProd.push(c.item); });
-    nomesProd.sort();
+    var nomesProd = (produtos || []).map(function(p) { return p.nome; }).filter(function(n) { return !!n; }).sort();
     var colabsSet = {};
     consumos.forEach(function(c) { var k = c.funcionario_nome || c.funcionario_id; if (k) colabsSet[k] = true; });
     var nomesColab = Object.keys(colabsSet).sort();
     function toggle(lista, setLista, val) { setLista(lista.indexOf(val) !== -1 ? lista.filter(function(x) { return x !== val; }) : lista.concat([val])); }
-    // Construir as linhas: uma por combinação produto x colaborador
     var series = [];
     compProdutos.forEach(function(prod) {
       compColabs.forEach(function(colab) {
@@ -6877,32 +6875,30 @@ function StockAnalise(props) {
     var plotW = W - pL - pR, plotH = H - pT - pB;
     function px(i) { return pL + (meses.length <= 1 ? plotW / 2 : (i / (meses.length - 1)) * plotW); }
     function py(v) { return pT + plotH - (v / maxV) * plotH; }
-    function linhaCheck(n, lista, setLista, cor, key) {
-      var on = lista.indexOf(n) !== -1;
-      return React.createElement("label", { key: key + n, onClick: function() { toggle(lista, setLista, n); }, style: { display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: on ? "#1A3A5C" : "#64748B", padding: "5px 2px", cursor: "pointer" } },
-        React.createElement("span", { style: { width: 16, height: 16, borderRadius: 4, flexShrink: 0, background: on ? cor : "#fff", border: on ? "none" : "1.5px solid #CBD5E1", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 900 } }, on ? "\u2713" : ""),
-        n);
-    }
-    var prodFiltrados = nomesProd.filter(function(n) { return n.toLowerCase().indexOf(compQProd.toLowerCase()) !== -1; });
-    var colabFiltrados = nomesColab.filter(function(n) { return n.toLowerCase().indexOf(compQColab.toLowerCase()) !== -1; });
-    var inpBusca = { width: "100%", padding: "6px 10px", border: "1.5px solid #E2EBF4", borderRadius: 8, fontSize: 12, boxSizing: "border-box", marginBottom: 8 };
-    return React.createElement("div", { style: Object.assign({}, card, { marginBottom: 0 }) },
-      React.createElement("button", { onClick: function() { setCompAberto(!compAberto); }, style: { width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#F6FAFD", border: "1.5px solid #E2EBF4", borderRadius: 10, padding: "10px 14px", fontSize: 13, fontWeight: 700, color: "#1A3A5C", cursor: "pointer", marginBottom: compAberto ? 12 : 14 } },
-        React.createElement("span", null, "Escolher produtos e colaboradores", (compProdutos.length + compColabs.length > 0) ? React.createElement("span", { style: { color: "#94A3B8", fontWeight: 500 } }, "  \u2014 " + compProdutos.length + " produto(s), " + compColabs.length + " colaborador(es)") : null),
-        React.createElement("span", { style: { color: "#94A3B8" } }, compAberto ? "\u25B4" : "\u25BE")
-      ),
-      compAberto && React.createElement("div", { style: { display: "flex", gap: 14, marginBottom: 12 } },
-        React.createElement("div", { style: { flex: 1, minWidth: 0 } },
-          React.createElement("div", { style: { fontSize: 11, fontWeight: 800, color: "#64748B", textTransform: "uppercase", marginBottom: 6 } }, "Produtos"),
-          React.createElement("input", { style: inpBusca, placeholder: "Pesquisar produto...", value: compQProd, onChange: function(e) { setCompQProd(e.target.value); } }),
-          React.createElement("div", { style: { maxHeight: 180, overflowY: "auto" } }, prodFiltrados.length === 0 ? React.createElement("span", { style: { fontSize: 12, color: "#94A3B8" } }, "Nada encontrado.") : prodFiltrados.map(function(n) { return linhaCheck(n, compProdutos, setCompProdutos, "#2E6DA4", "p"); }))
+    var inpBusca = { width: "100%", padding: "8px 10px", border: "1.5px solid #E2EBF4", borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
+    function campoBusca(label, lista, setLista, q, setQ, listaAberta, setListaAberta, nomes, qtxt, cor, key) {
+      var filtrados = nomes.filter(function(n) { return n.toLowerCase().indexOf(q.toLowerCase()) !== -1; });
+      return React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+        React.createElement("div", { style: { fontSize: 11, fontWeight: 800, color: "#64748B", textTransform: "uppercase", marginBottom: 6 } }, label),
+        React.createElement("input", { style: inpBusca, placeholder: "Pesquisar...", value: q, onFocus: function() { setListaAberta(true); }, onChange: function(e) { setQ(e.target.value); setListaAberta(true); } }),
+        listaAberta && React.createElement("div", { style: { border: "1.5px solid #E2EBF4", borderTop: "none", borderRadius: "0 0 8px 8px", maxHeight: 180, overflowY: "auto", background: "#fff" } },
+          filtrados.length === 0 ? React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", padding: 10 } }, "Nada encontrado.") : filtrados.map(function(n) {
+            var on = lista.indexOf(n) !== -1;
+            return React.createElement("label", { key: key + n, onClick: function() { toggle(lista, setLista, n); }, style: { display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: on ? "#1A3A5C" : "#475569", padding: "7px 10px", cursor: "pointer", borderBottom: "1px solid #F4F7FA" } },
+              React.createElement("span", { style: { width: 16, height: 16, borderRadius: 4, flexShrink: 0, background: on ? cor : "#fff", border: on ? "none" : "1.5px solid #CBD5E1", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 900 } }, on ? "\u2713" : ""),
+              n);
+          })
         ),
-        React.createElement("div", { style: { width: "0.5px", background: "#E2EBF4" } }),
-        React.createElement("div", { style: { flex: 1, minWidth: 0 } },
-          React.createElement("div", { style: { fontSize: 11, fontWeight: 800, color: "#64748B", textTransform: "uppercase", marginBottom: 6 } }, "Colaboradores"),
-          React.createElement("input", { style: inpBusca, placeholder: "Pesquisar colaborador...", value: compQColab, onChange: function(e) { setCompQColab(e.target.value); } }),
-          React.createElement("div", { style: { maxHeight: 180, overflowY: "auto" } }, colabFiltrados.length === 0 ? React.createElement("span", { style: { fontSize: 12, color: "#94A3B8" } }, "Nada encontrado.") : colabFiltrados.map(function(n) { return linhaCheck(n, compColabs, setCompColabs, "#16A34A", "c"); }))
-        )
+        lista.length > 0 && React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 } }, lista.map(function(n) {
+          return React.createElement("span", { key: "sel" + n, style: { background: cor + "18", color: cor, borderRadius: 6, padding: "3px 6px 3px 9px", fontSize: 12, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 5 } }, n,
+            React.createElement("span", { onClick: function() { toggle(lista, setLista, n); }, style: { cursor: "pointer", fontWeight: 900, fontSize: 13 } }, "\u00D7"));
+        }))
+      );
+    }
+    return React.createElement("div", { style: Object.assign({}, card, { marginBottom: 0 }) },
+      React.createElement("div", { style: { display: "flex", gap: 14, marginBottom: 14, alignItems: "flex-start" } },
+        campoBusca("Produtos", compProdutos, setCompProdutos, compQProd, setCompQProd, compListaProd, setCompListaProd, nomesProd, compQProd, "#2E6DA4", "p"),
+        campoBusca("Colaboradores", compColabs, setCompColabs, compQColab, setCompQColab, compListaColab, setCompListaColab, nomesColab, compQColab, "#16A34A", "c")
       ),
       React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 14 } },
         ["custo", "quantidade"].map(function(mo) { var on = compModo === mo; return React.createElement("button", { key: mo, onClick: function() { setCompModo(mo); }, style: { background: on ? "#7C3AED" : "#fff", color: on ? "#fff" : "#64748B", border: "1.5px solid " + (on ? "#7C3AED" : "#E2EBF4"), borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, mo === "custo" ? "Custo (\u20AC)" : "Quantidade"); })
@@ -6927,6 +6923,7 @@ function StockAnalise(props) {
       )
     );
   }
+
   var PERGUNTAS = [
     ["pessoas", "\uD83D\uDC65", "Quem gasta mais?"],
     ["produto", "\uD83D\uDCE6", "Vigiar um produto"],
