@@ -6676,6 +6676,7 @@ function StockAnalise(props) {
   const [pergunta, setPergunta] = useState("pessoas");
   const [produtoSel, setProdutoSel] = useState("");
   const [periodoAnalise, setPeriodoAnalise] = useState(6);
+  const [mesRefDiario, setMesRefDiario] = useState(localDateStr().slice(0, 7));
   const [compProdutos, setCompProdutos] = useState([]);
   const [compColabs, setCompColabs] = useState([]);
   const [compModo, setCompModo] = useState("custo");
@@ -6698,7 +6699,35 @@ function StockAnalise(props) {
   var mesesSet = {};
   consumos.forEach(function(c) { var m = mesDe(c); if (m) mesesSet[m] = true; });
   var mesesTodos = Object.keys(mesesSet).sort();
-  var meses = (periodoAnalise === "tudo" || mesesTodos.length <= periodoAnalise) ? mesesTodos : mesesTodos.slice(-periodoAnalise);
+  // Sistema de fatias de tempo: dia (modo "mês"), semana (3/6 meses), mês (12/tudo)
+  function pad2(n) { return String(n).padStart(2, "0"); }
+  var granularidade = (periodoAnalise === "mes") ? "dia" : ((periodoAnalise === 3 || periodoAnalise === 6) ? "semana" : "mes");
+  var buckets = [];
+  var bucketLabels = [];
+  function keyData(dataStr) {
+    if (!dataStr) return null;
+    if (granularidade === "mes") return dataStr.slice(0, 7);
+    if (granularidade === "dia") return dataStr.slice(0, 10);
+    var d = new Date(dataStr.slice(0, 10) + "T12:00:00");
+    var day = d.getDay(); var diff = (day === 0 ? 6 : day - 1);
+    d.setDate(d.getDate() - diff);
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+  }
+  if (granularidade === "mes") {
+    buckets = (periodoAnalise === "tudo" || mesesTodos.length <= 12) ? mesesTodos : mesesTodos.slice(-12);
+    bucketLabels = buckets.map(function(m) { return new Date(m + "-01T12:00:00").toLocaleDateString("pt-PT", { month: "short" }); });
+  } else if (granularidade === "dia") {
+    var pr = mesRefDiario.split("-"); var anoM = parseInt(pr[0]), mesM = parseInt(pr[1]);
+    var ultimo = new Date(anoM, mesM, 0).getDate();
+    for (var dd = 1; dd <= ultimo; dd++) { buckets.push(anoM + "-" + pad2(mesM) + "-" + pad2(dd)); bucketLabels.push(String(dd)); }
+  } else {
+    var nMeses = periodoAnalise;
+    var hojeB = new Date(); var fimB = new Date(hojeB.getFullYear(), hojeB.getMonth(), hojeB.getDate());
+    var iniB = new Date(fimB); iniB.setMonth(iniB.getMonth() - nMeses);
+    var cur = new Date(iniB); var dw = cur.getDay(); cur.setDate(cur.getDate() - (dw === 0 ? 6 : dw - 1));
+    while (cur <= fimB) { var k = cur.getFullYear() + "-" + pad2(cur.getMonth() + 1) + "-" + pad2(cur.getDate()); buckets.push(k); bucketLabels.push(cur.getDate() + "/" + pad2(cur.getMonth() + 1)); cur.setDate(cur.getDate() + 7); }
+  }
+  var meses = buckets; // compatibilidade com o código existente dos gráficos
 
   // ---- PERGUNTA 1: quem gasta mais (ranking do mês atual) ----
   function vistaPessoas() {
@@ -6732,7 +6761,7 @@ function StockAnalise(props) {
     var sel = produtoSel || (nomesProd.length > 0 ? nomesProd[0] : "");
     var porMes = {};
     meses.forEach(function(m) { porMes[m] = 0; });
-    consumos.filter(function(c) { return c.item === sel; }).forEach(function(c) { var m = mesDe(c); if (m in porMes) porMes[m] += custoDe(c); });
+    consumos.filter(function(c) { return c.item === sel; }).forEach(function(c) { var m = keyData(c.data); if (m in porMes) porMes[m] += custoDe(c); });
     var serie = meses.map(function(m) { return porMes[m]; });
     var maxV = Math.max.apply(null, serie.concat([1]));
     var meio = Math.floor(serie.length / 2);
@@ -6761,9 +6790,9 @@ function StockAnalise(props) {
         pts.map(function(p, gi) { return React.createElement("text", { key: "vl" + gi, x: p.x, y: p.y - 7, textAnchor: "middle", fontSize: 7.5, fontWeight: 700, fill: (tend.cor === "#94A3B8" ? "#2E6DA4" : tend.cor) }, fmt(serie[gi])); }),
         pts.map(function(p, i) { return React.createElement("circle", { key: i, cx: p.x, cy: p.y, r: i === pts.length - 1 ? 4 : 2.5, fill: tend.cor === "#94A3B8" ? "#2E6DA4" : tend.cor }); }),
         meses.map(function(m, i) {
-          if (meses.length > 4 && i !== 0 && i !== meses.length - 1 && i !== Math.floor(meses.length / 2)) return null;
+          var passo = Math.ceil(meses.length / 7); if (meses.length > 7 && i % passo !== 0 && i !== meses.length - 1) return null;
           var x = padL + (serie.length > 1 ? i / (serie.length - 1) * (W - padL - 10) : 0);
-          return React.createElement("text", { key: i, x: x, y: H - 8, fontSize: 9, fill: "#94A3B8", textAnchor: i === 0 ? "start" : i === meses.length - 1 ? "end" : "middle" }, new Date(m + "-01T12:00:00").toLocaleDateString("pt-PT", { month: "short" }));
+          return React.createElement("text", { key: i, x: x, y: H - 8, fontSize: 9, fill: "#94A3B8", textAnchor: i === 0 ? "start" : i === meses.length - 1 ? "end" : "middle" }, bucketLabels[i]);
         })
       )
     );
@@ -6773,7 +6802,7 @@ function StockAnalise(props) {
   function vistaEquipa() {
     var porMes = {};
     meses.forEach(function(m) { porMes[m] = 0; });
-    consumos.forEach(function(c) { var m = mesDe(c); if (m in porMes) porMes[m] += custoDe(c); });
+    consumos.forEach(function(c) { var m = keyData(c.data); if (m in porMes) porMes[m] += custoDe(c); });
     var serie = meses.map(function(m) { return porMes[m]; });
     var totalMesAtual = porMes[mesAtual] || 0;
     var anteriores = meses.filter(function(m) { return m !== mesAtual; });
@@ -6804,7 +6833,7 @@ function StockAnalise(props) {
         pts.map(function(p, i) { return React.createElement("circle", { key: i, cx: p.x, cy: p.y, r: i === pts.length - 1 ? 4.5 : 3, fill: "#2E6DA4" }); }),
         meses.map(function(m, i) {
           var x = padL + (serie.length > 1 ? i / (serie.length - 1) * (W - padL - 10) : 0);
-          return React.createElement("text", { key: i, x: x, y: H - 6, fontSize: 9, fill: "#94A3B8", textAnchor: i === 0 ? "start" : i === meses.length - 1 ? "end" : "middle" }, new Date(m + "-01T12:00:00").toLocaleDateString("pt-PT", { month: "short" }));
+          return React.createElement("text", { key: i, x: x, y: H - 6, fontSize: 9, fill: "#94A3B8", textAnchor: i === 0 ? "start" : i === meses.length - 1 ? "end" : "middle" }, bucketLabels[i]);
         })
       )
     );
@@ -6868,7 +6897,7 @@ function StockAnalise(props) {
         meses.forEach(function(m) { porMes[m] = 0; });
         consumos.forEach(function(c) {
           var k = c.funcionario_nome || c.funcionario_id;
-          if (c.item === prod && k === colab) { var m = mesDe(c); if (m in porMes) { porMes[m] += (compModo === "custo" ? custoDe(c) : (parseFloat(c.quantidade) || 0)); } }
+          if (c.item === prod && k === colab) { var m = keyData(c.data); if (m in porMes) { porMes[m] += (compModo === "custo" ? custoDe(c) : (parseFloat(c.quantidade) || 0)); } }
         });
         series.push({ label: prod + " \u2014 " + colab, valores: meses.map(function(m) { return porMes[m]; }) });
       });
@@ -6912,7 +6941,7 @@ function StockAnalise(props) {
         React.createElement("svg", { viewBox: "0 0 " + W + " " + H, width: "100%" },
           [0, 0.2, 0.4, 0.6, 0.8, 1].map(function(f, i) { var y = pT + plotH - f * plotH; return React.createElement("g", { key: "g" + i }, React.createElement("line", { x1: pL, y1: y, x2: W - pR, y2: y, stroke: f === 0 ? "#CBD5E1" : "#EEF2F6", strokeWidth: 1 }), React.createElement("text", { x: pL - 5, y: y + 3, textAnchor: "end", fontSize: 8, fill: "#94A3B8" }, compModo === "custo" ? fmt(maxV * f) : Math.round(maxV * f))); }),
           meses.map(function(m, i) { return React.createElement("line", { key: "tx" + i, x1: px(i), y1: pT + plotH, x2: px(i), y2: pT + plotH + 3, stroke: "#CBD5E1", strokeWidth: 1 }); }),
-          meses.map(function(m, i) { return React.createElement("text", { key: "m" + i, x: px(i), y: H - 8, textAnchor: "middle", fontSize: 8, fill: "#94A3B8" }, m.slice(5) + "/" + m.slice(2, 4)); }),
+          meses.map(function(m, i) { var passo = Math.ceil(meses.length / 7); if (meses.length > 7 && i % passo !== 0 && i !== meses.length - 1) return null; return React.createElement("text", { key: "m" + i, x: px(i), y: H - 8, textAnchor: "middle", fontSize: 8, fill: "#94A3B8" }, bucketLabels[i]); }),
           series.map(function(s, si) {
             var cor = CORES[si % CORES.length];
             var pts = s.valores.map(function(v, i) { return px(i) + "," + py(v); }).join(" ");
@@ -6948,10 +6977,15 @@ function StockAnalise(props) {
     ),
     (pergunta === "produto" || pergunta === "equipa" || pergunta === "comparar") && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } },
       /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#64748B", fontWeight: 600 } }, "Per\xEDodo:"),
-      [[3, "3 meses"], [6, "6 meses"], [12, "12 meses"], ["tudo", "Tudo"]].map(function(opt) {
+      [[3, "3 meses"], [6, "6 meses"], [12, "12 meses"], ["tudo", "Tudo"], ["mes", "M\xEAs (dias)"]].map(function(opt) {
         var ativo = periodoAnalise === opt[0];
         return /* @__PURE__ */ React.createElement("button", { key: String(opt[0]), onClick: function() { setPeriodoAnalise(opt[0]); }, style: { background: ativo ? "#7C3AED" : "#fff", color: ativo ? "#fff" : "#64748B", border: "1.5px solid " + (ativo ? "#7C3AED" : "#E2EBF4"), borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, opt[1]);
       })
+    ),
+    (pergunta === "produto" || pergunta === "equipa" || pergunta === "comparar") && periodoAnalise === "mes" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 12 } },
+      /* @__PURE__ */ React.createElement("button", { onClick: function() { var d = new Date(mesRefDiario + "-01T12:00:00"); d.setMonth(d.getMonth() - 1); setMesRefDiario(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, width: 26, height: 26, cursor: "pointer", fontWeight: 800, color: "#64748B" } }, "\u2039"),
+      /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C", minWidth: 110, textAlign: "center", textTransform: "capitalize" } }, new Date(mesRefDiario + "-01T12:00:00").toLocaleDateString("pt-PT", { month: "long", year: "numeric" })),
+      /* @__PURE__ */ React.createElement("button", { onClick: function() { var d = new Date(mesRefDiario + "-01T12:00:00"); d.setMonth(d.getMonth() + 1); setMesRefDiario(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, width: 26, height: 26, cursor: "pointer", fontWeight: 800, color: "#64748B" } }, "\u203A")
     ),
     pergunta === "pessoas" && vistaPessoas(),
     pergunta === "produto" && vistaProduto(),
