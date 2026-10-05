@@ -6754,9 +6754,11 @@ function StockAnalise(props) {
       ),
       !serie.some(function(v) { return v > 0; }) ? React.createElement("div", { style: { textAlign: "center", padding: 30, color: "#94A3B8", fontSize: 13 } }, "Sem consumo deste produto no per\xEDodo.") :
       React.createElement("svg", { viewBox: "0 0 " + W + " " + H, width: "100%" },
-        React.createElement("line", { x1: padL, y1: 15, x2: W - 10, y2: 15, stroke: "#F1F5F9", strokeWidth: 0.5, strokeDasharray: "3 3" }),
-        React.createElement("line", { x1: padL, y1: (H - padB), x2: W - 10, y2: (H - padB), stroke: "#E2EBF4", strokeWidth: 1 }),
+        [0, 0.2, 0.4, 0.6, 0.8, 1].map(function(f, gi) { var gy = 15 + (H - 15 - padB) * (1 - f); return React.createElement("g", { key: "gy" + gi }, React.createElement("line", { x1: padL, y1: gy, x2: W - 10, y2: gy, stroke: f === 0 ? "#CBD5E1" : "#F1F5F9", strokeWidth: 1 }), React.createElement("text", { x: padL - 4, y: gy + 3, textAnchor: "end", fontSize: 7.5, fill: "#94A3B8" }, fmt(maxV * f))); }),
+        pts.map(function(p, gi) { return React.createElement("line", { key: "gx" + gi, x1: p.x, y1: 15, x2: p.x, y2: (H - padB), stroke: "#F8FAFC", strokeWidth: 1 }); }),
+        React.createElement("polygon", { points: polyPts + " " + (pts.length ? pts[pts.length-1].x : padL) + "," + (H - padB) + " " + (pts.length ? pts[0].x : padL) + "," + (H - padB), fill: (tend.cor === "#94A3B8" ? "#2E6DA4" : tend.cor), fillOpacity: 0.08 }),
         React.createElement("polyline", { points: polyPts, fill: "none", stroke: tend.cor === "#94A3B8" ? "#2E6DA4" : tend.cor, strokeWidth: 2.5, strokeLinejoin: "round", strokeLinecap: "round" }),
+        pts.map(function(p, gi) { return React.createElement("text", { key: "vl" + gi, x: p.x, y: p.y - 7, textAnchor: "middle", fontSize: 7.5, fontWeight: 700, fill: (tend.cor === "#94A3B8" ? "#2E6DA4" : tend.cor) }, fmt(serie[gi])); }),
         pts.map(function(p, i) { return React.createElement("circle", { key: i, cx: p.x, cy: p.y, r: i === pts.length - 1 ? 4 : 2.5, fill: tend.cor === "#94A3B8" ? "#2E6DA4" : tend.cor }); }),
         meses.map(function(m, i) {
           if (meses.length > 4 && i !== 0 && i !== meses.length - 1 && i !== Math.floor(meses.length / 2)) return null;
@@ -6794,9 +6796,11 @@ function StockAnalise(props) {
         React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "este m\xEAs")
       ),
       React.createElement("svg", { viewBox: "0 0 " + W + " " + H, width: "100%" },
-        React.createElement("line", { x1: padL, y1: 12, x2: W - 10, y2: 12, stroke: "#F1F5F9", strokeWidth: 0.5, strokeDasharray: "3 3" }),
-        React.createElement("line", { x1: padL, y1: (H - padB), x2: W - 10, y2: (H - padB), stroke: "#E2EBF4", strokeWidth: 1 }),
+        [0, 0.2, 0.4, 0.6, 0.8, 1].map(function(f, gi) { var gy = 12 + (H - 12 - padB) * (1 - f); return React.createElement("g", { key: "gy" + gi }, React.createElement("line", { x1: padL, y1: gy, x2: W - 10, y2: gy, stroke: f === 0 ? "#CBD5E1" : "#F1F5F9", strokeWidth: 1 }), React.createElement("text", { x: padL - 4, y: gy + 3, textAnchor: "end", fontSize: 7.5, fill: "#94A3B8" }, fmt(maxV * f))); }),
+        pts.map(function(p, gi) { return React.createElement("line", { key: "gx" + gi, x1: p.x, y1: 12, x2: p.x, y2: (H - padB), stroke: "#F8FAFC", strokeWidth: 1 }); }),
+        React.createElement("polygon", { points: polyPts + " " + (pts.length ? pts[pts.length-1].x : padL) + "," + (H - padB) + " " + (pts.length ? pts[0].x : padL) + "," + (H - padB), fill: "#2E6DA4", fillOpacity: 0.08 }),
         React.createElement("polyline", { points: polyPts, fill: "none", stroke: "#2E6DA4", strokeWidth: 3, strokeLinejoin: "round", strokeLinecap: "round" }),
+        pts.map(function(p, gi) { return React.createElement("text", { key: "vl" + gi, x: p.x, y: p.y - 7, textAnchor: "middle", fontSize: 7.5, fontWeight: 700, fill: "#2E6DA4" }, fmt(serie[gi])); }),
         pts.map(function(p, i) { return React.createElement("circle", { key: i, cx: p.x, cy: p.y, r: i === pts.length - 1 ? 4.5 : 3, fill: "#2E6DA4" }); }),
         meses.map(function(m, i) {
           var x = padL + (serie.length > 1 ? i / (serie.length - 1) * (W - padL - 10) : 0);
@@ -6906,7 +6910,8 @@ function StockAnalise(props) {
       series.length === 0 ? React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 40, fontSize: 13 } }, "Escolhe pelo menos um produto e um colaborador para comparar.") :
       React.createElement("div", null,
         React.createElement("svg", { viewBox: "0 0 " + W + " " + H, width: "100%" },
-          [0, 0.5, 1].map(function(f, i) { var y = pT + plotH - f * plotH; return React.createElement("g", { key: "g" + i }, React.createElement("line", { x1: pL, y1: y, x2: W - pR, y2: y, stroke: "#F1F5F9", strokeWidth: 1 }), React.createElement("text", { x: pL - 5, y: y + 3, textAnchor: "end", fontSize: 8, fill: "#94A3B8" }, compModo === "custo" ? fmt(maxV * f) : Math.round(maxV * f))); }),
+          [0, 0.2, 0.4, 0.6, 0.8, 1].map(function(f, i) { var y = pT + plotH - f * plotH; return React.createElement("g", { key: "g" + i }, React.createElement("line", { x1: pL, y1: y, x2: W - pR, y2: y, stroke: f === 0 ? "#CBD5E1" : "#EEF2F6", strokeWidth: 1 }), React.createElement("text", { x: pL - 5, y: y + 3, textAnchor: "end", fontSize: 8, fill: "#94A3B8" }, compModo === "custo" ? fmt(maxV * f) : Math.round(maxV * f))); }),
+          meses.map(function(m, i) { return React.createElement("line", { key: "tx" + i, x1: px(i), y1: pT + plotH, x2: px(i), y2: pT + plotH + 3, stroke: "#CBD5E1", strokeWidth: 1 }); }),
           meses.map(function(m, i) { return React.createElement("text", { key: "m" + i, x: px(i), y: H - 8, textAnchor: "middle", fontSize: 8, fill: "#94A3B8" }, m.slice(5) + "/" + m.slice(2, 4)); }),
           series.map(function(s, si) {
             var cor = CORES[si % CORES.length];
