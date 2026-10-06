@@ -636,6 +636,7 @@ function Finance() {
   const [svcDatasFin, setSvcDatasFin] = useState({});
   const [picagensArmFin, setPicagensArmFin] = useState([]);
   const [ivaTrimIdx, setIvaTrimIdx] = useState(0);
+  const [mesSSIdx, setMesSSIdx] = useState(0);
   const [ivaMostrarDivisao, setIvaMostrarDivisao] = useState(false);
   useEffect(function() {
     var hoje = /* @__PURE__ */ new Date();
@@ -1688,15 +1689,23 @@ function Finance() {
           var rh = (rhData || []).find(function(r) { return r.funcionario_id === e.id; });
           return rh && (rh.tipo_contrato || "Contrato") !== "Recibo Verde";
         });
+        var nowSS = new Date(now.getFullYear(), now.getMonth() + mesSSIdx, 15);
         var ssGerencia = ordenadoGerencia ? (parseFloat(ordenadoGerencia.valor) || 0) * 0.2375 : 0;
         var ssColabs = contratoEmps.reduce(function(s, e) {
-          return s + calcCustoColaboradorMes(e, rhData, absData, [], now).detalhe.reduce(function(s2, d) {
+          return s + calcCustoColaboradorMes(e, rhData, absData, [], nowSS).detalhe.reduce(function(s2, d) {
             return s2 + (d.l.indexOf("Seg. Social") !== -1 ? d.v : 0);
           }, 0);
         }, 0);
         var totalSS = ssColabs + ssGerencia;
         return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, padding: 20 }) },
-          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "\uD83D\uDCCB Seguran\xE7a Social patronal \u2014 ", now.toLocaleDateString("pt-PT", { month: "long", year: "numeric" })),
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } },
+            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "\uD83D\uDCCB Seguran\xE7a Social patronal"),
+            /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
+              /* @__PURE__ */ React.createElement("button", { onClick: function() { setMesSSIdx(mesSSIdx - 1); }, style: Object.assign({}, btnO, { padding: "3px 10px" }) }, "\u2039"),
+              /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: "#64748B", minWidth: 100, textAlign: "center", textTransform: "capitalize" } }, nowSS.toLocaleDateString("pt-PT", { month: "long", year: "numeric" })),
+              /* @__PURE__ */ React.createElement("button", { onClick: function() { if (mesSSIdx < 0) setMesSSIdx(mesSSIdx + 1); }, style: Object.assign({}, btnO, { padding: "3px 10px", opacity: mesSSIdx < 0 ? 1 : 0.4 }) }, "\u203A")
+            )
+          ),
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 14 } }, "Obriga\xE7\xE3o mensal. J\xE1 est\xE1 inclu\xEDda no custo de m\xE3o-de-obra \u2014 este valor serve para preparares o pagamento."),
           /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 10, padding: 16, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 } },
             /* @__PURE__ */ React.createElement("div", null,
