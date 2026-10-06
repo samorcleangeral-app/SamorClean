@@ -9932,6 +9932,7 @@ function QuadroEsquecimentos(props) {
   const [loading, setLoading] = useState(true);
   const [aberto, setAberto] = useState(null);
   const [anularModal, setAnularModal] = useState(null);
+  const [anuladosArm, setAnuladosArm] = useState({});
   function chaveAnul(fid, sid, tipo) { return fid + "|" + sid + "|" + tipo; }
   function carregar() {
     setLoading(true);
@@ -9950,7 +9951,12 @@ function QuadroEsquecimentos(props) {
       var servicos = res[1] || [];
       var picArm = res[2] || [];
       var anulMap = {};
-      (res[3] || []).forEach(function(a) { anulMap[chaveAnul(a.funcionario_id, a.servico_id, a.tipo_picagem)] = a.motivo || "sem motivo"; });
+      var anulArmMap = {};
+      (res[3] || []).forEach(function(a) {
+        if (a.tipo_picagem === "armazem") { anulArmMap[a.funcionario_id + "|" + a.dia_ref] = a.motivo || "sem motivo"; }
+        else { anulMap[chaveAnul(a.funcionario_id, a.servico_id, a.tipo_picagem)] = a.motivo || "sem motivo"; }
+      });
+      setAnuladosArm(anulArmMap);
       setAnulados(anulMap);
       var lista = emps.map(function(e) {
         var faltasServ = [];
@@ -9966,19 +9972,22 @@ function QuadroEsquecimentos(props) {
         var detalheArm = [];
         Object.keys(diasComServico).forEach(function(dia) { if (!diasComEntradaArm[dia]) detalheArm.push(dia); });
         var contam = faltasServ.filter(function(f) { return !anulMap[chaveAnul(e.id, f.sid, f.tipo)]; });
-        return { id: e.id, nome: e.name, av: e.av, esqServ: contam.length, detalheServ: faltasServ, esqArm: detalheArm.length, detalheArm: detalheArm.sort() };
+        var contamArm = detalheArm.filter(function(dia) { return !anulArmMap[e.id + "|" + dia]; });
+        return { id: e.id, nome: e.name, av: e.av, esqServ: contam.length, detalheServ: faltasServ, esqArm: contamArm.length, detalheArm: detalheArm.sort() };
       }).sort(function(a, b) { return (b.esqServ + b.esqArm) - (a.esqServ + a.esqArm); });
       setDados(lista);
       setLoading(false);
     });
   }
   useEffect(function() { carregar(); }, [mesRef]);
-  function anular(fid, f) { setAnularModal({ fid: fid, f: f }); }
+  function anular(fid, f) { setAnularModal({ fid: fid, f: f, tipo: "servico" }); }
+  function anularArm(fid, dia) { setAnularModal({ fid: fid, dia: dia, tipo: "armazem" }); }
   async function confirmarAnular(motivo) {
     var m = anularModal;
     if (!m) return;
     try {
-      await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "resolution=merge-duplicates" }), body: JSON.stringify({ funcionario_id: m.fid, servico_id: m.f.sid, tipo_picagem: m.f.tipo, motivo: motivo }) });
+      var body = (m.tipo === "armazem") ? { funcionario_id: m.fid, dia_ref: m.dia, tipo_picagem: "armazem", motivo: motivo } : { funcionario_id: m.fid, servico_id: m.f.sid, tipo_picagem: m.f.tipo, motivo: motivo };
+      await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "resolution=merge-duplicates" }), body: JSON.stringify(body) });
       setAnularModal(null);
       carregar();
     } catch (e) { window.alert("Erro ao anular: " + e.message); }
@@ -9986,6 +9995,12 @@ function QuadroEsquecimentos(props) {
   async function reativar(fid, f) {
     try {
       await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados?funcionario_id=eq." + encodeURIComponent(fid) + "&servico_id=eq." + encodeURIComponent(f.sid) + "&tipo_picagem=eq." + encodeURIComponent(f.tipo), { method: "DELETE", headers: dbHeaders() });
+      carregar();
+    } catch (e) { window.alert("Erro: " + e.message); }
+  }
+  async function reativarArm(fid, dia) {
+    try {
+      await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados?funcionario_id=eq." + encodeURIComponent(fid) + "&dia_ref=eq." + encodeURIComponent(dia) + "&tipo_picagem=eq.armazem", { method: "DELETE", headers: dbHeaders() });
       carregar();
     } catch (e) { window.alert("Erro: " + e.message); }
   }
@@ -10012,7 +10027,7 @@ function QuadroEsquecimentos(props) {
       var cor = perde ? "#DC2626" : perto ? "#F59E0B" : "#16A34A";
       var estaAberto = aberto === d.id;
       return /* @__PURE__ */ React.createElement("div", { key: d.id, style: { borderBottom: "1px solid #F1F5F9" } },
-        /* @__PURE__ */ React.createElement("div", { onClick: function() { setAberto(estaAberto ? null : d.id); }, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 0", cursor: d.detalheServ.length > 0 ? "pointer" : "default" } },
+        /* @__PURE__ */ React.createElement("div", { onClick: function() { setAberto(estaAberto ? null : d.id); }, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 0", cursor: (d.detalheServ.length > 0 || (d.detalheArm && d.detalheArm.length > 0)) ? "pointer" : "default" } },
           /* @__PURE__ */ React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: cor, flexShrink: 0 } }),
           e_av(d.av, cor),
           /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } },
@@ -10028,7 +10043,17 @@ function QuadroEsquecimentos(props) {
             /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B", flex: 1 } }, f.date ? new Date(f.date + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) : "", " \xB7 ", f.cn || "", " \xB7 ", /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, color: anulado ? "#94A3B8" : "#DC2626", textDecoration: anulado ? "line-through" : "none" } }, "faltou ", f.tipo), anulado ? /* @__PURE__ */ React.createElement("span", { style: { color: "#16A34A", fontStyle: "italic" } }, " \u2014 anulado: ", anulado) : null),
             anulado ? /* @__PURE__ */ React.createElement("button", { onClick: function() { reativar(d.id, f); }, style: { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline" } }, "reativar") : /* @__PURE__ */ React.createElement("button", { onClick: function() { anular(d.id, f); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, color: "#2E6DA4", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "3px 10px", flexShrink: 0 } }, "anular")
           );
-        })) : null
+        })) : null,
+        estaAberto && d.detalheArm && d.detalheArm.length > 0 ? /* @__PURE__ */ React.createElement("div", { style: { padding: "0 0 10px 26px" } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 800, color: "#94A3B8", textTransform: "uppercase", margin: "4px 0" } }, "Armaz\xE9m \u2014 dias sem picagem de entrada"),
+          d.detalheArm.map(function(dia, i) {
+            var anuladoA = anuladosArm[d.id + "|" + dia];
+            return /* @__PURE__ */ React.createElement("div", { key: "arm" + i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11.5, padding: "4px 0", opacity: anuladoA ? 0.55 : 1 } },
+              /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B", flex: 1 } }, dia ? new Date(dia + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) : "", " \xB7 ", /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, color: anuladoA ? "#94A3B8" : "#DC2626", textDecoration: anuladoA ? "line-through" : "none" } }, "sem picagem no armaz\xE9m"), anuladoA ? /* @__PURE__ */ React.createElement("span", { style: { color: "#16A34A", fontStyle: "italic" } }, " \u2014 anulado: ", anuladoA) : null),
+              anuladoA ? /* @__PURE__ */ React.createElement("button", { onClick: function() { reativarArm(d.id, dia); }, style: { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline" } }, "reativar") : /* @__PURE__ */ React.createElement("button", { onClick: function() { anularArm(d.id, dia); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, color: "#2E6DA4", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "3px 10px", flexShrink: 0 } }, "anular")
+            );
+          })
+        ) : null
       );
     }),
     anularModal && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 600, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }, onClick: function() { setAnularModal(null); } },
