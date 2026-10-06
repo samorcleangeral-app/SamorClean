@@ -6782,19 +6782,10 @@ function StockAnalise(props) {
         serie.some(function(v) { return v > 0; }) && React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: tend.cor, background: tend.bg, padding: "4px 12px", borderRadius: 20 } }, tend.txt)
       ),
       !serie.some(function(v) { return v > 0; }) ? React.createElement("div", { style: { textAlign: "center", padding: 30, color: "#94A3B8", fontSize: 13 } }, "Sem consumo deste produto no per\xEDodo.") :
-      React.createElement("svg", { viewBox: "0 0 " + W + " " + H, width: "100%" },
-        [0, 0.2, 0.4, 0.6, 0.8, 1].map(function(f, gi) { var gy = 15 + (H - 15 - padB) * (1 - f); return React.createElement("g", { key: "gy" + gi }, React.createElement("line", { x1: padL, y1: gy, x2: W - 10, y2: gy, stroke: f === 0 ? "#CBD5E1" : "#F1F5F9", strokeWidth: 1 }), React.createElement("text", { x: padL - 4, y: gy + 3, textAnchor: "end", fontSize: 7.5, fill: "#94A3B8" }, fmt(maxV * f))); }),
-        pts.map(function(p, gi) { return React.createElement("line", { key: "gx" + gi, x1: p.x, y1: 15, x2: p.x, y2: (H - padB), stroke: "#F8FAFC", strokeWidth: 1 }); }),
-        React.createElement("polygon", { points: polyPts + " " + (pts.length ? pts[pts.length-1].x : padL) + "," + (H - padB) + " " + (pts.length ? pts[0].x : padL) + "," + (H - padB), fill: (tend.cor === "#94A3B8" ? "#2E6DA4" : tend.cor), fillOpacity: 0.08 }),
-        React.createElement("polyline", { points: polyPts, fill: "none", stroke: tend.cor === "#94A3B8" ? "#2E6DA4" : tend.cor, strokeWidth: 2.5, strokeLinejoin: "round", strokeLinecap: "round" }),
-        pts.map(function(p, gi) { return React.createElement("text", { key: "vl" + gi, x: p.x, y: p.y - 7, textAnchor: "middle", fontSize: 7.5, fontWeight: 700, fill: (tend.cor === "#94A3B8" ? "#2E6DA4" : tend.cor) }, fmt(serie[gi])); }),
-        pts.map(function(p, i) { return React.createElement("circle", { key: i, cx: p.x, cy: p.y, r: i === pts.length - 1 ? 4 : 2.5, fill: tend.cor === "#94A3B8" ? "#2E6DA4" : tend.cor }); }),
-        meses.map(function(m, i) {
-          var passo = Math.ceil(meses.length / 7); if (meses.length > 7 && i % passo !== 0 && i !== meses.length - 1) return null;
-          var x = padL + (serie.length > 1 ? i / (serie.length - 1) * (W - padL - 10) : 0);
-          return React.createElement("text", { key: i, x: x, y: H - 8, fontSize: 9, fill: "#94A3B8", textAnchor: i === 0 ? "start" : i === meses.length - 1 ? "end" : "middle" }, bucketLabels[i]);
-        })
-      )
+      (function() { var cor = tend.cor === "#94A3B8" ? "#2E6DA4" : tend.cor; return React.createElement(ChartCanvas, { type: "line", height: 240, data: {
+        labels: bucketLabels,
+        datasets: [{ label: sel, data: serie.map(function(v) { return Number(v.toFixed(2)); }), borderColor: cor, backgroundColor: cor + "1F", fill: true, tension: 0.35, pointRadius: 3, pointBackgroundColor: cor, pointBorderColor: "#fff", pointBorderWidth: 1.5, borderWidth: 2.5 }]
+      }, options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: function(v) { return fmt(v) + " \u20AC"; } } } } } }); })()
     );
   }
 
@@ -6824,18 +6815,10 @@ function StockAnalise(props) {
         React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: tend.cor } }, tend.txt),
         React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "este m\xEAs")
       ),
-      React.createElement("svg", { viewBox: "0 0 " + W + " " + H, width: "100%" },
-        [0, 0.2, 0.4, 0.6, 0.8, 1].map(function(f, gi) { var gy = 12 + (H - 12 - padB) * (1 - f); return React.createElement("g", { key: "gy" + gi }, React.createElement("line", { x1: padL, y1: gy, x2: W - 10, y2: gy, stroke: f === 0 ? "#CBD5E1" : "#F1F5F9", strokeWidth: 1 }), React.createElement("text", { x: padL - 4, y: gy + 3, textAnchor: "end", fontSize: 7.5, fill: "#94A3B8" }, fmt(maxV * f))); }),
-        pts.map(function(p, gi) { return React.createElement("line", { key: "gx" + gi, x1: p.x, y1: 12, x2: p.x, y2: (H - padB), stroke: "#F8FAFC", strokeWidth: 1 }); }),
-        React.createElement("polygon", { points: polyPts + " " + (pts.length ? pts[pts.length-1].x : padL) + "," + (H - padB) + " " + (pts.length ? pts[0].x : padL) + "," + (H - padB), fill: "#2E6DA4", fillOpacity: 0.08 }),
-        React.createElement("polyline", { points: polyPts, fill: "none", stroke: "#2E6DA4", strokeWidth: 3, strokeLinejoin: "round", strokeLinecap: "round" }),
-        pts.map(function(p, gi) { return React.createElement("text", { key: "vl" + gi, x: p.x, y: p.y - 7, textAnchor: "middle", fontSize: 7.5, fontWeight: 700, fill: "#2E6DA4" }, fmt(serie[gi])); }),
-        pts.map(function(p, i) { return React.createElement("circle", { key: i, cx: p.x, cy: p.y, r: i === pts.length - 1 ? 4.5 : 3, fill: "#2E6DA4" }); }),
-        meses.map(function(m, i) {
-          var x = padL + (serie.length > 1 ? i / (serie.length - 1) * (W - padL - 10) : 0);
-          return React.createElement("text", { key: i, x: x, y: H - 6, fontSize: 9, fill: "#94A3B8", textAnchor: i === 0 ? "start" : i === meses.length - 1 ? "end" : "middle" }, bucketLabels[i]);
-        })
-      )
+      React.createElement(ChartCanvas, { type: "line", height: 240, data: {
+        labels: bucketLabels,
+        datasets: [{ label: "Consumo (\u20AC)", data: serie.map(function(v) { return Number(v.toFixed(2)); }), borderColor: "#2E6DA4", backgroundColor: "rgba(46,109,164,0.12)", fill: true, tension: 0.35, pointRadius: 3, pointBackgroundColor: "#2E6DA4", pointBorderColor: "#fff", pointBorderWidth: 1.5, borderWidth: 2.5 }]
+      }, options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: function(v) { return fmt(v) + " \u20AC"; } } } } } })
     );
   }
 
@@ -6937,24 +6920,10 @@ function StockAnalise(props) {
         ["custo", "quantidade"].map(function(mo) { var on = compModo === mo; return React.createElement("button", { key: mo, onClick: function() { setCompModo(mo); }, style: { background: on ? "#7C3AED" : "#fff", color: on ? "#fff" : "#64748B", border: "1.5px solid " + (on ? "#7C3AED" : "#E2EBF4"), borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, mo === "custo" ? "Custo (\u20AC)" : "Quantidade"); })
       ),
       series.length === 0 ? React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 40, fontSize: 13 } }, "Escolhe pelo menos um produto e um colaborador para comparar.") :
-      React.createElement("div", null,
-        React.createElement("svg", { viewBox: "0 0 " + W + " " + H, width: "100%" },
-          [0, 0.2, 0.4, 0.6, 0.8, 1].map(function(f, i) { var y = pT + plotH - f * plotH; var val = maxV * f; var txt = compModo === "custo" ? fmt(val) : (maxV <= 5 ? (Math.round(val * 10) / 10).toString().replace(".", ",") : String(Math.round(val))); return React.createElement("g", { key: "g" + i }, React.createElement("line", { x1: pL, y1: y, x2: W - pR, y2: y, stroke: f === 0 ? "#CBD5E1" : "#EEF2F6", strokeWidth: 1 }), React.createElement("text", { x: pL - 5, y: y + 3, textAnchor: "end", fontSize: 8, fill: "#94A3B8" }, txt)); }),
-          meses.map(function(m, i) { return React.createElement("line", { key: "tx" + i, x1: px(i), y1: pT + plotH, x2: px(i), y2: pT + plotH + 3, stroke: "#CBD5E1", strokeWidth: 1 }); }),
-          meses.map(function(m, i) { var passo = Math.ceil(meses.length / 7); if (meses.length > 7 && i % passo !== 0 && i !== meses.length - 1) return null; return React.createElement("text", { key: "m" + i, x: px(i), y: H - 8, textAnchor: "middle", fontSize: 8, fill: "#94A3B8" }, bucketLabels[i]); }),
-          series.map(function(s, si) {
-            var cor = CORES[si % CORES.length];
-            var pts = s.valores.map(function(v, i) { return px(i) + "," + py(v); }).join(" ");
-            return React.createElement("g", { key: "s" + si },
-              React.createElement("polyline", { points: pts, fill: "none", stroke: cor, strokeWidth: 2 }),
-              s.valores.map(function(v, i) { return React.createElement("circle", { key: i, cx: px(i), cy: py(v), r: 2.5, fill: cor }); })
-            );
-          })
-        ),
-        React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 10, marginTop: 10 } },
-          series.map(function(s, si) { var cor = CORES[si % CORES.length]; return React.createElement("div", { key: "l" + si, style: { display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#64748B" } }, React.createElement("div", { style: { width: 12, height: 3, background: cor, borderRadius: 2 } }), s.label); })
-        )
-      )
+      React.createElement(ChartCanvas, { type: "line", height: 260, data: {
+        labels: bucketLabels,
+        datasets: series.map(function(s, si) { var cor = CORES[si % CORES.length]; return { label: s.label, data: s.valores.map(function(v) { return Number(v.toFixed(2)); }), borderColor: cor, backgroundColor: cor + "14", fill: false, tension: 0.35, pointRadius: 3, pointBackgroundColor: cor, pointBorderColor: "#fff", pointBorderWidth: 1.5, borderWidth: 2.5 }; })
+      }, options: { plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } }, scales: { y: { beginAtZero: true, ticks: { callback: function(v) { return compModo === "custo" ? fmt(v) + " \u20AC" : v; } } } } } })
     );
   }
 
