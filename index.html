@@ -9948,18 +9948,25 @@ function QuadroEsquecimentos(props) {
     ]).then(function(res) {
       var emps = (res[0] || []).filter(function(e) { return e.ativo !== false; });
       var servicos = res[1] || [];
+      var picArm = res[2] || [];
       var anulMap = {};
       (res[3] || []).forEach(function(a) { anulMap[chaveAnul(a.funcionario_id, a.servico_id, a.tipo_picagem)] = a.motivo || "sem motivo"; });
       setAnulados(anulMap);
       var lista = emps.map(function(e) {
         var faltasServ = [];
+        var diasComServico = {};
         servicos.forEach(function(j) {
           if ((j.team || []).indexOf(e.id) === -1) return;
+          if (j.date) diasComServico[j.date] = true;
           if (!j.check_in) faltasServ.push({ sid: j.id, cn: j.cn, date: j.date, t1: j.t1, tipo: "entrada" });
           if (!j.check_out) faltasServ.push({ sid: j.id, cn: j.cn, date: j.date, t1: j.t1, tipo: "sa\xEDda" });
         });
+        var diasComEntradaArm = {};
+        picArm.forEach(function(p) { if (p.funcionario_id === e.id && p.tipo === "entrada") { diasComEntradaArm[(p.created_at || "").slice(0, 10)] = true; } });
+        var detalheArm = [];
+        Object.keys(diasComServico).forEach(function(dia) { if (!diasComEntradaArm[dia]) detalheArm.push(dia); });
         var contam = faltasServ.filter(function(f) { return !anulMap[chaveAnul(e.id, f.sid, f.tipo)]; });
-        return { id: e.id, nome: e.name, av: e.av, esqServ: contam.length, detalheServ: faltasServ, esqArm: (e.esquecimentos_armazem_manual != null ? e.esquecimentos_armazem_manual : 0) };
+        return { id: e.id, nome: e.name, av: e.av, esqServ: contam.length, detalheServ: faltasServ, esqArm: detalheArm.length, detalheArm: detalheArm.sort() };
       }).sort(function(a, b) { return (b.esqServ + b.esqArm) - (a.esqServ + a.esqArm); });
       setDados(lista);
       setLoading(false);
