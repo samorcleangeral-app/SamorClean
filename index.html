@@ -615,6 +615,7 @@ function Finance() {
   const [selFaturacaoCliente, setSelFaturacaoCliente] = useState(null);
   const [faturacaoSearch, setFaturacaoSearch] = useState("");
   const [ordenadoGerencia, setOrdenadoGerencia] = useState(null);
+  const [todosOrdenadosGer, setTodosOrdenadosGer] = useState([]);
   const [ajustesRecibo, setAjustesRecibo] = useState({});
   const [premiosOpcionais, setPremiosOpcionais] = useState({});
   const [premiosOpcionaisInput, setPremiosOpcionaisInput] = useState({});
@@ -724,7 +725,7 @@ function Finance() {
       db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd),
       db.list("despesas", "?select=data,valor&data=gte." + sixMonthsAgo),
       db.list("servicos", "?select=*&status=eq.completed&paid=is.false"),
-      db.list("ordenado_gerencia", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
+      db.list("ordenado_gerencia", "?select=*&order=ano.desc,mes.desc"),
       db.list("ajuste_dias_recibo_verde", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
       db.list("premio_assiduidade_opcional", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
       db.list("historico_financeiro", "?select=ano,mes,despesas,faturado&ano=eq." + now.getFullYear() + "&order=mes.desc"),
@@ -746,7 +747,10 @@ function Finance() {
       setLast6Months((results[1] || []).filter(function(j) { return cm[j.client_id]; }));
       setDespesas6Months(results[13] || []);
       setAllPendingJobs((results[14] || []).filter(function(j) { return cm[j.client_id] && cm[j.client_id].ativo !== false; }));
-      var ordenadoRow = results[15] && results[15][0] ? results[15][0] : null;
+      var todosOrdGer = results[15] || [];
+      setTodosOrdenadosGer(todosOrdGer);
+      var mesAtualNum = now.getMonth() + 1, anoAtualNum = now.getFullYear();
+      var ordenadoRow = todosOrdGer.find(function(o) { return o.ano === anoAtualNum && o.mes === mesAtualNum; }) || null;
       setOrdenadoGerencia(ordenadoRow);
       setOrdenadoGerenciaInput(ordenadoRow ? String(ordenadoRow.valor) : "");
       var ajustesMap = {};
@@ -1690,13 +1694,17 @@ function Finance() {
           return rh && (rh.tipo_contrato || "Contrato") !== "Recibo Verde";
         });
         var nowSS = new Date(now.getFullYear(), now.getMonth() + mesSSIdx, 15);
-        var ssGerencia = ordenadoGerencia ? (parseFloat(ordenadoGerencia.valor) || 0) * 0.2375 : 0;
+        var ordGerMes = todosOrdenadosGer.find(function(o) { return o.ano === nowSS.getFullYear() && o.mes === (nowSS.getMonth() + 1); });
+        var ssGerencia = ordGerMes ? (parseFloat(ordGerMes.valor) || 0) * 0.2375 : 0;
         var ssColabs = contratoEmps.reduce(function(s, e) {
           return s + calcCustoColaboradorMes(e, rhData, absData, [], nowSS).detalhe.reduce(function(s2, d) {
             return s2 + (d.l.indexOf("Seg. Social") !== -1 ? d.v : 0);
           }, 0);
         }, 0);
-        var totalSS = ssColabs + ssGerencia;
+        var ssPatronal = ssColabs + ssGerencia;
+        var baseSS = ssPatronal / 0.2375;
+        var ss11 = baseSS * 0.11;
+        var totalSS = ssPatronal + ss11;
         return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, padding: 20 }) },
           /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } },
             /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "\uD83D\uDCCB Seguran\xE7a Social patronal"),
@@ -1706,13 +1714,16 @@ function Finance() {
               /* @__PURE__ */ React.createElement("button", { onClick: function() { if (mesSSIdx < 0) setMesSSIdx(mesSSIdx + 1); }, style: Object.assign({}, btnO, { padding: "3px 10px", opacity: mesSSIdx < 0 ? 1 : 0.4 }) }, "\u203A")
             )
           ),
-          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 14 } }, "Obriga\xE7\xE3o mensal. J\xE1 est\xE1 inclu\xEDda no custo de m\xE3o-de-obra \u2014 este valor serve para preparares o pagamento."),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 14 } }, "Obriga\xE7\xE3o mensal \u2014 o total que entregas \xE0 Seguran\xE7a Social: a parte patronal (23,75%) mais a parte do trabalhador (11%) que ret\xE9ns. S\xF3 a parte patronal entra no custo de m\xE3o-de-obra."),
           /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 10, padding: 16, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 } },
             /* @__PURE__ */ React.createElement("div", null,
               /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#64748B", textTransform: "uppercase" } }, "A entregar este m\xEAs"),
               /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } }, contratoEmps.length, " colaborador", contratoEmps.length !== 1 ? "es" : "", " a contrato", ssGerencia > 0 ? " + ger\xEAncia" : "")
             ),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 30, fontWeight: 900, color: "#2E6DA4" } }, fmt(totalSS), "\u20AC")
+            /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right" } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 30, fontWeight: 900, color: "#2E6DA4" } }, fmt(totalSS), "\u20AC"),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10.5, color: "#94A3B8", marginTop: 2 } }, "Patronal ", fmt(ssPatronal), "\u20AC + Trabalhador ", fmt(ss11), "\u20AC")
+            )
           ),
           /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 } },
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, "Colaboradores a contrato: ", /* @__PURE__ */ React.createElement("b", null, fmt(ssColabs), "\u20AC")),
