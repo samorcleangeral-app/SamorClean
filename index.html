@@ -2237,14 +2237,18 @@ function Finance() {
         /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar cliente...", value: margemSearch, onChange: function(e) { setMargemSearch(e.target.value); } }),
         /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 12 } },
           margensPorCliente.slice().filter(function(c) { return !margemSearch || c.name.toLowerCase().indexOf(margemSearch.toLowerCase()) !== -1; }).sort(function(a, b) { return b.margemPct - a.margemPct; }).map(function(c) {
-            var corMargem = c.margemPct >= 30 ? "#16A34A" : c.margemPct >= 15 ? "#F59E0B" : "#EF4444";
-            return /* @__PURE__ */ React.createElement("div", { key: c.name, onClick: function() { setSelMargemCliente(c.name); }, style: { border: "1px solid #E2EBF4", borderLeft: "4px solid " + corMargem, borderRadius: 10, padding: "12px 14px", cursor: "pointer" } },
+            var semPreco = c.receita === 0 && !c.isOrcamento;
+            var corMargem = semPreco ? "#F59E0B" : (c.margemPct >= 30 ? "#16A34A" : c.margemPct >= 15 ? "#F59E0B" : "#EF4444");
+            return /* @__PURE__ */ React.createElement("div", { key: c.name, onClick: function() { setSelMargemCliente(c.name); }, style: { border: "1px solid " + (semPreco ? "#FDE68A" : "#E2EBF4"), borderLeft: "4px solid " + corMargem, background: semPreco ? "#FFFBEB" : "#fff", borderRadius: 10, padding: "12px 14px", cursor: "pointer" } },
               /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.name),
               /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
                 /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, fmt(c.receita)),
-                /* @__PURE__ */ React.createElement("span", { style: { background: corMargem + "20", color: corMargem, borderRadius: 8, padding: "2px 10px", fontSize: 12, fontWeight: 800 } }, c.margemPct, "%")
+                semPreco
+                  ? /* @__PURE__ */ React.createElement("span", { style: { background: "#FEF3C7", color: "#92400E", borderRadius: 8, padding: "2px 10px", fontSize: 11, fontWeight: 800 } }, "\u26A0 sem pre\xE7o")
+                  : /* @__PURE__ */ React.createElement("span", { style: { background: corMargem + "20", color: corMargem, borderRadius: 8, padding: "2px 10px", fontSize: 12, fontWeight: 800 } }, c.margemPct, "%")
               ),
               /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 4 } }, c.jobs, " servi\xE7o", c.jobs !== 1 ? "s" : ""),
+              semPreco && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#92400E", background: "#FEF3C7", borderRadius: 5, padding: "3px 7px", marginTop: 5, fontWeight: 700 } }, "\u26A0 Falta lan\xE7ar o pre\xE7o na ficha do cliente"),
               (c.semCusto && c.semCusto.length > 0) && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#92400E", background: "#FEF3C7", borderRadius: 5, padding: "2px 6px", marginTop: 5, display: "inline-block", fontWeight: 700 } }, "\u26A0 margem sobrestimada")
             );
           })
