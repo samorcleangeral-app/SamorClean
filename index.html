@@ -1194,7 +1194,7 @@ function Finance() {
   var custoOrdenadoGerenciaSS = custoOrdenadoGerenciaBase * 0.2375;
   var custoOrdenadoGerenciaTotal = custoOrdenadoGerenciaBase + custoOrdenadoGerenciaSS;
   const totalCustoMaoObraGeral = emps.filter(function(e) { return contaNoPeriodo(e, monthJobs); }).reduce(function(s, e) {
-    return s + calcCustoColaboradorMes(e, rhData, absData, monthJobs, now, ajustesRecibo, premiosOpcionais).total;
+    return s + custoColaborador(e).total;   // MESMA conta dos cartões de colaborador (inclui produtividade) — margem global bate com a soma dos custos
   }, 0) + custoOrdenadoGerenciaTotal;
   const margemBruta = fatSemIva - totalCustos - totalCustoMaoObraGeral;
   const margemPct = fatSemIva > 0 ? Math.round(margemBruta / fatSemIva * 100) : 0;
@@ -1629,11 +1629,13 @@ function Finance() {
     if (isOrcamentoCliente) {
       receita = jobs.reduce(function(s, j) { return s + (j.val || 0); }, 0);
     } else if (c.tipo_faturacao === "visita") {
-      receita = jobs.reduce(function(s, j) { return s + (parseFloat(j.val) || 0); }, 0);
+      // MESMA regra da conta corrente/faturação: valor manual se existir, senão o valor por visita da ficha (nunca j.val a 0 "fantasma").
+      receita = jobs.reduce(function(s, j) { return s + (j.val_manual ? (parseFloat(j.val) || 0) : (parseFloat(c.valor_visita) || 0)); }, 0);
     } else if (c.tipo_faturacao === "mensal") {
       receita = parseFloat(c.valor_visita) || 0;
     } else {
-      receita = jobs.reduce(function(s, j) { return s + (j.val || 0); }, 0);
+      // Sem tipo definido: igual à faturação — valor manual, senão valor por visita da ficha, e só em último caso o j.val gravado.
+      receita = jobs.reduce(function(s, j) { var vv = parseFloat(c.valor_visita) || 0; return s + (j.val_manual ? (parseFloat(j.val) || 0) : (vv > 0 ? vv : (parseFloat(j.val) || 0))); }, 0);
     }
     var custoMO = 0;
     var horasCliente = 0;
