@@ -422,6 +422,33 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
   }
   return { total: total, detalhe: detalhe, tipo: tipo };
 }
+// Monta os dados de produtividade de um colaborador (avaliações de clientes, nota mensal, esquecimentos de armazém).
+// Fonte ÚNICA, partilhada pelo Financeiro e pelo Relatório Mensal, para os dois baterem ao cêntimo.
+// ctx: { avaliacoes, avaliacoesMensais, svcDatas, picagensArm, monthJobs, mesYM }
+function calcDadosProdColab(emp, ctx) {
+  var mesYM = ctx.mesYM;
+  var svcDatas = ctx.svcDatas || {};
+  var avsCli = (ctx.avaliacoes || []).filter(function(a) {
+    if (a.funcionario_id !== emp.id) return false;
+    if ((a.created_at || "").slice(0, 7) !== mesYM) return false;
+    var ds = svcDatas[a.servico_id];
+    if (!ds) return true;
+    return (ds || "").slice(0, 7) === mesYM;
+  }).map(function(a) { return a.stars || 0; });
+  var avMensal = (ctx.avaliacoesMensais || []).find(function(a) { return a.funcionario_id === emp.id && a.mes === mesYM; });
+  var diasComServico = {};
+  (ctx.monthJobs || []).forEach(function(j) { if ((j.team || []).indexOf(emp.id) !== -1 && j.status === "completed") diasComServico[j.date] = true; });
+  var diasComEntradaArm = {};
+  (ctx.picagensArm || []).forEach(function(p) {
+    if (p.funcionario_id !== emp.id) return;
+    if (p.tipo && p.tipo !== "entrada") return;
+    var dia = (p.created_at || "").slice(0, 10);
+    if (dia) diasComEntradaArm[dia] = true;
+  });
+  var esqArm = 0;
+  Object.keys(diasComServico).forEach(function(dia) { if (!diasComEntradaArm[dia]) esqArm++; });
+  return { avsClientes: avsCli, notaMensal: avMensal ? Number(avMensal.nota_final) : null, esquecimentosArmazem: esqArm };
+}
 function calcCustoHoraReal(emp, rhData, refDate, absData) {
   var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
   if (!rh) return 0;
@@ -1336,27 +1363,7 @@ function Finance() {
 
   function custoColaborador(emp) {
     var mesYM = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
-    var avsCli = (avsClientesFin || []).filter(function(a) {
-      if (a.funcionario_id !== emp.id) return false;
-      if ((a.created_at || "").slice(0, 7) !== mesYM) return false;
-      var ds = svcDatasFin[a.servico_id];
-      if (!ds) return true;
-      return (ds || "").slice(0, 7) === mesYM;
-    }).map(function(a) { return a.stars || 0; });
-    var avMensal = (avsMensaisFin || []).find(function(a) { return a.funcionario_id === emp.id && a.mes === mesYM; });
-    // Esquecimentos de armazém: dias com serviço mas sem picagem de ENTRADA no armazém
-    var diasComServico = {};
-    (monthJobs || []).forEach(function(j) { if ((j.team || []).indexOf(emp.id) !== -1 && j.status === "completed") diasComServico[j.date] = true; });
-    var diasComEntradaArm = {};
-    (picagensArmFin || []).forEach(function(p) {
-      if (p.funcionario_id !== emp.id) return;
-      if (p.tipo && p.tipo !== "entrada") return;
-      var dia = (p.created_at || "").slice(0, 10);
-      if (dia) diasComEntradaArm[dia] = true;
-    });
-    var esqArm = 0;
-    Object.keys(diasComServico).forEach(function(dia) { if (!diasComEntradaArm[dia]) esqArm++; });
-    var dadosProd = { avsClientes: avsCli, notaMensal: avMensal ? Number(avMensal.nota_final) : null, esquecimentosArmazem: esqArm };
+    var dadosProd = calcDadosProdColab(emp, { avaliacoes: avsClientesFin, avaliacoesMensais: avsMensaisFin, svcDatas: svcDatasFin, picagensArm: picagensArmFin, monthJobs: monthJobs, mesYM: mesYM });
     return calcCustoColaboradorMes(emp, rhData, absData, monthJobs, now, ajustesRecibo, premiosOpcionais, dadosProd);
   }
 
@@ -8977,7 +8984,7 @@ function RelatorioMensal() {
     const from = localDateStr(new Date(ano, mes, 1));
     const to = localDateStr(new Date(ano, mes + 1, 0));
     const yearStart2 = localDateStr(new Date(ano, 0, 1));
-    const [servicos, clientes, funcs, avs, pedidos, despesas, rhData, absData, cashConfigArr, cashMovs, metasArr, recrutamento] = await Promise.all([
+    const [servicos, clientes, funcs, avs, pedidos, despesas, rhData, absData, cashConfigArr, cashMovs, metasArr, recrutamento, avsMensaisRel, picagensArmRel, ajusteRV, premioAssidOpc] = await Promise.all([
       db.list("servicos", "?select=*&date=gte." + from + "&date=lte." + to + "&order=date"),
       db.list("clientes", "?select=*&excluir_financeiro=is.false"),
       db.list("funcionarios", "?select=*"),
@@ -8989,7 +8996,11 @@ function RelatorioMensal() {
       db.list("cash_config", "?select=*&order=data_inicio.desc&limit=1"),
       db.list("cash_movimentos", "?select=*&order=data.desc"),
       db.list("metas_financeiras", "?select=*&order=created_at.desc"),
-      db.list("leads_recrutamento", "?select=id,estado")
+      db.list("leads_recrutamento", "?select=id,estado"),
+      db.list("avaliacoes_mensais", "?select=funcionario_id,mes,nota_final"),
+      db.list("picagens_armazem", "?select=funcionario_id,tipo,created_at&created_at=gte." + from),
+      db.list("ajuste_dias_recibo_verde", "?select=*&ano=eq." + ano + "&mes=eq." + (mes + 1)),
+      db.list("premio_assiduidade_opcional", "?select=*&ano=eq." + ano + "&mes=eq." + (mes + 1))
     ]);
     const cm = {}, fm = {};
     const rhSafe = rhData || [];
@@ -9049,6 +9060,18 @@ function RelatorioMensal() {
     });
     var totalHorasMesRateio = completed.reduce(function(s, j) { return clientesOrcamento[j.client_id] ? s : s + jobHoras(j) * ((j.team || []).length || 1); }, 0);
     const byClient = {};
+    // Custo/hora REAL por colaborador (custo mensal completo ÷ horas alocadas) — MESMA fonte e fórmula do Financeiro
+    var mesYMrel = ano + "-" + String(mes + 1).padStart(2, "0");
+    var svcDatasRel = {}; (servicos || []).forEach(function(sv) { svcDatasRel[sv.id] = sv.date; });
+    var ajustesRel = {}; (ajusteRV || []).forEach(function(a) { ajustesRel[a.funcionario_id] = parseFloat(a.dias_extra) || 0; });
+    var premiosRel = {}; (premioAssidOpc || []).forEach(function(p) { premiosRel[p.funcionario_id] = parseFloat(p.valor) || 0; });
+    var custoHoraAlocadaMapRel = {};
+    (funcs || []).forEach(function(e) {
+      var dp = calcDadosProdColab(e, { avaliacoes: avs, avaliacoesMensais: avsMensaisRel, svcDatas: svcDatasRel, picagensArm: picagensArmRel, monthJobs: completed, mesYM: mesYMrel });
+      var cc = calcCustoColaboradorMes(e, rhSafe, absData, completed, refDate, ajustesRel, premiosRel, dp);
+      var horasAloc = completed.reduce(function(s, j) { return (j.team || []).indexOf(e.id) !== -1 ? s + jobHoras(j) : s; }, 0);
+      custoHoraAlocadaMapRel[e.id] = horasAloc > 0 ? cc.total / horasAloc : 0;
+    });
     function idEfetivo(clientId) {
       var c = cm[clientId];
       return (c && c.cliente_principal_id) || clientId;
@@ -9067,7 +9090,7 @@ function RelatorioMensal() {
       byClient[cid].horas += horasJob * teamSize;
       (j.team || []).forEach(function(eid) {
         var empObj = fm[eid];
-        if (empObj) byClient[cid].custoMO += calcCustoHoraReal(empObj, rhSafe, refDate) * horasJob;
+        if (empObj) byClient[cid].custoMO += (custoHoraAlocadaMapRel[eid] || 0) * horasJob;
       });
     });
     Object.keys(byClient).forEach(function(cid) {
