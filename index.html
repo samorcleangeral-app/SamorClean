@@ -1458,9 +1458,11 @@ function Finance() {
     var utilizacaoPct = c.tipo === "Recibo Verde"
       ? (diasUteisDisponiveis > 0 ? Math.round(diasTrabalhadosEmp / diasUteisDisponiveis * 100) : 0)
       : (capacidadeHoras > 0 ? Math.round(horasEmp / capacidadeHoras * 100) : 0);
-    // Custo/hora REAL = custo mensal completo ÷ horas efectivamente alocadas a serviços (não a capacidade teórica).
-    // Varia com faltas e ocupação — é o número verdadeiro para a margem. Fallback para capacidade se 0 horas.
-    var custoHoraAlocada = horasEmp > 0 ? c.total / horasEmp : custoH;
+    // Custo/hora REAL = custo mensal completo ÷ horas AGENDADAS do mês completo (não só as já feitas até hoje).
+    // Usar o mês inteiro no divisor mantém a taxa estável desde o dia 1 (numerador e denominador no mesmo período)
+    // e continua a refletir a ocupação real. Fallback para capacidade se não houver horas agendadas.
+    var horasMesAgendadas = (monthJobsAll || []).filter(function(j) { return j.status !== "cancelado" && (j.team || []).indexOf(e.id) !== -1; }).reduce(function(s, j) { return s + horasReais(j.t1, j.t2); }, 0);
+    var custoHoraAlocada = horasMesAgendadas > 0 ? c.total / horasMesAgendadas : custoH;
     return { emp: e, inactivo: inactivoNoMes, custo: c.total, custoAteHoje: custoAteHoje, horas: horasEmp, dias: diasTrabalhadosEmp, detalhe: c.detalhe, tipo: c.tipo, custoHora: custoHoraAlocada, custoHoraCapacidade: custoH, capacidadeHoras: capacidadeHoras, diasUteisDisponiveis: diasUteisDisponiveis, diasAusenciaEmp: diasAusenciaEmp, utilizacaoPct: utilizacaoPct };
   }).filter(function(x) { return x.custo > 0 || x.horas > 0; });
   // Mapa colaborador -> custo/hora sobre horas alocadas (usado na margem por cliente; soma bate com o custo total de MO)
@@ -9065,11 +9067,13 @@ function RelatorioMensal() {
     var svcDatasRel = {}; (servicos || []).forEach(function(sv) { svcDatasRel[sv.id] = sv.date; });
     var ajustesRel = {}; (ajusteRV || []).forEach(function(a) { ajustesRel[a.funcionario_id] = parseFloat(a.dias_extra) || 0; });
     var premiosRel = {}; (premioAssidOpc || []).forEach(function(p) { premiosRel[p.funcionario_id] = parseFloat(p.valor) || 0; });
+    // Divisor = horas AGENDADAS do mês completo (não só as feitas), para a taxa ser estável desde o dia 1
+    var monthJobsAllRel = (servicos || []).filter(function(j) { return cm[j.client_id] && j.status !== "cancelado"; });
     var custoHoraAlocadaMapRel = {};
     (funcs || []).forEach(function(e) {
       var dp = calcDadosProdColab(e, { avaliacoes: avs, avaliacoesMensais: avsMensaisRel, svcDatas: svcDatasRel, picagensArm: picagensArmRel, monthJobs: completed, mesYM: mesYMrel });
       var cc = calcCustoColaboradorMes(e, rhSafe, absData, completed, refDate, ajustesRel, premiosRel, dp);
-      var horasAloc = completed.reduce(function(s, j) { return (j.team || []).indexOf(e.id) !== -1 ? s + jobHoras(j) : s; }, 0);
+      var horasAloc = monthJobsAllRel.reduce(function(s, j) { return (j.team || []).indexOf(e.id) !== -1 ? s + jobHoras(j) : s; }, 0);
       custoHoraAlocadaMapRel[e.id] = horasAloc > 0 ? cc.total / horasAloc : 0;
     });
     function idEfetivo(clientId) {
