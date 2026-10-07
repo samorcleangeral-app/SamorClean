@@ -1454,15 +1454,26 @@ function Finance() {
     var diasUteisDisponiveis = Math.max(0, diasUteisDoMes - diasAusenciaEmp);
     var rhEmp = rhData.find(function(r) { return r.funcionario_id === e.id; });
     var horasDiaEmp = (rhEmp && parseFloat(rhEmp.horas_dia)) || 8;
-    var capacidadeHoras = diasUteisDisponiveis * horasDiaEmp;
+    // Capacidade e ocupação ATÉ HOJE (não do mês inteiro): horas úteis já decorridas menos as ausências dela até hoje.
+    var mStartCap = new Date(now.getFullYear(), now.getMonth(), 1);
+    var horasAusAteHoje = 0;
+    absData.forEach(function(a) {
+      if (a.funcionario_id !== e.id) return;
+      var d1 = new Date((a.data_inicio || "") + "T12:00:00");
+      var d2 = new Date((a.data_fim || a.data_inicio || "") + "T12:00:00");
+      var dd = new Date(Math.max(d1, mStartCap)), de = new Date(Math.min(d2, now));
+      if (a.parcial && a.hora_inicio && a.hora_fim) { if (dd <= de) horasAusAteHoje += horasReais(a.hora_inicio, a.hora_fim); }
+      else { var nd = 0; while (dd <= de) { if (dd.getDay() !== 0 && dd.getDay() !== 6) nd++; dd.setDate(dd.getDate() + 1); } horasAusAteHoje += nd * horasDiaEmp; }
+    });
+    var capacidadeHoras = Math.max(0, diasUteisPassados * horasDiaEmp - horasAusAteHoje);
+    var diasUteisPassadosDisp = Math.max(0, diasUteisPassados - diasAusenciaEmp);
     var utilizacaoPct = c.tipo === "Recibo Verde"
-      ? (diasUteisDisponiveis > 0 ? Math.round(diasTrabalhadosEmp / diasUteisDisponiveis * 100) : 0)
+      ? (diasUteisPassadosDisp > 0 ? Math.round(diasTrabalhadosEmp / diasUteisPassadosDisp * 100) : 0)
       : (capacidadeHoras > 0 ? Math.round(horasEmp / capacidadeHoras * 100) : 0);
-    // Custo/hora REAL = custo mensal completo ÷ horas AGENDADAS do mês completo (não só as já feitas até hoje).
-    // Usar o mês inteiro no divisor mantém a taxa estável desde o dia 1 (numerador e denominador no mesmo período)
-    // e continua a refletir a ocupação real. Fallback para capacidade se não houver horas agendadas.
-    var horasMesAgendadas = (monthJobsAll || []).filter(function(j) { return j.status !== "cancelado" && (j.team || []).indexOf(e.id) !== -1; }).reduce(function(s, j) { return s + horasReais(j.t1, j.t2); }, 0);
-    var custoHoraAlocada = horasMesAgendadas > 0 ? c.total / horasMesAgendadas : custoH;
+    // Custo/hora = custo incorrido ATÉ HOJE ÷ horas PAGAS (presença: as 8h/dia que ela está ao serviço), NÃO as horas de serviço alocado.
+    // A Ângela é paga para estar 8h/dia; o custo dela espalha-se por essas horas. As horas em clientes são a PRODUTIVIDADE (abaixo), não o divisor do custo.
+    var custoAteHojeProp = c.total * proporcaoMes;                       // custo projectado proporcional aos dias úteis já decorridos
+    var custoHoraAlocada = capacidadeHoras > 0 ? custoAteHojeProp / capacidadeHoras : custoH;
     return { emp: e, inactivo: inactivoNoMes, custo: c.total, custoAteHoje: custoAteHoje, horas: horasEmp, dias: diasTrabalhadosEmp, detalhe: c.detalhe, tipo: c.tipo, custoHora: custoHoraAlocada, custoHoraCapacidade: custoH, capacidadeHoras: capacidadeHoras, diasUteisDisponiveis: diasUteisDisponiveis, diasAusenciaEmp: diasAusenciaEmp, utilizacaoPct: utilizacaoPct };
   }).filter(function(x) { return x.custo > 0 || x.horas > 0; });
   // Mapa colaborador -> custo/hora sobre horas alocadas (usado na margem por cliente; soma bate com o custo total de MO)
@@ -9067,14 +9078,32 @@ function RelatorioMensal() {
     var svcDatasRel = {}; (servicos || []).forEach(function(sv) { svcDatasRel[sv.id] = sv.date; });
     var ajustesRel = {}; (ajusteRV || []).forEach(function(a) { ajustesRel[a.funcionario_id] = parseFloat(a.dias_extra) || 0; });
     var premiosRel = {}; (premioAssidOpc || []).forEach(function(p) { premiosRel[p.funcionario_id] = parseFloat(p.valor) || 0; });
-    // Divisor = horas AGENDADAS do mês completo (não só as feitas), para a taxa ser estável desde o dia 1
-    var monthJobsAllRel = (servicos || []).filter(function(j) { return cm[j.client_id] && j.status !== "cancelado"; });
+    // Modelo acumulado (igual ao Financeiro): custo incorrido ATÉ À DATA DE REFERÊNCIA ÷ horas feitas.
+    // proporcaoRel = fração de dias úteis decorridos; = 1 para meses já fechados (passados), parcial se for o mês a correr.
+    var diasUteisMesRel = diasUteisDoMes(ano, mes);
+    var ehMesCorrenteRel = (ano === now.getFullYear() && mes === now.getMonth());
+    var fimRefRel = ehMesCorrenteRel ? now : new Date(ano, mes + 1, 0);
+    var diasUteisPassadosRel = 0; var dCurRel = new Date(ano, mes, 1);
+    while (dCurRel <= fimRefRel) { if (dCurRel.getDay() !== 0 && dCurRel.getDay() !== 6) diasUteisPassadosRel++; dCurRel.setDate(dCurRel.getDate() + 1); }
+    var proporcaoRel = diasUteisMesRel > 0 ? diasUteisPassadosRel / diasUteisMesRel : 1;
     var custoHoraAlocadaMapRel = {};
+    var mStartRel = new Date(ano, mes, 1);
     (funcs || []).forEach(function(e) {
       var dp = calcDadosProdColab(e, { avaliacoes: avs, avaliacoesMensais: avsMensaisRel, svcDatas: svcDatasRel, picagensArm: picagensArmRel, monthJobs: completed, mesYM: mesYMrel });
       var cc = calcCustoColaboradorMes(e, rhSafe, absData, completed, refDate, ajustesRel, premiosRel, dp);
-      var horasAloc = monthJobsAllRel.reduce(function(s, j) { return (j.team || []).indexOf(e.id) !== -1 ? s + jobHoras(j) : s; }, 0);
-      custoHoraAlocadaMapRel[e.id] = horasAloc > 0 ? cc.total / horasAloc : 0;
+      // Divisor = horas PAGAS (presença: dias úteis decorridos × horas/dia, menos ausências dela), NÃO as horas de serviço
+      var rhE = rhSafe.find(function(r) { return r.funcionario_id === e.id; });
+      var horasDiaE = (rhE && parseFloat(rhE.horas_dia)) || 8;
+      var horasAusE = 0;
+      absData.forEach(function(a) {
+        if (a.funcionario_id !== e.id) return;
+        var d1 = new Date((a.data_inicio || "") + "T12:00:00"), d2 = new Date((a.data_fim || a.data_inicio || "") + "T12:00:00");
+        var dd = new Date(Math.max(d1, mStartRel)), de = new Date(Math.min(d2, fimRefRel));
+        if (a.parcial && a.hora_inicio && a.hora_fim) { if (dd <= de) horasAusE += horasReais(a.hora_inicio, a.hora_fim); }
+        else { var n = 0; while (dd <= de) { if (dd.getDay() !== 0 && dd.getDay() !== 6) n++; dd.setDate(dd.getDate() + 1); } horasAusE += n * horasDiaE; }
+      });
+      var horasPresenca = Math.max(0, diasUteisPassadosRel * horasDiaE - horasAusE);
+      custoHoraAlocadaMapRel[e.id] = horasPresenca > 0 ? (cc.total * proporcaoRel) / horasPresenca : 0;
     });
     function idEfetivo(clientId) {
       var c = cm[clientId];
