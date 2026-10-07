@@ -17,7 +17,7 @@
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script>
-    const { useState, useEffect } = React;
+const { useState, useEffect } = React;
     function jsx(type, props, key) {
       const p = Object.assign({}, props); const ch = p.children; delete p.children;
       if (key !== undefined) p.key = key;
@@ -302,6 +302,8 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
   var diasBaixa = 0;
   var diasFerias = 0;
   var diasFalta = 0;
+  var horasFalta = 0;
+  var horasDiaEmp = parseFloat(rh.horas_dia) || 8;
   var temAusenciaPenalizante = false;
   var monthStart2 = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
   var monthEnd2 = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0);
@@ -316,7 +318,12 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
       if (d.getDay() !== 0 && d.getDay() !== 6) dias++;
       d.setDate(d.getDate() + 1);
     }
-    if (tipoAus.indexOf("falta") !== -1) { diasFalta += dias; }
+    if (tipoAus.indexOf("falta") !== -1) {
+      diasFalta += dias;
+      // Horas faltadas: parcial = horas marcadas nesse dia; dia inteiro = dias × horas/dia da ficha
+      if (a.parcial && a.hora_inicio && a.hora_fim) { horasFalta += horasReais(a.hora_inicio, a.hora_fim); }
+      else { horasFalta += dias * horasDiaEmp; }
+    }
     else if (tipoAus === "férias") { diasFerias += dias; }
     else if (tipoAus === "baixa médica" || tipoAus === "baixa m\xe9dica" || tipoAus === "baixa" || tipoAus.indexOf("baixa") !== -1) { diasBaixa += dias; if (diasBaixa > 3) diasBaixa = diasBaixa - 3; }
     else { temAusenciaPenalizante = true; }
@@ -333,9 +340,14 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
   // Esquecimentos de armazém (só entrada) — vêm de fora
   var esquecimentosArmazem = (dadosProdutividade && dadosProdutividade.esquecimentosArmazem) || 0;
   var perdePorPicagem = esquecimentosServico >= 10 || esquecimentosArmazem >= 5;
-  var premio = (temAusencia || diasFerias > 0 || perdePorPicagem) ? 0 : 50;
+  var premio = (temAusencia || diasFerias > 0 || diasFalta > 0 || perdePorPicagem) ? 0 : 50;
   if (tipo === "Recibo Verde") {
     premio = (premiosOpcionais && premiosOpcionais[emp.id]) || 0;
+  }
+  // Prémio de produtividade calculado já aqui (acima da SS) para poder entrar na base tributável
+  var prodResult = null;
+  if (dadosProdutividade) {
+    prodResult = calcPremioProdutividade(dadosProdutividade.avsClientes || [], dadosProdutividade.notaMensal != null ? dadosProdutividade.notaMensal : null);
   }
   if (tipo === "Recibo Verde") {
     var diasTrabalhados = new Set();
@@ -346,14 +358,20 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
     var numDias = diasTrabalhados.size + ajusteEmp;
     var valorDia = parseFloat(rh.valor_dia) || 0;
     var custo = numDias * valorDia;
-    detalhe.push({ l: "Recibo Verde (" + diasTrabalhados.size + " dias registados" + (ajusteEmp > 0 ? " + " + ajusteEmp + " dias ajuste manual" : "") + " × " + fmt(valorDia) + "€)", v: custo });
+    detalhe.push({ l: "Recibo Verde (" + diasTrabalhados.size + " dias registados" + (ajusteEmp > 0 ? " + " + ajusteEmp + " dias ajuste manual" : "") + " × " + fmt(valorDia) + ")", v: custo });
     total = custo;
   } else {
     var salario = parseFloat(rh.salario_base) || 0;
-    var diasEfectivos = Math.max(0, diasUteisDoMes - diasBaixa - diasFalta);
+    var diasEfectivos = Math.max(0, diasUteisDoMes - diasBaixa);
     var diasAlim = diasComSubsidioAlim(emp, absData, refDate);
-    var subAlim = diasAlim * 6;
-    var salarioEfectivo = (diasBaixa > 0 || diasFalta > 0) ? salario * (diasEfectivos / Math.max(1, diasUteisDoMes)) : salario;
+    var valorAlimDia = (rh.valor_alimentacao != null && rh.valor_alimentacao !== "") ? (parseFloat(rh.valor_alimentacao) || 0) : 6;
+    var subAlim = diasAlim * valorAlimDia;
+    // Valor/hora legal FIXO = (ordenado × 12) / (52 semanas × 40h). Para 925€ → 5,34€/h.
+    var valorHora = (salario * 12) / (52 * 40);
+    var descontoFalta = horasFalta * valorHora;
+    // Baixa reduz proporcionalmente aos dias; a falta desconta horas × valor/hora (não proporção de dias)
+    var salarioAposBaixa = diasBaixa > 0 ? salario * (diasEfectivos / Math.max(1, diasUteisDoMes)) : salario;
+    var salarioEfectivo = Math.max(0, salarioAposBaixa - descontoFalta);
     // Verifica se o subsídio de férias já foi pago a s\xE9rio este ano
     var subFerias = salario * 0.0833;
     var notaSubFerias = " (8,33%)";
@@ -373,15 +391,16 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
         notaSubFerias = " (j\xE1 pago em " + new Date(refDate.getFullYear(), mesFerias, 1).toLocaleDateString("pt-PT", { month: "long" }) + ")";
       }
     }
-    var subNatal = (diasBaixa > 0 || diasFalta > 0) ? salario * 0.0833 * (diasEfectivos / Math.max(1, diasUteisDoMes)) : salario * 0.0833;
-    // SS incide sempre sobre sal\xE1rio + duod\xE9cimo de Natal (pago todos os meses), e sobre o subs\xEDdio de f\xE9rias real só no mês em que for pago a s\xE9rio
-    var ss = (salarioEfectivo + subNatal + subFeriasParaSS) * 0.2375;
+    var subNatal = diasBaixa > 0 ? salario * 0.0833 * (diasEfectivos / Math.max(1, diasUteisDoMes)) : salario * 0.0833;
+    // SS incide sobre sal\xE1rio + duod\xE9cimo de Natal (pago todos os meses) + pr\xE9mios (assiduidade + produtividade, confirmados tribut\xE1veis pela contabilidade), e sobre o subs\xEDdio de f\xE9rias real só no mês em que for pago a s\xE9rio
+    var premiosTributaveis = premio + (prodResult ? prodResult.premio : 0);
+    var ss = (salarioEfectivo + subNatal + subFeriasParaSS + premiosTributaveis) * 0.2375;
     var seguro = salarioEfectivo * 0.015;
-    detalhe.push({ l: "Salário base" + ((diasBaixa > 0 || diasFalta > 0) ? " (prop. " + diasEfectivos + "/" + diasUteisDoMes + " dias" + (diasFalta > 0 ? " — " + diasFalta + " falta(s) descontada(s)" : "") + ")" : ""), v: salarioEfectivo });
-    detalhe.push({ l: "Sub. alimentação (" + diasAlim + " dias trabalhados × 6€)", v: subAlim });
+    detalhe.push({ l: "Salário base" + (diasBaixa > 0 ? " (prop. " + diasEfectivos + "/" + diasUteisDoMes + " dias — baixa)" : "") + (horasFalta > 0 ? " (−" + horasFalta.toLocaleString("pt-PT", { maximumFractionDigits: 2 }) + "h falta × " + fmt(valorHora) + " = −" + fmt(descontoFalta) + ")" : ""), v: salarioEfectivo });
+    detalhe.push({ l: "Sub. alimentação (" + diasAlim + " dias trabalhados × " + fmt(valorAlimDia) + ")", v: subAlim });
     detalhe.push({ l: "Sub. férias" + notaSubFerias, v: subFerias });
     detalhe.push({ l: "Sub. Natal (8,33%)" + (diasBaixa > 0 ? " (prop. baixa)" : ""), v: subNatal });
-    detalhe.push({ l: "Seg. Social patronal (23,75%)" + (subFeriasParaSS > 0 ? " — inclui subs. férias real" : ""), v: ss });
+    detalhe.push({ l: "Seg. Social patronal (23,75%)" + (premiosTributaveis > 0 ? " — inclui prémios" : "") + (subFeriasParaSS > 0 ? " — inclui subs. férias real" : ""), v: ss });
     detalhe.push({ l: "Seguro acidentes (1,5%)", v: seguro });
     total = salarioEfectivo + subAlim + subFerias + subNatal + ss + seguro;
   }
@@ -392,8 +411,8 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
   }
   detalhe.push({ l: labelAssid, v: premio });
   total += premio;
-  if (dadosProdutividade) {
-    var prod = calcPremioProdutividade(dadosProdutividade.avsClientes || [], dadosProdutividade.notaMensal != null ? dadosProdutividade.notaMensal : null);
+  if (prodResult) {
+    var prod = prodResult;
     var labelProd = "Prémio produtividade";
     if (prod.precisaAvaliar) labelProd += " (\u26A0 falta avalia\xE7\xE3o mensal)";
     else if (prod.origem === "gestao") labelProd += " (aval. gest\xE3o: " + prod.nota.toFixed(1) + ")";
@@ -415,8 +434,8 @@ function calcCustoHoraReal(emp, rhData, refDate, absData) {
     var diasUteis = calcDiasUteisMes(refDate) || 22;
     // Subsídio de alimentação só nos dias efectivamente trabalhados
     var diasAlim = absData ? diasComSubsidioAlim(emp, absData, refDate) : Math.max(0, diasUteis - feriadosUteisNoMes(refDate));
-    // Faltas (justificadas ou não) descontam o dia de salário
-    var diasFaltaH = 0;
+    // Faltas descontam horas × valor/hora legal fixo (mesmo modelo do ecrã de custo de mão de obra)
+    var horasFaltaH = 0;
     if (absData) {
       var mS = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
       var mE = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0);
@@ -425,12 +444,16 @@ function calcCustoHoraReal(emp, rhData, refDate, absData) {
         var d1 = new Date((a.data_inicio || "") + "T12:00:00");
         var d2 = new Date((a.data_fim || a.data_inicio || "") + "T12:00:00");
         var dd = new Date(Math.max(d1, mS)), de = new Date(Math.min(d2, mE));
-        while (dd <= de) { if (dd.getDay() !== 0 && dd.getDay() !== 6) diasFaltaH++; dd.setDate(dd.getDate() + 1); }
+        var diasA = 0;
+        while (dd <= de) { if (dd.getDay() !== 0 && dd.getDay() !== 6) diasA++; dd.setDate(dd.getDate() + 1); }
+        if (a.parcial && a.hora_inicio && a.hora_fim) { horasFaltaH += horasReais(a.hora_inicio, a.hora_fim); }
+        else { horasFaltaH += diasA * horasDia; }
       });
     }
-    var factor = diasUteis > 0 ? Math.max(0, diasUteis - diasFaltaH) / diasUteis : 1;
-    var salarioEf = salario * factor;
-    var custoMensal = salarioEf + diasAlim * 6 + salarioEf * 0.0833 + salarioEf * 0.0833 + salarioEf * 0.2375 + salarioEf * 0.015;
+    var valorHoraLegal = (salario * 12) / (52 * 40);
+    var salarioEf = Math.max(0, salario - horasFaltaH * valorHoraLegal);
+    var valorAlimDia = (rh.valor_alimentacao != null && rh.valor_alimentacao !== "") ? (parseFloat(rh.valor_alimentacao) || 0) : 6;
+    var custoMensal = salarioEf + diasAlim * valorAlimDia + salarioEf * 0.0833 + salarioEf * 0.0833 + salarioEf * 0.2375 + salarioEf * 0.015;
     return custoMensal / diasUteis / horasDia;
   }
 }
@@ -522,7 +545,8 @@ function calcCustoAteHojeReal(emp, rhData, absData, monthJobs, hoje) {
   var diasEfectivos = Math.max(0, diasUteisPassados - diasBaixaAteHoje);
   var salarioAteHoje = diasUteisDoMes > 0 ? salario * (diasEfectivos / diasUteisDoMes) : 0;
   var diasAlim = Math.max(0, diasUteisPassados - diasFeriasAteHoje - diasBaixaAteHoje);
-  var subAlimAteHoje = diasAlim * 6;
+  var valorAlimDia = (rh.valor_alimentacao != null && rh.valor_alimentacao !== "") ? (parseFloat(rh.valor_alimentacao) || 0) : 6;
+  var subAlimAteHoje = diasAlim * valorAlimDia;
   var proporcaoPassado = diasUteisDoMes > 0 ? diasUteisPassados / diasUteisDoMes : 0;
   var subFeriasAteHoje = salario * 0.0833 * proporcaoPassado;
   var subNatalAteHoje = salario * 0.0833 * proporcaoPassado;
@@ -12999,7 +13023,7 @@ function App() {
   }, style: { background: "rgba(255,255,255,0.07)", border: "1.5px solid rgba(255,255,255,0.1)", borderRadius: 16, padding: "28px 16px", textAlign: "center", cursor: "pointer" } }, /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 15, marginBottom: 6 } }, "Colaboradores"), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.4)", fontSize: 11, lineHeight: 1.6 } }, "Servi\xE7os do dia, checklist e produtos"))), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 40, fontSize: 11, color: "rgba(255,255,255,0.18)" } }, "SamorClean by Fragancelines, Lda"));
 }
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
+        const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(React.createElement(App));
   </script>
 </body>
