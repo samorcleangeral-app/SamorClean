@@ -340,7 +340,7 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
   // Esquecimentos de armazém (só entrada) — vêm de fora
   var esquecimentosArmazem = (dadosProdutividade && dadosProdutividade.esquecimentosArmazem) || 0;
   var perdePorPicagem = esquecimentosServico >= 10 || esquecimentosArmazem >= 5;
-  var premio = (temAusencia || diasFerias > 0 || diasFalta > 0 || perdePorPicagem) ? 0 : 50;
+  var premio = (temAusencia || diasFalta > 0 || perdePorPicagem) ? 0 : 50;
   if (tipo === "Recibo Verde") {
     premio = (premiosOpcionais && premiosOpcionais[emp.id]) || 0;
   }
@@ -1451,8 +1451,14 @@ function Finance() {
     var utilizacaoPct = c.tipo === "Recibo Verde"
       ? (diasUteisDisponiveis > 0 ? Math.round(diasTrabalhadosEmp / diasUteisDisponiveis * 100) : 0)
       : (capacidadeHoras > 0 ? Math.round(horasEmp / capacidadeHoras * 100) : 0);
-    return { emp: e, inactivo: inactivoNoMes, custo: c.total, custoAteHoje: custoAteHoje, horas: horasEmp, dias: diasTrabalhadosEmp, detalhe: c.detalhe, tipo: c.tipo, custoHora: custoH, capacidadeHoras: capacidadeHoras, diasUteisDisponiveis: diasUteisDisponiveis, diasAusenciaEmp: diasAusenciaEmp, utilizacaoPct: utilizacaoPct };
+    // Custo/hora REAL = custo mensal completo ÷ horas efectivamente alocadas a serviços (não a capacidade teórica).
+    // Varia com faltas e ocupação — é o número verdadeiro para a margem. Fallback para capacidade se 0 horas.
+    var custoHoraAlocada = horasEmp > 0 ? c.total / horasEmp : custoH;
+    return { emp: e, inactivo: inactivoNoMes, custo: c.total, custoAteHoje: custoAteHoje, horas: horasEmp, dias: diasTrabalhadosEmp, detalhe: c.detalhe, tipo: c.tipo, custoHora: custoHoraAlocada, custoHoraCapacidade: custoH, capacidadeHoras: capacidadeHoras, diasUteisDisponiveis: diasUteisDisponiveis, diasAusenciaEmp: diasAusenciaEmp, utilizacaoPct: utilizacaoPct };
   }).filter(function(x) { return x.custo > 0 || x.horas > 0; });
+  // Mapa colaborador -> custo/hora sobre horas alocadas (usado na margem por cliente; soma bate com o custo total de MO)
+  var custoHoraAlocadaMap = {};
+  custosColab.forEach(function(cc) { custoHoraAlocadaMap[cc.emp.id] = cc.custoHora; });
 
   var totalCustoMaoObra = custosColab.reduce(function(s, c) { return s + c.custo; }, 0) + custoOrdenadoGerenciaTotal;
 
@@ -1619,7 +1625,7 @@ function Finance() {
       (j.team || []).forEach(function(eid) {
         var empObj = emps.find(function(x) { return x.id === eid; });
         if (empObj) {
-          var ch = custoHoraReal(empObj);
+          var ch = custoHoraAlocadaMap[empObj.id] || 0;
           if (ch > 0) custoMO += ch * horas;
           else semCustoIds[eid] = empObj.name || eid;
         }
@@ -2123,7 +2129,7 @@ function Finance() {
               )
             ),
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 900, color: "#EF4444" } }, fmt(c.custo)),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, c.horas.toFixed(1), "h \u2022 ", fmt(c.custoHora), "\u20AC/h")
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, c.horas.toFixed(1), "h \u2022 ", fmt(c.custoHora), "/h \u2022 ", c.utilizacaoPct, "% ocup.")
           );
         })
       ),
@@ -2140,7 +2146,7 @@ function Finance() {
             /* @__PURE__ */ React.createElement("button", { onClick: function() { setSelColabCusto(null); }, style: { background: "none", border: "none", fontSize: 20, color: "#94A3B8", cursor: "pointer" } }, "\u2715")
           ),
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#EF4444", marginBottom: 4 } }, fmt(selColabCusto.custo)),
-          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 16 } }, fmt(selColabCusto.custoHora), "\u20AC/h"),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 16 } }, fmt(selColabCusto.custoHora), "/h \u2022 ", selColabCusto.utilizacaoPct, "% de ocupa\xE7\xE3o (", selColabCusto.horas.toFixed(0), "h de ", selColabCusto.capacidadeHoras.toFixed(0), "h)"),
           /* @__PURE__ */ React.createElement("div", { style: { borderTop: "1px solid #F1F5F9", paddingTop: 10 } },
             selColabCusto.detalhe.map(function(d, i) {
               return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", fontSize: 13, color: "#334155", padding: "5px 0" } },
