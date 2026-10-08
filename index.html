@@ -5129,6 +5129,8 @@ function FichaRH(props) {
     alert("\u2713 " + empNome + " foi retirado(a) de " + meus.length + " servi\xE7o(s).\n\n" + (ficamVazios > 0 ? "\u26A0 " + ficamVazios + " servi\xE7o(s) ficaram sem equipa \u2014 tr" + "ata nas Rotas." : "Os restantes mant\xEAm a equipa que sobra."));
   }
   async function addAusencia() {
+    if (!ausForm.data_inicio) { alert("⚠ Falta preencher a data de in\xEDcio da aus\xEAncia."); return; }
+    if (ausForm.data_fim && ausForm.data_fim < ausForm.data_inicio) { alert("⚠ A data de fim \xE9 anterior \xE0 data de in\xEDcio."); return; }
     function limparAus(obj) {
       var o = Object.assign({}, obj);
       if (o.subsidio_ferias_valor === "" || o.subsidio_ferias_valor === null || o.subsidio_ferias_valor === undefined) o.subsidio_ferias_valor = null;
