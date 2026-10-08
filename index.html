@@ -1536,15 +1536,20 @@ function Finance() {
       db.list("historico_financeiro", "?select=*&ano=eq." + (ano - 1)),
       db.list("funcionarios", "?select=*"),
       db.list("funcionarios_rh", "?select=*"),
-      db.list("ausencias", "?select=*&data_inicio=lte." + fimAtual + "&or=(data_fim.gte." + inicioAnterior + ",data_fim.is.null)")
+      db.list("ausencias", "?select=*&data_inicio=lte." + fimAtual + "&or=(data_fim.gte." + inicioAnterior + ",data_fim.is.null)"),
+      db.list("avaliacoes_mensais", "?select=funcionario_id,mes,nota_final")
     ]);
     var funcs = res[6] || [];
     var rhData = res[7] || [];
     var absData = res[8] || [];
+    var avsMensaisAno = res[9] || [];
     function custoMOMes(anoRef, mesIdx) {
       var refDate = new Date(anoRef, mesIdx, 15);
+      var mesYMano = anoRef + "-" + String(mesIdx + 1).padStart(2, "0");
       return funcs.reduce(function(s, e) {
-        return s + calcCustoColaboradorMes(e, rhData, absData, [], refDate).total;
+        // Inclui produtividade (via avaliação mensal) para a tendência bater com os cartões e a SS.
+        var dpAno = calcDadosProdColab(e, { avaliacoes: [], avaliacoesMensais: avsMensaisAno, svcDatas: {}, picagensArm: [], monthJobs: [], mesYM: mesYMano });
+        return s + calcCustoColaboradorMes(e, rhData, absData, [], refDate, {}, {}, dpAno).total;
       }, 0);
     }
     function porMes(jobsAno) {
@@ -1753,10 +1758,13 @@ function Finance() {
           return rh && (rh.tipo_contrato || "Contrato") !== "Recibo Verde";
         });
         var nowSS = new Date(now.getFullYear(), now.getMonth() + mesSSIdx, 15);
+        var mesYMss = nowSS.getFullYear() + "-" + String(nowSS.getMonth() + 1).padStart(2, "0");
         var ordGerMes = todosOrdenadosGer.find(function(o) { return o.ano === nowSS.getFullYear() && o.mes === (nowSS.getMonth() + 1); });
         var ssGerencia = ordGerMes ? (parseFloat(ordGerMes.valor) || 0) * 0.2375 : 0;
         var ssColabs = contratoEmps.reduce(function(s, e) {
-          return s + calcCustoColaboradorMes(e, rhData, absData, [], nowSS).detalhe.reduce(function(s2, d) {
+          // Inclui a produtividade na base da SS (é tributável). Usa os dados já carregados, scoped ao mês navegado.
+          var dpSS = calcDadosProdColab(e, { avaliacoes: avsClientesFin, avaliacoesMensais: avsMensaisFin, svcDatas: svcDatasFin, picagensArm: picagensArmFin, monthJobs: [], mesYM: mesYMss });
+          return s + calcCustoColaboradorMes(e, rhData, absData, [], nowSS, ajustesRecibo, premiosOpcionais, dpSS).detalhe.reduce(function(s2, d) {
             return s2 + (d.l.indexOf("Seg. Social") !== -1 ? d.v : 0);
           }, 0);
         }, 0);
