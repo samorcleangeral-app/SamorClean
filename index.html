@@ -674,11 +674,18 @@ function Finance() {
   const [movForm, setMovForm] = useState({ data: localDateStr(), tipo: "entrada", descricao: "", valor: "" });
   const [showMeta, setShowMeta] = useState(false);
   const [metaForm, setMetaForm] = useState({ tipo: "cash_flow", titulo: "", valor_alvo: "", data_alvo: "", notas: "" });
-  const now = /* @__PURE__ */ new Date();
+  const hojeReal = /* @__PURE__ */ new Date();
+  const [finMesRef, setFinMesRef] = useState(hojeReal.getFullYear() + "-" + String(hojeReal.getMonth() + 1).padStart(2, "0"));
+  const _fmParts = finMesRef.split("-");
+  const finAno = parseInt(_fmParts[0]), finMesIdx = parseInt(_fmParts[1]) - 1;
+  const isMesActual = finAno === hojeReal.getFullYear() && finMesIdx === hojeReal.getMonth();
+  // Mês actual → "até hoje" é hoje. Mês fechado → referência no último dia do mês (tudo = mês inteiro, proporção 100%).
+  const now = isMesActual ? hojeReal : new Date(finAno, finMesIdx + 1, 0);
   const dayOfMonth = now.getDate();
   const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const isLastWeek = dayOfMonth >= lastDayOfMonth - 6;
   useEffect(function() {
+    setLoading(true);
     const monthStart = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
     const monthEnd = localDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
     const yearStart = localDateStr(new Date(now.getFullYear(), 0, 1));
@@ -777,7 +784,7 @@ function Finance() {
       setAlertasFreq(alertas);
       setLoading(false);
     });
-  }, []);
+  }, [finMesRef]);
   function ivaTypeFor(job) {
     if (job.iva_override) return job.iva_override;
     const c = clientsMap[job.client_id];
@@ -1141,7 +1148,7 @@ function Finance() {
     return { inicio: d, fim: d };
   })();
   var hojeStr = localDateStr(now);
-  var mostrarAvisoFaturacao = hojeStr >= localDateStr(ultimaSemanaCompleta.inicio);
+  var mostrarAvisoFaturacao = isMesActual && hojeStr >= localDateStr(ultimaSemanaCompleta.inicio);
   const emAtraso = mostrarAvisoFaturacao ? monthJobs.filter(function(j) {
     if (j.paid) return false;
     var cRef = clientes.find(function(cc) { return cc.id === j.client_id; });
@@ -1621,7 +1628,14 @@ function Finance() {
   return /* @__PURE__ */ React.createElement("div", null,
     /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 16 } },
       /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Dashboard Financeiro"),
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, now.toLocaleDateString("pt-PT", { month: "long", year: "numeric" }))
+      (["geral", "colaboradores", "clientes", "faturacao"].indexOf(finTab) !== -1)
+        ? /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 6, flexWrap: "wrap" } },
+            /* @__PURE__ */ React.createElement("button", { onClick: function() { var d = new Date(finAno, finMesIdx - 1, 1); setFinMesRef(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")); }, style: Object.assign({}, btnO, { padding: "4px 12px" }) }, "‹"),
+            /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 800, color: "#1A3A5C", minWidth: 150, textAlign: "center", textTransform: "capitalize" } }, now.toLocaleDateString("pt-PT", { month: "long", year: "numeric" })),
+            /* @__PURE__ */ React.createElement("button", { onClick: function() { if (isMesActual) return; var d = new Date(finAno, finMesIdx + 1, 1); setFinMesRef(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")); }, disabled: isMesActual, style: Object.assign({}, btnO, { padding: "4px 12px", opacity: isMesActual ? 0.4 : 1, cursor: isMesActual ? "default" : "pointer" }) }, "›"),
+            /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: isMesActual ? "#2E6DA4" : "#64748B", background: isMesActual ? "#EFF6FF" : "#F1F5F9", borderRadius: 6, padding: "2px 8px" } }, isMesActual ? "em curso" : "fechado")
+          )
+        : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 3 } }, hojeReal.toLocaleDateString("pt-PT", { month: "long", year: "numeric" }))
     ),
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" } }, ["geral", "graficos", "anual", "caixa", "colaboradores", "clientes", "faturacao", "estado", "relatorio_mensal"].map(function(t) {
       var labels = { geral: "Geral", graficos: "\uD83D\uDCCA Gr\xE1ficos", anual: "\uD83D\uDCC5 Anual", caixa: "\uD83D\uDCB0 Caixa", colaboradores: "Mão de Obra", clientes: "Margens por Cliente", faturacao: "📄 Faturação", estado: "\uD83C\uDFDB\uFE0F Estado", relatorio_mensal: "\uD83D\uDCC3 Relat\xF3rio Mensal" };
@@ -1998,11 +2012,11 @@ function Finance() {
       /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, padding: 16, background: "#1A3A5C" }) },
         /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 16 } },
           /* @__PURE__ */ React.createElement("div", null,
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.6)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Custo acumulado at\xE9 hoje"),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.6)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, isMesActual ? "Custo acumulado at\xE9 hoje" : "Custo do mês (fechado)"),
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, fontWeight: 900, color: "#fff" } }, fmt(custosColab.reduce(function(s, c) { return s + c.custoAteHoje; }, 0)))
           ),
           /* @__PURE__ */ React.createElement("div", null,
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.5)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Proje\xE7\xE3o mês completo"),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.5)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, isMesActual ? "Proje\xE7\xE3o mês completo" : "Total do mês"),
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: "rgba(255,255,255,0.7)" } }, fmt(totalCustoMaoObra))
           )
         )
@@ -2024,7 +2038,7 @@ function Finance() {
       ),
       custosColab.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
         /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } },
-          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "Custo por colaborador \u2014 at\xE9 hoje"),
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, isMesActual ? "Custo por colaborador \u2014 at\xE9 hoje" : "Custo por colaborador \u2014 m\u00eas fechado"),
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, diasUteisPassados, "/", diasUteisDoMes, " dias \xFAteis")
         ),
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 14 } }, "Valor acumulado com base nos dias \xFAteis j\xE1 decorridos este m\xEAs (recibo verde conta sempre pelos dias reais trabalhados)."),
