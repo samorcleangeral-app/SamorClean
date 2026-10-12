@@ -449,41 +449,6 @@ function calcDadosProdColab(emp, ctx) {
   Object.keys(diasComServico).forEach(function(dia) { if (!diasComEntradaArm[dia]) esqArm++; });
   return { avsClientes: avsCli, notaMensal: avMensal ? Number(avMensal.nota_final) : null, esquecimentosArmazem: esqArm };
 }
-function calcCustoHoraReal(emp, rhData, refDate, absData) {
-  var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
-  if (!rh) return 0;
-  var tipo = rh.tipo_contrato || "Contrato";
-  var horasDia = parseFloat(rh.horas_dia) || 8;
-  if (tipo === "Recibo Verde") {
-    return (parseFloat(rh.valor_dia) || 0) / horasDia;
-  } else {
-    var salario = parseFloat(rh.salario_base) || 0;
-    var diasUteis = calcDiasUteisMes(refDate) || 22;
-    // Subsídio de alimentação só nos dias efectivamente trabalhados
-    var diasAlim = absData ? diasComSubsidioAlim(emp, absData, refDate) : Math.max(0, diasUteis - feriadosUteisNoMes(refDate));
-    // Faltas descontam horas × valor/hora legal fixo (mesmo modelo do ecrã de custo de mão de obra)
-    var horasFaltaH = 0;
-    if (absData) {
-      var mS = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
-      var mE = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0);
-      absData.forEach(function(a) {
-        if (a.funcionario_id !== emp.id || (a.tipo || "").toLowerCase().indexOf("falta") === -1) return;
-        var d1 = new Date((a.data_inicio || "") + "T12:00:00");
-        var d2 = new Date((a.data_fim || a.data_inicio || "") + "T12:00:00");
-        var dd = new Date(Math.max(d1, mS)), de = new Date(Math.min(d2, mE));
-        var diasA = 0;
-        while (dd <= de) { if (dd.getDay() !== 0 && dd.getDay() !== 6) diasA++; dd.setDate(dd.getDate() + 1); }
-        if (a.parcial && a.hora_inicio && a.hora_fim) { horasFaltaH += horasReais(a.hora_inicio, a.hora_fim); }
-        else { horasFaltaH += diasA * horasDia; }
-      });
-    }
-    var valorHoraLegal = (salario * 12) / (52 * 40);
-    var salarioEf = Math.max(0, salario - horasFaltaH * valorHoraLegal);
-    var valorAlimDia = (rh.valor_alimentacao != null && rh.valor_alimentacao !== "") ? (parseFloat(rh.valor_alimentacao) || 0) : 6;
-    var custoMensal = salarioEf + diasAlim * valorAlimDia + salarioEf * 0.0833 + salarioEf * 0.0833 + salarioEf * 0.2375 + salarioEf * 0.015;
-    return custoMensal / diasUteis / horasDia;
-  }
-}
 function ChartCanvas(props) {
   const canvasRef = React.useRef(null);
   const chartRef = React.useRef(null);
@@ -539,47 +504,6 @@ function calcValorFaturacao(c, jobs, horas) {
   if (tipoFat === "mensal") return { valor: parseFloat(c.valor_visita) || 0, tipo: "mensal" };
   if (tipoFat === "visita") return { valor: jobs.reduce(function(s, j) { return s + (parseFloat(j.val) || 0); }, 0), tipo: "visita" };
   return { valor: horas * (c.price_per_hour || 0), tipo: "hora" };
-}
-function calcCustoAteHojeReal(emp, rhData, absData, monthJobs, hoje) {
-  var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
-  if (!rh) return 0;
-  var tipo = rh.tipo_contrato || "Contrato";
-  var hojeStr = localDateStr(hoje);
-  if (tipo === "Recibo Verde") {
-    var diasTrabalhados = new Set();
-    monthJobs.forEach(function(j) { if ((j.team || []).indexOf(emp.id) !== -1 && j.date <= hojeStr) diasTrabalhados.add(j.date); });
-    return diasTrabalhados.size * (parseFloat(rh.valor_dia) || 0);
-  }
-  var diasUteisDoMes = calcDiasUteisMes(hoje);
-  var monthStart = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-  var diasUteisPassados = 0;
-  var d = new Date(monthStart);
-  while (d <= hoje) { if (d.getDay() !== 0 && d.getDay() !== 6) diasUteisPassados++; d.setDate(d.getDate() + 1); }
-  var ausenciasEmp = absData.filter(function(a) { return a.funcionario_id === emp.id; });
-  var diasBaixaAteHoje = 0, diasFeriasAteHoje = 0;
-  ausenciasEmp.forEach(function(a) {
-    var start = new Date((a.data_inicio || "") + "T12:00:00");
-    var end = new Date((a.data_fim || a.data_inicio || "") + "T12:00:00");
-    var tipoAus = (a.tipo || "").toLowerCase();
-    var dd = new Date(Math.max(start, monthStart));
-    var ddEnd = new Date(Math.min(end, hoje));
-    var dias = 0;
-    while (dd <= ddEnd) { if (dd.getDay() !== 0 && dd.getDay() !== 6) dias++; dd.setDate(dd.getDate() + 1); }
-    if (tipoAus === "férias") diasFeriasAteHoje += dias;
-    else if (tipoAus.indexOf("baixa") !== -1) { diasBaixaAteHoje += dias; if (diasBaixaAteHoje > 3) diasBaixaAteHoje -= 3; }
-  });
-  var salario = parseFloat(rh.salario_base) || 0;
-  var diasEfectivos = Math.max(0, diasUteisPassados - diasBaixaAteHoje);
-  var salarioAteHoje = diasUteisDoMes > 0 ? salario * (diasEfectivos / diasUteisDoMes) : 0;
-  var diasAlim = Math.max(0, diasUteisPassados - diasFeriasAteHoje - diasBaixaAteHoje);
-  var valorAlimDia = (rh.valor_alimentacao != null && rh.valor_alimentacao !== "") ? (parseFloat(rh.valor_alimentacao) || 0) : 6;
-  var subAlimAteHoje = diasAlim * valorAlimDia;
-  var proporcaoPassado = diasUteisDoMes > 0 ? diasUteisPassados / diasUteisDoMes : 0;
-  var subFeriasAteHoje = salario * 0.0833 * proporcaoPassado;
-  var subNatalAteHoje = salario * 0.0833 * proporcaoPassado;
-  var ssAteHoje = salarioAteHoje * 0.2375;
-  var seguroAteHoje = salarioAteHoje * 0.015;
-  return salarioAteHoje + subAlimAteHoje + subFeriasAteHoje + subNatalAteHoje + ssAteHoje + seguroAteHoje;
 }
 function Finance() {
   const [loading, setLoading] = useState(true);
@@ -1374,10 +1298,6 @@ function Finance() {
     return calcCustoColaboradorMes(emp, rhData, absData, monthJobs, now, ajustesRecibo, premiosOpcionais, dadosProd);
   }
 
-  function custoHoraReal(emp) {
-    return calcCustoHoraReal(emp, rhData, now, absData);
-  }
-
   async function setupCash() {
     if (!cashSetupForm.saldo_inicial || !cashSetupForm.data_inicio) return;
     const data = { saldo_inicial: parseFloat(cashSetupForm.saldo_inicial), data_inicio: cashSetupForm.data_inicio };
@@ -1455,8 +1375,6 @@ function Finance() {
       return s + horasReais(j.t1, j.t2);
     }, 0);
     var diasTrabalhadosEmp = new Set(jobsEmp.map(function(j) { return j.date; })).size;
-    var custoH = custoHoraReal(e);
-    var custoAteHoje = calcCustoAteHojeReal(e, rhData, absData, monthJobs, now);
     var diasAusenciaEmp = diasAusenciaMes(e, absData, now);
     var diasUteisDisponiveis = Math.max(0, diasUteisDoMes - diasAusenciaEmp);
     var rhEmp = rhData.find(function(r) { return r.funcionario_id === e.id; });
@@ -1479,9 +1397,22 @@ function Finance() {
       : (capacidadeHoras > 0 ? Math.round(horasEmp / capacidadeHoras * 100) : 0);
     // Custo/hora = custo incorrido ATÉ HOJE ÷ horas PAGAS (presença: as 8h/dia que ela está ao serviço), NÃO as horas de serviço alocado.
     // A Ângela é paga para estar 8h/dia; o custo dela espalha-se por essas horas. As horas em clientes são a PRODUTIVIDADE (abaixo), não o divisor do custo.
-    var custoAteHojeProp = c.total * proporcaoMes;                       // custo projectado proporcional aos dias úteis já decorridos
-    var custoHoraAlocada = capacidadeHoras > 0 ? custoAteHojeProp / capacidadeHoras : custoH;
-    return { emp: e, inactivo: inactivoNoMes, custo: c.total, custoAteHoje: custoAteHoje, horas: horasEmp, dias: diasTrabalhadosEmp, detalhe: c.detalhe, tipo: c.tipo, custoHora: custoHoraAlocada, custoHoraCapacidade: custoH, capacidadeHoras: capacidadeHoras, diasUteisDisponiveis: diasUteisDisponiveis, diasAusenciaEmp: diasAusenciaEmp, utilizacaoPct: utilizacaoPct };
+    // ── CUSTO ATÉ HOJE e CUSTO/HORA — uma só fonte (calcCustoColaboradorMes → c.total). ──
+    // Contrato: custo até hoje = projecção proporcional aos dias úteis decorridos; custo/hora = esse custo ÷ horas PAGAS (presença).
+    // Recibo Verde: custo até hoje = dias realmente trabalhados até hoje × valor/dia; custo/hora = valor/dia ÷ horas/dia (taxa real do RV).
+    var hojeStrCC = localDateStr(now);
+    var custoAteHoje, custoHora, custoHoraIndef = false;
+    if (c.tipo === "Recibo Verde") {
+      var valorDiaEmp = (rhEmp && parseFloat(rhEmp.valor_dia)) || 0;
+      var diasTrabAteHoje = new Set(jobsEmp.filter(function(j) { return j.date <= hojeStrCC; }).map(function(j) { return j.date; })).size;
+      custoAteHoje = diasTrabAteHoje * valorDiaEmp;
+      custoHora = horasDiaEmp > 0 ? valorDiaEmp / horasDiaEmp : 0;
+    } else {
+      custoAteHoje = c.total * proporcaoMes;                             // custo projectado proporcional aos dias úteis já decorridos
+      if (capacidadeHoras > 0) { custoHora = custoAteHoje / capacidadeHoras; }
+      else { custoHora = null; custoHoraIndef = true; }                 // sem horas de presença ainda → não há custo/hora (não mostrar 0 falso)
+    }
+    return { emp: e, inactivo: inactivoNoMes, custo: c.total, custoAteHoje: custoAteHoje, horas: horasEmp, dias: diasTrabalhadosEmp, detalhe: c.detalhe, tipo: c.tipo, custoHora: custoHora, custoHoraIndef: custoHoraIndef, capacidadeHoras: capacidadeHoras, diasUteisDisponiveis: diasUteisDisponiveis, diasAusenciaEmp: diasAusenciaEmp, utilizacaoPct: utilizacaoPct };
   }).filter(function(x) { return x.custo > 0 || x.horas > 0; });
   // Mapa colaborador -> custo/hora sobre horas alocadas (usado na margem por cliente; soma bate com o custo total de MO)
   var custoHoraAlocadaMap = {};
@@ -2068,11 +1999,11 @@ function Finance() {
         /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 16 } },
           /* @__PURE__ */ React.createElement("div", null,
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.6)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Custo acumulado at\xE9 hoje"),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, fontWeight: 900, color: "#fff" } }, fmt(custosColab.reduce(function(s, c) { return s + c.custoAteHoje; }, 0)), "€")
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, fontWeight: 900, color: "#fff" } }, fmt(custosColab.reduce(function(s, c) { return s + c.custoAteHoje; }, 0)))
           ),
           /* @__PURE__ */ React.createElement("div", null,
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.5)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 } }, "Proje\xE7\xE3o mês completo"),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: "rgba(255,255,255,0.7)" } }, fmt(totalCustoMaoObra), "€")
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 800, color: "rgba(255,255,255,0.7)" } }, fmt(totalCustoMaoObra))
           )
         )
       ),
@@ -2105,7 +2036,7 @@ function Finance() {
             return /* @__PURE__ */ React.createElement("div", { key: c.emp.id, style: { marginBottom: 10 } },
               /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 } },
                 /* @__PURE__ */ React.createElement("span", { style: { color: "#334155", fontWeight: 600 } }, c.emp.name, c.inactivo ? /* @__PURE__ */ React.createElement("span", { style: { background: "#F1F5F9", color: "#94A3B8", borderRadius: 5, padding: "1px 6px", fontSize: 9, fontWeight: 700, marginLeft: 6 } }, "inactivo") : null),
-                /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B", fontWeight: 700 } }, fmt(c.custoAteHoje), c.tipo !== "Recibo Verde" && /* @__PURE__ */ React.createElement("span", { style: { color: "#CBD5E1", fontWeight: 500 } }, " / ", fmt(c.custo), "\u20AC proj."))
+                /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B", fontWeight: 700 } }, fmt(c.custoAteHoje), c.tipo !== "Recibo Verde" && /* @__PURE__ */ React.createElement("span", { style: { color: "#CBD5E1", fontWeight: 500 } }, " / ", fmt(c.custo), " proj."))
               ),
               /* @__PURE__ */ React.createElement("div", { style: { height: 10, background: "#F1F5F9", borderRadius: 5 } },
                 /* @__PURE__ */ React.createElement("div", { style: { height: 10, width: pct + "%", background: EC[c.emp.id] || "#2E6DA4", borderRadius: 5 } })
@@ -2170,7 +2101,7 @@ function Finance() {
               )
             ),
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 900, color: "#EF4444" } }, fmt(c.custo)),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, c.horas.toFixed(1), "h \u2022 ", fmt(c.custoHora), "/h \u2022 ", c.utilizacaoPct, "% ocup.")
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B" } }, c.horas.toFixed(1), "h \u2022 ", (c.custoHoraIndef ? "\u2014" : fmt(c.custoHora)), "/h \u2022 ", c.utilizacaoPct, "% ocup.")
           );
         })
       ),
@@ -2187,7 +2118,7 @@ function Finance() {
             /* @__PURE__ */ React.createElement("button", { onClick: function() { setSelColabCusto(null); }, style: { background: "none", border: "none", fontSize: 20, color: "#94A3B8", cursor: "pointer" } }, "\u2715")
           ),
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#EF4444", marginBottom: 4 } }, fmt(selColabCusto.custo)),
-          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 16 } }, fmt(selColabCusto.custoHora), "/h \u2022 ", selColabCusto.utilizacaoPct, "% de ocupa\xE7\xE3o (", selColabCusto.horas.toFixed(0), "h de ", selColabCusto.capacidadeHoras.toFixed(0), "h)"),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 16 } }, (selColabCusto.custoHoraIndef ? "\u2014" : fmt(selColabCusto.custoHora)), "/h \u2022 ", selColabCusto.utilizacaoPct, "% de ocupa\xE7\xE3o (", selColabCusto.horas.toFixed(0), "h de ", selColabCusto.capacidadeHoras.toFixed(0), "h)"),
           /* @__PURE__ */ React.createElement("div", { style: { borderTop: "1px solid #F1F5F9", paddingTop: 10 } },
             selColabCusto.detalhe.map(function(d, i) {
               return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", fontSize: 13, color: "#334155", padding: "5px 0" } },
