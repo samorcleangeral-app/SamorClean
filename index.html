@@ -688,6 +688,7 @@ function Finance() {
     setLoading(true);
     const monthStart = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
     const monthEnd = localDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+    const nextMonthStart = localDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 1));
     const yearStart = localDateStr(new Date(now.getFullYear(), 0, 1));
     const sixMonthsAgo = localDateStr(new Date(now.getFullYear(), now.getMonth() - 5, 1));
     const past60 = localDateStr(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 60));
@@ -711,7 +712,7 @@ function Finance() {
       db.list("ajuste_dias_recibo_verde", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
       db.list("premio_assiduidade_opcional", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
       db.list("historico_financeiro", "?select=ano,mes,despesas,faturado&ano=eq." + now.getFullYear() + "&order=mes.desc"),
-      db.list("stock_movimentos", "?select=*&tipo=eq.saida"),
+      db.list("stock_movimentos", "?select=created_at,quantidade,valor_unitario&tipo=eq.saida&created_at=gte." + monthStart + "&created_at=lt." + nextMonthStart),
       db.list("avaliacoes", "?select=stars,funcionario_id,servico_id,created_at&created_at=gte." + new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString()),
       db.list("avaliacoes_mensais", "?select=funcionario_id,mes,nota_final"),
       db.list("picagens_armazem", "?select=funcionario_id,tipo,created_at&created_at=gte." + monthStart)
@@ -1106,7 +1107,7 @@ function Finance() {
   })();
   // Material: a margem conta o CONSUMO do mês (regular), não a compra (às pancadas).
   // A compra fica como existência no stock. Regra alinhada com a margem por cliente.
-  var consumoMaterialMes = stockSaidas.filter(function(m) { return (m.created_at || "").slice(0, 7) === localDateStr().slice(0, 7); })
+  var consumoMaterialMes = stockSaidas.filter(function(m) { return (m.created_at || "").slice(0, 7) === (now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0")); })
     .reduce(function(s, m) { return s + (parseFloat(m.quantidade) || 0) * (parseFloat(m.valor_unitario) || 0); }, 0);
   const totalCustos = despesas.reduce(function(s, d) {
     return d.is_stock ? s : s + (parseFloat(d.valor) || 0);
