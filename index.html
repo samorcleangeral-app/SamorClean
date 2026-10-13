@@ -529,9 +529,11 @@ function Finance() {
   const [faturaSearch, setFaturaSearch] = useState("");
   const [contaCorrenteEdits, setContaCorrenteEdits] = useState({});
   const [carregandoConta, setCarregandoConta] = useState(false);
+  const [contaCorrenteModo, setContaCorrenteModo] = useState("leitura");
   async function abrirContaCorrente(clientId) {
     setCarregandoConta(true);
     setContaCorrenteAberta(true);
+    setContaCorrenteModo("leitura");
     setContaCorrenteId(clientId);
     var cRef = clientes.find(function(cc) { return cc.id === clientId; });
     setContaCorrenteNome(cRef ? cRef.name : "");
@@ -1036,6 +1038,89 @@ function Finance() {
   function avencaPendenteComIva(cid, mes) { return pendenteMesComIva(cid, mes); }
   function mesesDevidosAvenca(cid) { return mesesDevidosCliente(cid); }
   function avencaPendenteTotalCliente(cid) { return pendenteTotalCliente(cid); }
+  // ── EXTRATO (conta corrente em modo leitura) — avença. Bebe da mesma fonte que o modal de edição. ──
+  function nomeMesLongoCC(mes) { return new Date(mes + "-01T12:00:00").toLocaleDateString("pt-PT", { month: "long", year: "numeric" }); }
+  function movimentosContaAvenca(cid) {
+    var meses = mesesDevidosAvenca(cid);
+    var movs = [];
+    meses.forEach(function(mes) {
+      var totalMes = valorMesComIva(cid, mes);
+      if (totalMes > 0.005) {
+        movs.push({ date: mes + "-01", tipo: "faturado", desc: "Aven\xE7a de " + nomeMesLongoCC(mes) + (temValorAjustado(cid, mes) ? " (inclui extra)" : ""), valor: totalMes });
+      }
+      movimentosDoMes(cid, mes).forEach(function(m) {
+        movs.push({ date: m.data_pagamento || (mes + "-01"), tipo: "pago", desc: "Pagamento" + (m.nota ? " · " + m.nota : ""), valor: parseFloat(m.valor) || 0 });
+      });
+      var legacy = Math.max(0, pagoMesComIva(cid, mes) - totalPagoMovimentos(cid, mes));
+      if (legacy > 0.005) {
+        movs.push({ date: mes + "-01", tipo: "pago", desc: "Pagamento (registo anterior)", valor: legacy });
+      }
+    });
+    movs.sort(function(a, b) {
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+      return (a.tipo === "faturado" ? 0 : 1) - (b.tipo === "faturado" ? 0 : 1);
+    });
+    var saldo = 0;
+    movs.forEach(function(m) { saldo += m.tipo === "faturado" ? m.valor : -m.valor; m.saldo = saldo; });
+    return movs;
+  }
+  function renderExtratoConta(cid) {
+    var movs = movimentosContaAvenca(cid);
+    var totalFat = movs.reduce(function(s, m) { return s + (m.tipo === "faturado" ? m.valor : 0); }, 0);
+    var totalPg = movs.reduce(function(s, m) { return s + (m.tipo === "pago" ? m.valor : 0); }, 0);
+    var emDivida = Math.max(0, totalFat - totalPg);
+    var thR = { textAlign: "right", padding: "8px 10px", fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", borderBottom: "2px solid #E2EBF4" };
+    var thL = Object.assign({}, thR, { textAlign: "left" });
+    var tdR = { textAlign: "right", padding: "10px", borderBottom: "1px solid #E2EBF4", verticalAlign: "top" };
+    var tdL = Object.assign({}, tdR, { textAlign: "left" });
+    function chip(l, v, bg, cor) {
+      return /* @__PURE__ */ React.createElement("div", { style: { background: bg, borderRadius: 10, padding: "10px 12px", flex: 1 } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 4 } }, l),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 17, fontWeight: 900, color: cor } }, fmt(v)));
+    }
+    var tagStyle = function(bg, cor) { return { display: "inline-block", fontSize: 9, fontWeight: 700, borderRadius: 5, padding: "1px 6px", marginLeft: 6, background: bg, color: cor }; };
+    return /* @__PURE__ */ React.createElement("div", null,
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginBottom: 18 } },
+        chip("Faturado", totalFat, "#EFF6FF", "#2E6DA4"),
+        chip("Pago", totalPg, "#F0FDF4", "#16A34A"),
+        chip("Em d\xEDvida", emDivida, "#FEF2F2", "#DC2626")
+      ),
+      movs.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 20, color: "#94A3B8", fontSize: 13 } }, "Sem movimentos ainda.") :
+      /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } },
+        /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } },
+          /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null,
+            /* @__PURE__ */ React.createElement("th", { style: thL }, "Data"),
+            /* @__PURE__ */ React.createElement("th", { style: thL }, "Movimento"),
+            /* @__PURE__ */ React.createElement("th", { style: thR }, "Faturado"),
+            /* @__PURE__ */ React.createElement("th", { style: thR }, "Pago"),
+            /* @__PURE__ */ React.createElement("th", { style: thR }, "Saldo")
+          )),
+          /* @__PURE__ */ React.createElement("tbody", null, movs.map(function(m, i) {
+            var ehFat = m.tipo === "faturado";
+            return /* @__PURE__ */ React.createElement("tr", { key: i },
+              /* @__PURE__ */ React.createElement("td", { style: Object.assign({}, tdL, { color: "#94A3B8", fontSize: 11, whiteSpace: "nowrap" }) }, new Date(m.date + "T12:00:00").toLocaleDateString("pt-PT")),
+              /* @__PURE__ */ React.createElement("td", { style: tdL },
+                /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 600, color: "#1A3A5C" } }, m.desc),
+                ehFat
+                  ? (m.desc.indexOf("extra") !== -1 ? /* @__PURE__ */ React.createElement("span", { style: tagStyle("#FEF3C7", "#B45309") }, "Extra") : /* @__PURE__ */ React.createElement("span", { style: tagStyle("#F5F3FF", "#7C3AED") }, "Aven\xE7a"))
+                  : /* @__PURE__ */ React.createElement("span", { style: tagStyle("#DCFCE7", "#16A34A") }, "Pago")
+              ),
+              /* @__PURE__ */ React.createElement("td", { style: Object.assign({}, tdR, { fontWeight: 700, color: "#1A3A5C" }) }, ehFat ? fmt(m.valor) : "—"),
+              /* @__PURE__ */ React.createElement("td", { style: Object.assign({}, tdR, { fontWeight: 700, color: "#16A34A" }) }, ehFat ? "—" : fmt(m.valor)),
+              /* @__PURE__ */ React.createElement("td", { style: Object.assign({}, tdR, { fontWeight: 800, color: m.saldo > 0.005 ? "#DC2626" : "#94A3B8" }) }, fmt(m.saldo))
+            );
+          })),
+          /* @__PURE__ */ React.createElement("tfoot", null, /* @__PURE__ */ React.createElement("tr", null,
+            /* @__PURE__ */ React.createElement("td", { style: { textAlign: "left", padding: "14px 10px 0", fontWeight: 900, fontSize: 15, color: "#1A3A5C" }, colSpan: 4 }, "Saldo em d\xEDvida"),
+            /* @__PURE__ */ React.createElement("td", { style: { textAlign: "right", padding: "14px 10px 0", fontWeight: 900, fontSize: 15, color: "#DC2626" } }, fmt(emDivida))
+          ))
+        )
+      ),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 18 } },
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { exportarContaCorrentePDF(contaCorrenteNome, contaCorrenteJobs); }, style: Object.assign({}, btnO, { fontSize: 11, padding: "7px 14px" }) }, "📄 Exportar PDF")
+      )
+    );
+  }
   function visitasDoMesCliente(cid, mes) { return jobsClienteMes(cid, mes); }
   function visitaValorMesComIva(cid, mes) { return valorMesComIva(cid, mes); }
   function visitaPagoMesComIva(cid, mes) { return pagoMesComIva(cid, mes); }
@@ -2355,10 +2440,15 @@ function Finance() {
   })))), contaCorrenteAberta && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 600, padding: 20 }, onClick: function() { setContaCorrenteAberta(false); } },
             /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 24, maxWidth: 620, width: "100%", maxHeight: "85vh", overflowY: "auto" }, onClick: function(e) { e.stopPropagation(); } },
               /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } },
-                /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C" } }, "\uD83D\uDCCB Conta Corrente \u2014 ", contaCorrenteNome),
-                /* @__PURE__ */ React.createElement("button", { onClick: function() { setContaCorrenteAberta(false); }, style: { background: "none", border: "none", fontSize: 20, color: "#94A3B8", cursor: "pointer" } }, "\u2715")
+                /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C" } }, "\uD83D\uDCCB Conta Corrente \u2014 ", contaCorrenteNome, isClienteMensal(contaCorrenteId) && contaCorrenteModo === "leitura" && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 700, color: "#2E6DA4", background: "#EFF6FF", borderRadius: 6, padding: "2px 8px", marginLeft: 8 } }, "modo leitura")),
+                /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+                  isClienteMensal(contaCorrenteId) && /* @__PURE__ */ React.createElement("button", { onClick: function() { setContaCorrenteModo(contaCorrenteModo === "leitura" ? "edicao" : "leitura"); }, style: { border: "1.5px solid #2E6DA4", background: contaCorrenteModo === "leitura" ? "#fff" : "#EFF6FF", color: "#2E6DA4", fontWeight: 700, fontSize: 12, borderRadius: 9, padding: "6px 14px", cursor: "pointer" } }, contaCorrenteModo === "leitura" ? "\u270E Editar" : "\u2713 Concluir"),
+                  /* @__PURE__ */ React.createElement("button", { onClick: function() { setContaCorrenteAberta(false); }, style: { background: "none", border: "none", fontSize: 20, color: "#94A3B8", cursor: "pointer" } }, "\u2715")
+                )
               ),
-              carregandoConta ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 30, color: "#94A3B8" } }, "A carregar...") : /* @__PURE__ */ React.createElement("div", null,
+              carregandoConta ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 30, color: "#94A3B8" } }, "A carregar...") :
+              (isClienteMensal(contaCorrenteId) && contaCorrenteModo === "leitura") ? renderExtratoConta(contaCorrenteId) :
+              /* @__PURE__ */ React.createElement("div", null,
                 (function() {
                   var totalPago = isClienteObra(contaCorrenteId) ? obrasDoCliente(contaCorrenteId).reduce(function(s2, o) { return s2 + obraPagoComIva(o.id); }, 0) : (isClienteMensal(contaCorrenteId) || isClienteVisita(contaCorrenteId)) ? mesesDevidosCliente(contaCorrenteId).reduce(function(s2, m) { return s2 + pagoMesComIva(contaCorrenteId, m); }, 0) : contaCorrenteJobs.reduce(function(s2, j) { return s2 + valorPagoDoJob(j); }, 0);
                   var totalPendente = isClienteObra(contaCorrenteId) ? obraPendenteTotalCliente(contaCorrenteId) : (isClienteMensal(contaCorrenteId) || isClienteVisita(contaCorrenteId)) ? pendenteTotalCliente(contaCorrenteId) : contaCorrenteJobs.reduce(function(s2, j) { return s2 + valorPendenteDoJob(j); }, 0);
