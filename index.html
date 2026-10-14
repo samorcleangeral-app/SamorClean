@@ -1197,15 +1197,33 @@ function Finance() {
   function visitaPendenteMesComIva(cid, mes) { return pendenteMesComIva(cid, mes); }
   function mesesDevidosVisita(cid) { return mesesDevidosCliente(cid); }
   function visitaPendenteTotalCliente(cid) { return pendenteTotalCliente(cid); }
-  const fatSemIva = monthJobs.reduce(function(s, j) {
-    return s + (j.val || 0);
-  }, 0);
-  const fatComIva = monthJobs.reduce(function(s, j) {
-    return s + withIva(j.val || 0, j);
-  }, 0);
-  const recebido = monthJobs.reduce(function(s, j) {
-    return s + valorPagoDoJob(j);
-  }, 0);
+  // Receita do mês pela regra CERTA por tipo (igual à faturação e às margens):
+  // mensal/visita = avença/valor-visita do mês (inclui a avença, que os monthJobs não têm);
+  // hora/obra = valor dos serviços do mês. Sem contar a dobrar.
+  const _recMes = (function() {
+    var sIva = 0, cIva = 0, pg = 0;
+    clientes.forEach(function(c) {
+      if (c.cliente_principal_id || c.excluir_financeiro === true) return;
+      if (c.tipo_faturacao === "mensal" || isClienteVisita(c.id)) {
+        sIva += valorMesSemIva(c.id, mesActualStr);
+        cIva += valorMesComIva(c.id, mesActualStr);
+        pg += pagoMesComIva(c.id, mesActualStr);
+      }
+    });
+    return { sIva: sIva, cIva: cIva, pg: pg };
+  })();
+  const _recServ = monthJobs.reduce(function(acc, j) {
+    var c = clientsMap[j.client_id];
+    var tf = c ? (c.cliente_principal_id ? (clientsMap[c.cliente_principal_id] || {}).tipo_faturacao : c.tipo_faturacao) : null;
+    if (tf === "mensal" || tf === "visita") return acc;   // esses já entram pelo bloco acima
+    acc.sIva += (j.val || 0);
+    acc.cIva += withIva(j.val || 0, j);
+    acc.pg += valorPagoDoJob(j);
+    return acc;
+  }, { sIva: 0, cIva: 0, pg: 0 });
+  const fatSemIva = _recMes.sIva + _recServ.sIva;
+  const fatComIva = _recMes.cIva + _recServ.cIva;
+  const recebido = _recMes.pg + _recServ.pg;
   const divida = fatComIva - recebido;
   // Dívida por mês dos clientes "por visita"/"hora" (consistente com a conta corrente)
   const byClientCobrarVisita = (function() {
