@@ -12396,6 +12396,7 @@ function ClientPortal(props) {
   const [ratings, setRatings] = useState({});
   const [comment, setComment] = useState("");
   const [rateDone, setRateDone] = useState(false);
+  const [savingRate, setSavingRate] = useState(false);
   const [extraSel, setExtraSel] = useState("");
   const [extraNote, setExtraNote] = useState("");
   const [extraSent, setExtraSent] = useState(false);
@@ -12610,40 +12611,48 @@ function ClientPortal(props) {
     });
   }
   async function submitRate(job) {
-    const promises = (job.team || []).map(function(eid) {
-      return db.insert("avaliacoes", {
-        servico_id: job.id,
-        funcionario_id: eid,
-        client_id: clientId,
-        stars: ratings[eid],
-        comment: comment || null,
-        contact_name: currentContact ? currentContact.name : null
-      });
-    });
-    await Promise.all(promises);
-    await db.update("servicos", job.id, { rated: true });
-    for (let i = 0; i < (job.team || []).length; i++) {
-      const eid = job.team[i];
-      const allAvs = await db.list("avaliacoes", "?select=stars&funcionario_id=eq." + encodeURIComponent(eid));
-      if (allAvs && allAvs.length > 0) {
-        const avg = allAvs.reduce(function(s, a) {
-          return s + (a.stars || 0);
-        }, 0) / allAvs.length;
-        await db.update("funcionarios", eid, { rating: Math.round(avg * 10) / 10 });
-      }
-    }
-    setRateDone(true);
-    setTimeout(function() {
-      setShowRate(null);
-      setRatings({});
-      setComment("");
-      setRateDone(false);
-      setHistory(function(p) {
-        return p.map(function(s) {
-          return s.id === job.id ? Object.assign({}, s, { rated: true }) : s;
+    if (savingRate) return;                 // trava o duplo-envio do pop-up das avaliações
+    setSavingRate(true);
+    try {
+      const promises = (job.team || []).map(function(eid) {
+        return db.insert("avaliacoes", {
+          servico_id: job.id,
+          funcionario_id: eid,
+          client_id: clientId,
+          stars: ratings[eid],
+          comment: comment || null,
+          contact_name: currentContact ? currentContact.name : null
         });
       });
-    }, 1800);
+      await Promise.all(promises);
+      await db.update("servicos", job.id, { rated: true });
+      for (let i = 0; i < (job.team || []).length; i++) {
+        const eid = job.team[i];
+        const allAvs = await db.list("avaliacoes", "?select=stars&funcionario_id=eq." + encodeURIComponent(eid));
+        if (allAvs && allAvs.length > 0) {
+          const avg = allAvs.reduce(function(s, a) {
+            return s + (a.stars || 0);
+          }, 0) / allAvs.length;
+          await db.update("funcionarios", eid, { rating: Math.round(avg * 10) / 10 });
+        }
+      }
+      setRateDone(true);
+      setTimeout(function() {
+        setShowRate(null);
+        setRatings({});
+        setComment("");
+        setRateDone(false);
+        setSavingRate(false);
+        setHistory(function(p) {
+          return p.map(function(s) {
+            return s.id === job.id ? Object.assign({}, s, { rated: true }) : s;
+          });
+        });
+      }, 1800);
+    } catch (e) {
+      setSavingRate(false);
+      alert("N\xE3o foi poss\xEDvel guardar a avalia\xE7\xE3o. Tenta de novo.");
+    }
   }
   async function submitExtra() {
     const inserted = await db.insert("pedidos_extra", {
@@ -13113,7 +13122,7 @@ function ClientPortal(props) {
     setComment("");
   }, style: Object.assign({}, btnX, { flex: 1 }) }, "Cancelar"), /* @__PURE__ */ React.createElement("button", { onClick: function() {
     submitRate(showRate);
-  }, disabled: !(showRate.team || []).every(function(eid) {
+  }, disabled: savingRate || !(showRate.team || []).every(function(eid) {
     return ratings[eid];
   }), style: { flex: 2, background: (showRate.team || []).every(function(eid) {
     return ratings[eid];
