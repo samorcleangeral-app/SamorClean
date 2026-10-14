@@ -1010,6 +1010,16 @@ function Finance() {
   function obraPendenteTotalCliente(cid) {
     return obrasDoCliente(cid).reduce(function(s2, o) { return s2 + obraPendenteComIva(o); }, 0);
   }
+  // ── Obra por FATIAS: adjudicação vence na adjudicação; restante vence na conclusão ──
+  function obraPctAdj(o) { var p = parseFloat(o.adjudicacao_pct); return isNaN(p) ? 50 : p; }
+  function obraDevidoComIva(o) { var orc = obraValorComIva(o); return o.estado === "concluida" ? orc : orc * (obraPctAdj(o) / 100); }
+  function obraDividaComIva(o) { return Math.max(0, obraDevidoComIva(o) - obraPagoComIva(o.id)); }   // vencido e por pagar
+  function obraPrevisaoComIva(o) { return Math.max(0, obraValorComIva(o) - obraDevidoComIva(o)); }    // fatia por vencer (futuro)
+  function obraDividaTotalCliente(cid) { return obrasDoCliente(cid).reduce(function(s, o) { return s + obraDividaComIva(o); }, 0); }
+  function obraPrevisaoTotalCliente(cid) { return obrasDoCliente(cid).reduce(function(s, o) { return s + obraPrevisaoComIva(o); }, 0); }
+  // ── Mensal/Visita: vencido = meses FECHADOS por pagar; previsão = mês corrente por receber ──
+  function pendenteVencidoCliente(cid) { return mesesDevidosCliente(cid).reduce(function(s, m) { return m < mesActualStr ? s + pendenteMesComIva(cid, m) : s; }, 0); }
+  function previsaoMesCliente(cid) { return pendenteMesComIva(cid, mesActualStr); }
   async function registarPagamentoObra(obra, valorComIva, dataPag, nota) {
     try {
       var res = await fetch(SUPABASE_URL + "/rest/v1/pagamentos_movimentos", {
@@ -1046,19 +1056,20 @@ function Finance() {
     var meses = mesesDevidosAvenca(cid);
     var movs = [];
     meses.forEach(function(mes) {
+      var corr = (mes === mesActualStr);
       var totalMes = valorMesComIva(cid, mes);
       if (totalMes > 0.005) {
         var desc, kind;
         if (tipoFat === "visita") { desc = "Visitas de " + nomeMesLongoCC(mes); kind = "visita"; }
         else { var ex = temValorAjustado(cid, mes); desc = "Aven\xE7a de " + nomeMesLongoCC(mes) + (ex ? " (inclui extra)" : ""); kind = ex ? "extra" : "avenca"; }
-        movs.push({ date: mes + "-01", tipo: "faturado", desc: desc, kind: kind, valor: totalMes });
+        movs.push({ date: mes + "-01", tipo: "faturado", desc: desc, kind: kind, valor: totalMes, corrente: corr });
       }
       movimentosDoMes(cid, mes).forEach(function(m) {
-        movs.push({ date: m.data_pagamento || (mes + "-01"), tipo: "pago", desc: "Pagamento" + (m.nota ? " · " + m.nota : ""), kind: "pago", valor: parseFloat(m.valor) || 0 });
+        movs.push({ date: m.data_pagamento || (mes + "-01"), tipo: "pago", desc: "Pagamento" + (m.nota ? " · " + m.nota : ""), kind: "pago", valor: parseFloat(m.valor) || 0, corrente: corr });
       });
       var legacy = Math.max(0, pagoMesComIva(cid, mes) - totalPagoMovimentos(cid, mes));
       if (legacy > 0.005) {
-        movs.push({ date: mes + "-01", tipo: "pago", desc: "Pagamento (registo anterior)", kind: "pago", valor: legacy });
+        movs.push({ date: mes + "-01", tipo: "pago", desc: "Pagamento (registo anterior)", kind: "pago", valor: legacy, corrente: corr });
       }
     });
     return finalizarMovs(movs);
@@ -1069,17 +1080,19 @@ function Finance() {
       return (a.tipo === "faturado" ? 0 : 1) - (b.tipo === "faturado" ? 0 : 1);
     });
     var saldo = 0;
-    movs.forEach(function(m) { saldo += m.tipo === "faturado" ? m.valor : -m.valor; m.saldo = saldo; });
+    movs.forEach(function(m) { if (!m.corrente) { saldo += m.tipo === "faturado" ? m.valor : -m.valor; m.saldo = saldo; } });
     return movs;
   }
   function movimentosContaObra(cid) {
     var movs = [];
     obrasDoCliente(cid).forEach(function(o) {
-      var total = obraValorComIva(o);
       var dataFat = o.data_adjudicacao || o.data_conclusao || localDateStr();
-      if (total > 0.005) movs.push({ date: dataFat, tipo: "faturado", desc: "Obra: " + (o.nome || "sem nome"), kind: "obra", valor: total });
+      var devido = obraDevidoComIva(o);       // fatia já vencida (dívida)
+      var porVencer = obraPrevisaoComIva(o);  // fatia por vencer (previsão)
+      if (devido > 0.005) movs.push({ date: dataFat, tipo: "faturado", desc: "Obra: " + (o.nome || "sem nome") + (porVencer > 0.005 ? " (adjudica\xE7\xE3o " + obraPctAdj(o) + "%)" : ""), kind: "obra", valor: devido, corrente: false });
+      if (porVencer > 0.005) movs.push({ date: dataFat, tipo: "faturado", desc: "Obra: " + (o.nome || "sem nome") + " — fatia por vencer", kind: "obra", valor: porVencer, corrente: true });
       pagMovimentos.filter(function(m) { return m.obra_id === o.id; }).forEach(function(m) {
-        movs.push({ date: m.data_pagamento || dataFat, tipo: "pago", desc: "Pagamento" + (m.nota ? " · " + m.nota : ""), kind: "pago", valor: parseFloat(m.valor) || 0 });
+        movs.push({ date: m.data_pagamento || dataFat, tipo: "pago", desc: "Pagamento" + (m.nota ? " · " + m.nota : ""), kind: "pago", valor: parseFloat(m.valor) || 0, corrente: false });
       });
     });
     return finalizarMovs(movs);
@@ -1087,10 +1100,11 @@ function Finance() {
   function movimentosContaHora(cid) {
     var movs = [];
     contaCorrenteJobs.forEach(function(j) {
+      var corr = (j.date || "").slice(0, 7) === mesActualStr;
       var vTot = withIva(j.val || 0, j);
-      if (vTot > 0.005) movs.push({ date: j.date, tipo: "faturado", desc: j.svc || "Servi\xE7o", kind: "servico", valor: vTot });
+      if (vTot > 0.005) movs.push({ date: j.date, tipo: "faturado", desc: j.svc || "Servi\xE7o", kind: "servico", valor: vTot, corrente: corr });
       var vPg = valorPagoDoJob(j);
-      if (vPg > 0.005) movs.push({ date: j.date, tipo: "pago", desc: "Pagamento · " + (j.svc || "servi\xE7o"), kind: "pago", valor: vPg });
+      if (vPg > 0.005) movs.push({ date: j.date, tipo: "pago", desc: "Pagamento · " + (j.svc || "servi\xE7o"), kind: "pago", valor: vPg, corrente: corr });
     });
     return finalizarMovs(movs);
   }
@@ -1101,9 +1115,14 @@ function Finance() {
   }
   function renderExtratoConta(cid) {
     var movs = movimentosConta(cid);
-    var totalFat = movs.reduce(function(s, m) { return s + (m.tipo === "faturado" ? m.valor : 0); }, 0);
-    var totalPg = movs.reduce(function(s, m) { return s + (m.tipo === "pago" ? m.valor : 0); }, 0);
+    var fechados = movs.filter(function(m) { return !m.corrente; });
+    var correntes = movs.filter(function(m) { return m.corrente; });
+    var totalFat = fechados.reduce(function(s, m) { return s + (m.tipo === "faturado" ? m.valor : 0); }, 0);
+    var totalPg = fechados.reduce(function(s, m) { return s + (m.tipo === "pago" ? m.valor : 0); }, 0);
     var emDivida = Math.max(0, totalFat - totalPg);
+    var prevFat = correntes.reduce(function(s, m) { return s + (m.tipo === "faturado" ? m.valor : 0); }, 0);
+    var prevPg = correntes.reduce(function(s, m) { return s + (m.tipo === "pago" ? m.valor : 0); }, 0);
+    var prevNet = Math.max(0, prevFat - prevPg);
     var thR = { textAlign: "right", padding: "8px 10px", fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", borderBottom: "2px solid #E2EBF4" };
     var thL = Object.assign({}, thR, { textAlign: "left" });
     var tdR = { textAlign: "right", padding: "10px", borderBottom: "1px solid #E2EBF4", verticalAlign: "top" };
@@ -1114,13 +1133,17 @@ function Finance() {
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 17, fontWeight: 900, color: cor } }, fmt(v)));
     }
     var tagStyle = function(bg, cor) { return { display: "inline-block", fontSize: 9, fontWeight: 700, borderRadius: 5, padding: "1px 6px", marginLeft: 6, background: bg, color: cor }; };
+    function tagFat(m) {
+      return m.kind === "extra" ? /* @__PURE__ */ React.createElement("span", { style: tagStyle("#FEF3C7", "#B45309") }, "Extra") : m.kind === "visita" ? /* @__PURE__ */ React.createElement("span", { style: tagStyle("#EFF6FF", "#2E6DA4") }, "Visitas") : m.kind === "obra" ? /* @__PURE__ */ React.createElement("span", { style: tagStyle("#FFF7ED", "#EA580C") }, "Obra") : m.kind === "servico" ? /* @__PURE__ */ React.createElement("span", { style: tagStyle("#F1F5F9", "#64748B") }, "Servi\xE7o") : /* @__PURE__ */ React.createElement("span", { style: tagStyle("#F5F3FF", "#7C3AED") }, "Aven\xE7a");
+    }
     return /* @__PURE__ */ React.createElement("div", null,
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginBottom: 18 } },
-        chip("Faturado", totalFat, "#EFF6FF", "#2E6DA4"),
+        chip("Faturado (fechado)", totalFat, "#EFF6FF", "#2E6DA4"),
         chip("Pago", totalPg, "#F0FDF4", "#16A34A"),
         chip("Em d\xEDvida", emDivida, "#FEF2F2", "#DC2626")
       ),
-      movs.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 20, color: "#94A3B8", fontSize: 13 } }, "Sem movimentos ainda.") :
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 8 } }, "Conta corrente — meses fechados"),
+      fechados.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 16, color: "#94A3B8", fontSize: 13 } }, "Sem d\xEDvida de meses anteriores. ✓") :
       /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } },
         /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } },
           /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null,
@@ -1130,15 +1153,13 @@ function Finance() {
             /* @__PURE__ */ React.createElement("th", { style: thR }, "Pago"),
             /* @__PURE__ */ React.createElement("th", { style: thR }, "Saldo")
           )),
-          /* @__PURE__ */ React.createElement("tbody", null, movs.map(function(m, i) {
+          /* @__PURE__ */ React.createElement("tbody", null, fechados.map(function(m, i) {
             var ehFat = m.tipo === "faturado";
             return /* @__PURE__ */ React.createElement("tr", { key: i },
               /* @__PURE__ */ React.createElement("td", { style: Object.assign({}, tdL, { color: "#94A3B8", fontSize: 11, whiteSpace: "nowrap" }) }, new Date(m.date + "T12:00:00").toLocaleDateString("pt-PT")),
               /* @__PURE__ */ React.createElement("td", { style: tdL },
                 /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 600, color: "#1A3A5C" } }, m.desc),
-                ehFat
-                  ? (m.kind === "extra" ? /* @__PURE__ */ React.createElement("span", { style: tagStyle("#FEF3C7", "#B45309") }, "Extra") : m.kind === "visita" ? /* @__PURE__ */ React.createElement("span", { style: tagStyle("#EFF6FF", "#2E6DA4") }, "Visitas") : m.kind === "obra" ? /* @__PURE__ */ React.createElement("span", { style: tagStyle("#FFF7ED", "#EA580C") }, "Obra") : m.kind === "servico" ? /* @__PURE__ */ React.createElement("span", { style: tagStyle("#F1F5F9", "#64748B") }, "Servi\xE7o") : /* @__PURE__ */ React.createElement("span", { style: tagStyle("#F5F3FF", "#7C3AED") }, "Aven\xE7a"))
-                  : /* @__PURE__ */ React.createElement("span", { style: tagStyle("#DCFCE7", "#16A34A") }, "Pago")
+                ehFat ? tagFat(m) : /* @__PURE__ */ React.createElement("span", { style: tagStyle("#DCFCE7", "#16A34A") }, "Pago")
               ),
               /* @__PURE__ */ React.createElement("td", { style: Object.assign({}, tdR, { fontWeight: 700, color: "#1A3A5C" }) }, ehFat ? fmt(m.valor) : "—"),
               /* @__PURE__ */ React.createElement("td", { style: Object.assign({}, tdR, { fontWeight: 700, color: "#16A34A" }) }, ehFat ? "—" : fmt(m.valor)),
@@ -1150,6 +1171,20 @@ function Finance() {
             /* @__PURE__ */ React.createElement("td", { style: { textAlign: "right", padding: "14px 10px 0", fontWeight: 900, fontSize: 15, color: "#DC2626" } }, fmt(emDivida))
           ))
         )
+      ),
+      correntes.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 18, background: "#FAF5FF", border: "1.5px solid #E9D5FF", borderRadius: 12, padding: 14 } },
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#7C3AED", textTransform: "uppercase" } }, "Previs\xE3o do mês corrente"),
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: 900, color: "#7C3AED" } }, fmt(prevNet))
+        ),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginBottom: 8 } }, "A decorrer — ainda n\xE3o venceu, por isso n\xE3o entra na d\xEDvida."),
+        correntes.map(function(m, i) {
+          var ehFat = m.tipo === "faturado";
+          return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0", color: "#334155" } },
+            /* @__PURE__ */ React.createElement("span", null, m.desc),
+            /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, color: ehFat ? "#1A3A5C" : "#16A34A" } }, (ehFat ? "" : "− ") + fmt(m.valor))
+          );
+        })
       ),
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 18 } },
         /* @__PURE__ */ React.createElement("button", { onClick: function() { exportarContaCorrentePDF(contaCorrenteNome, contaCorrenteJobs); }, style: Object.assign({}, btnO, { fontSize: 11, padding: "7px 14px" }) }, "📄 Exportar PDF")
@@ -1184,29 +1219,41 @@ function Finance() {
     });
     return out;
   })();
+  // DÍVIDA = só o VENCIDO: meses fechados por pagar + fatias de obra vencidas. O mês corrente é PREVISÃO, à parte.
   const dividaTotalAcumulada = allPendingJobs.reduce(function(s, j) {
     var cRefD = clientsMap[j.client_id];
     var tfD = cRefD ? (cRefD.cliente_principal_id ? (clientsMap[cRefD.cliente_principal_id] || {}).tipo_faturacao : cRefD.tipo_faturacao) : "hora";
-    // Serviço a serviço = SÓ clientes à Hora. Mensal/Visita vêm pelo pendente do cliente; Obra vem pelo orçamento (senão contava a dobrar).
     if (tfD === "mensal" || tfD === "visita" || tfD === "orcamento") return s;
+    if ((j.date || "").slice(0, 7) >= mesActualStr) return s;   // hora: só meses FECHADOS
     return s + valorPendenteDoJob(j);
   }, 0) + clientes.reduce(function(s, cc) {
-    if (cc.cliente_principal_id) return s;
-    if (cc.tipo_faturacao === "mensal") return s + avencaPendenteTotalCliente(cc.id);
-    return s;
-  }, 0) + Object.keys(byClientCobrarVisita).reduce(function(s, k) { return s + byClientCobrarVisita[k]; }, 0) + clientes.reduce(function(s, cc) {
     if (cc.cliente_principal_id || cc.excluir_financeiro === true) return s;
-    return s + (isClienteObra(cc.id) ? obraPendenteTotalCliente(cc.id) : 0);
+    if (cc.tipo_faturacao === "mensal" || isClienteVisita(cc.id)) return s + pendenteVencidoCliente(cc.id);
+    if (isClienteObra(cc.id)) return s + obraDividaTotalCliente(cc.id);
+    return s;
   }, 0);
-  // ── Dívida a rever: lista cliente a cliente, mesma lógica do total (soma TEM de bater com dividaTotalAcumulada) ──
+  // PREVISÃO do mês corrente (não vencido) — nunca entra na dívida
+  const previsaoMesTotal = allPendingJobs.reduce(function(s, j) {
+    var cRefD = clientsMap[j.client_id];
+    var tfD = cRefD ? (cRefD.cliente_principal_id ? (clientsMap[cRefD.cliente_principal_id] || {}).tipo_faturacao : cRefD.tipo_faturacao) : "hora";
+    if (tfD === "mensal" || tfD === "visita" || tfD === "orcamento") return s;
+    if ((j.date || "").slice(0, 7) !== mesActualStr) return s;   // hora: só mês corrente
+    return s + valorPendenteDoJob(j);
+  }, 0) + clientes.reduce(function(s, cc) {
+    if (cc.cliente_principal_id || cc.excluir_financeiro === true) return s;
+    if (cc.tipo_faturacao === "mensal" || isClienteVisita(cc.id)) return s + previsaoMesCliente(cc.id);
+    if (isClienteObra(cc.id)) return s + obraPrevisaoTotalCliente(cc.id);
+    return s;
+  }, 0);
+  // ── Dívida a rever (VENCIDO): lista cliente a cliente; soma = dividaTotalAcumulada ──
   function diasDividaCliente(cc) {
     var datas = [];
     if (isClienteObra(cc.id)) {
-      obrasDoCliente(cc.id).forEach(function(o) { if (obraPendenteComIva(o) > 0.01) datas.push(o.data_adjudicacao || o.data_conclusao); });
+      obrasDoCliente(cc.id).forEach(function(o) { if (obraDividaComIva(o) > 0.01) datas.push(o.data_adjudicacao || o.data_conclusao); });
     } else if (cc.tipo_faturacao === "mensal" || isClienteVisita(cc.id)) {
-      mesesDevidosCliente(cc.id).forEach(function(m) { if (pendenteMesComIva(cc.id, m) > 0.01) datas.push(m + "-01"); });
+      mesesDevidosCliente(cc.id).forEach(function(m) { if (m < mesActualStr && pendenteMesComIva(cc.id, m) > 0.01) datas.push(m + "-01"); });
     } else {
-      allPendingJobs.forEach(function(j) { if (j.client_id === cc.id && valorPendenteDoJob(j) > 0.01) datas.push(j.date); });
+      allPendingJobs.forEach(function(j) { if (j.client_id === cc.id && (j.date || "").slice(0, 7) < mesActualStr && valorPendenteDoJob(j) > 0.01) datas.push(j.date); });
     }
     datas = datas.filter(Boolean).sort();
     if (!datas.length) return null;
@@ -1220,15 +1267,15 @@ function Finance() {
       var principal = cRefD.cliente_principal_id || cRefD.id;
       var tfD = cRefD.cliente_principal_id ? (clientsMap[cRefD.cliente_principal_id] || {}).tipo_faturacao : cRefD.tipo_faturacao;
       if (tfD === "mensal" || tfD === "visita" || tfD === "orcamento") return;
+      if ((j.date || "").slice(0, 7) >= mesActualStr) return;
       porJobHora[principal] = (porJobHora[principal] || 0) + valorPendenteDoJob(j);
     });
     var out = [];
     clientes.forEach(function(cc) {
       if (cc.cliente_principal_id || cc.excluir_financeiro === true) return;
       var val = 0;
-      if (cc.tipo_faturacao === "mensal") val = avencaPendenteTotalCliente(cc.id);
-      else if (isClienteVisita(cc.id)) val = pendenteTotalCliente(cc.id);
-      else if (isClienteObra(cc.id)) val = obraPendenteTotalCliente(cc.id);
+      if (cc.tipo_faturacao === "mensal" || isClienteVisita(cc.id)) val = pendenteVencidoCliente(cc.id);
+      else if (isClienteObra(cc.id)) val = obraDividaTotalCliente(cc.id);
       else val = porJobHora[cc.id] || 0;
       if (val > 0.01) out.push({ id: cc.id, nome: cc.name, valor: val, dias: diasDividaCliente(cc) });
     });
@@ -2407,7 +2454,7 @@ function Finance() {
           /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, "🔍 D\xEDvida a rever"),
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#DC2626" } }, fmt(dividaTotalAcumulada))
         ),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 12 } }, dividaPorCliente.length, " cliente", dividaPorCliente.length !== 1 ? "s" : "", " com saldo em d\xEDvida — do maior para o menor. Carrega para abrir a conta corrente e corrigir."),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 12 } }, dividaPorCliente.length, " cliente", dividaPorCliente.length !== 1 ? "s" : "", " com d\xEDvida vencida (meses fechados) — do maior para o menor. O mês corrente est\xE1 na Previs\xE3o, \xE0 parte. Carrega para abrir a conta corrente e corrigir."),
         dividaPorCliente.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 16, color: "#94A3B8", fontSize: 13 } }, "Sem d\xEDvida a rever. ✓") :
         /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6, maxHeight: 420, overflowY: "auto" } }, dividaPorCliente.map(function(d) {
           var corDias = d.dias == null ? "#94A3B8" : d.dias >= 90 ? "#DC2626" : d.dias >= 60 ? "#F97316" : d.dias >= 30 ? "#F59E0B" : "#16A34A";
@@ -2425,10 +2472,10 @@ function Finance() {
       ),
       // Os 4 números
       /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 } }, [
-        { l: "Faturado", v: fatMesData.faturado, c: "#2E6DA4", s: "este mês" },
         { l: "Pago", v: fatMesData.pago, c: "#16A34A", s: "recebido" },
-        { l: "Por pagar", v: fatMesData.porPagar, c: "#DC2626", s: "todos os meses" },
-        { l: "Projecção", v: fatMesData.projecao, c: "#7C3AED", s: "até fim do mês" }
+        { l: "Em d\xEDvida", v: dividaTotalAcumulada, c: "#DC2626", s: "vencido · meses fechados" },
+        { l: "Previs\xE3o do mês", v: previsaoMesTotal, c: "#7C3AED", s: "a decorrer (n\xE3o vencido)" },
+        { l: "Faturado", v: fatMesData.faturado, c: "#2E6DA4", s: "este mês" }
       ].map(function(k) {
         return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 14, borderTop: "3px solid " + k.c }) },
           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 8 } }, k.l),
@@ -2513,7 +2560,7 @@ function Finance() {
     { l: "Faturado c/IVA", v: fmt(fatComIva), c: "#0F766E" },
     { l: "Recebido", v: fmt(recebido), s: fatComIva > 0 ? Math.round(recebido / fatComIva * 100) + "%" : "0%", c: "#16A34A" },
     { l: "Em d\xEDvida (este m\xEAs)", v: fmt(divida), c: "#DC2626" },
-    { l: "D\xEDvida total (todos os meses)", v: fmt(dividaTotalAcumulada), c: "#991B1B" }
+    { l: "Em d\xEDvida (vencido)", v: fmt(dividaTotalAcumulada), c: "#991B1B" }
   ].map(function(k) {
     return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 14, borderTop: "3px solid " + k.c }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 8 } }, k.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 900, color: k.c } }, k.v), k.s && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 4 } }, k.s));
   })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Custos"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 } }, [
@@ -2593,14 +2640,24 @@ function Finance() {
                           /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, "\uD83C\uDFD7 ", o.nome),
                           /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 2 } }, o.estado === "concluida" ? "Conclu\xEDda em " + (o.data_conclusao || "\u2014") : "Em curso \u00B7 adjudicada em " + (o.data_adjudicacao || "\u2014"))
                         ),
-                        /* @__PURE__ */ React.createElement("button", { onClick: function() {
-                          var v = window.prompt("Valor do or\xE7amento acordado (sem IVA):", o.valor_orcamento || 0);
-                          if (v === null) return;
-                          var nv = parseFloat(String(v).replace(",", "."));
-                          if (isNaN(nv) || nv < 0) { alert("Valor inv\xE1lido."); return; }
-                          guardarObra(o, { valor_orcamento: nv });
-                        }, style: Object.assign({}, btnX, { fontSize: 10, padding: "3px 8px" }) }, "\u270E or\xE7amento")
+                        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" } },
+                          /* @__PURE__ */ React.createElement("button", { onClick: function() {
+                            var v = window.prompt("Valor do or\xE7amento acordado (sem IVA):", o.valor_orcamento || 0);
+                            if (v === null) return;
+                            var nv = parseFloat(String(v).replace(",", "."));
+                            if (isNaN(nv) || nv < 0) { alert("Valor inv\xE1lido."); return; }
+                            guardarObra(o, { valor_orcamento: nv });
+                          }, style: Object.assign({}, btnX, { fontSize: 10, padding: "3px 8px" }) }, "\u270E or\xE7amento"),
+                          /* @__PURE__ */ React.createElement("button", { onClick: function() {
+                            var v = window.prompt("% de adjudica\xE7\xE3o \u2014 a fatia que vence j\xE1 (o resto vence quando a obra ficar conclu\xEDda):", obraPctAdj(o));
+                            if (v === null) return;
+                            var nv = parseFloat(String(v).replace(",", "."));
+                            if (isNaN(nv) || nv < 0 || nv > 100) { alert("Percentagem inv\xE1lida (0 a 100)."); return; }
+                            guardarObra(o, { adjudicacao_pct: nv });
+                          }, style: Object.assign({}, btnX, { fontSize: 10, padding: "3px 8px" }) }, "\u270E adjudica\xE7\xE3o " + obraPctAdj(o) + "%")
+                        )
                       ),
+                      o.estado !== "concluida" && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", marginBottom: 6 } }, "Vencido (adjudica\xE7\xE3o ", obraPctAdj(o), "%): ", /* @__PURE__ */ React.createElement("b", null, fmt(obraDevidoComIva(o))), " \u00B7 Por vencer (previs\xE3o): ", fmt(obraPrevisaoComIva(o))),
                       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 } },
                         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: "#1A3A5C" } }, fmt(total)),
                         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: falta < 0.01 ? "#16A34A" : "#B45309" } }, falta < 0.01 ? "\u2713 Pago" : "Falta " + fmt(falta))
