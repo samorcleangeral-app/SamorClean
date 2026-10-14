@@ -1204,28 +1204,40 @@ function Finance() {
   var _diasPassG = 0; var _dG = new Date(_mStartG);
   while (_dG <= now) { if (_dG.getDay() !== 0 && _dG.getDay() !== 6) _diasPassG++; _dG.setDate(_dG.getDate() + 1); }
   var _propMesG = _diasUteisMesG > 0 ? _diasPassG / _diasUteisMesG : 1;
-  // Receita do mês AO DIA DE HOJE, pela regra certa por tipo:
-  //   mensal → avença base × proporção dos dias decorridos + extras (já realizados, a 100%);
-  //   visita/hora → serviço a serviço (cada visita feita já é receita ganha, não se proporcionaliza);
-  //   obra → entra pelos monthJobs abaixo. Sem contar a dobrar.
+  // Receita do mês AO DIA DE HOJE = só o que está REALIZADO (serviços concluídos):
+  //   mensal → avença base × proporção dos dias decorridos + extras já concluídos;
+  //   visita → só visitas com status "completed" (a agendada ainda não aconteceu → é previsão);
+  //   hora/obra → entram pelos monthJobs abaixo (que já vêm filtrados a completed).
+  // ag* acumula o AGENDADO/por fazer do mês = previsão (não entra na margem).
   const _recMes = (function() {
-    var sIva = 0, cIva = 0, pg = 0;
+    var sIva = 0, cIva = 0, pg = 0, agSem = 0, agCom = 0;
     clientes.forEach(function(c) {
       if (c.cliente_principal_id || c.excluir_financeiro === true) return;
+      var ivaT = c.iva_type;
       if (c.tipo_faturacao === "mensal") {
         var base = parseFloat(c.valor_visita) || 0;
-        var extras = valorMesSemIva(c.id, mesActualStr) - base;   // valorMesSemIva(mensal) = base + extras
-        var semHoje = base * _propMesG + extras;
-        sIva += semHoje;
-        cIva += aplicaIva(semHoje, c.iva_type);
-        pg += pagoMesComIva(c.id, mesActualStr);
+        var extrasFeitos = 0, extrasAg = 0;
+        jobsClienteMes(c.id, mesActualStr).forEach(function(j) {
+          if (!j.val_manual) return;
+          var v = parseFloat(j.val) || 0;
+          if (j.status === "completed") extrasFeitos += v; else if (j.status !== "cancelado") extrasAg += v;
+        });
+        var semHoje = base * _propMesG + extrasFeitos;             // avença ao dia + extras concluídos
+        sIva += semHoje; cIva += aplicaIva(semHoje, ivaT); pg += pagoMesComIva(c.id, mesActualStr);
+        var semAg = base * (1 - _propMesG) + extrasAg;             // resto da avença + extras agendados = previsão
+        agSem += semAg; agCom += aplicaIva(semAg, ivaT);
       } else if (isClienteVisita(c.id)) {
-        sIva += valorMesSemIva(c.id, mesActualStr);
-        cIva += valorMesComIva(c.id, mesActualStr);
-        pg += pagoMesComIva(c.id, mesActualStr);
+        var vv = parseFloat(c.valor_visita) || 0;
+        var feito = 0, agend = 0;
+        jobsClienteMes(c.id, mesActualStr).forEach(function(j) {
+          var v = j.val_manual ? (parseFloat(j.val) || 0) : vv;
+          if (j.status === "completed") feito += v; else if (j.status !== "cancelado") agend += v;
+        });
+        sIva += feito; cIva += aplicaIva(feito, ivaT); pg += pagoMesComIva(c.id, mesActualStr);
+        agSem += agend; agCom += aplicaIva(agend, ivaT);
       }
     });
-    return { sIva: sIva, cIva: cIva, pg: pg };
+    return { sIva: sIva, cIva: cIva, pg: pg, agSem: agSem, agCom: agCom };
   })();
   const _recServ = monthJobs.reduce(function(acc, j) {
     var c = clientsMap[j.client_id];
@@ -1236,10 +1248,23 @@ function Finance() {
     acc.pg += valorPagoDoJob(j);
     return acc;
   }, { sIva: 0, cIva: 0, pg: 0 });
-  const fatSemIva = _recMes.sIva + _recServ.sIva;
+  // Agendado (por fazer) de hora/obra deste mês = previsão. monthJobs só traz concluídos,
+  // por isso o agendado vem do monthJobsAll (todos os do mês) filtrando o que ainda não está concluído.
+  const _agServ = monthJobsAll.reduce(function(acc, j) {
+    if (j.status === "completed" || j.status === "cancelado") return acc;
+    var c = clientsMap[j.client_id];
+    var tf = c ? (c.cliente_principal_id ? (clientsMap[c.cliente_principal_id] || {}).tipo_faturacao : c.tipo_faturacao) : null;
+    if (tf === "mensal" || tf === "visita") return acc;   // avença/visita já tratados acima
+    acc.sIva += (j.val || 0);
+    acc.cIva += withIva(j.val || 0, j);
+    return acc;
+  }, { sIva: 0, cIva: 0 });
+  const fatSemIva = _recMes.sIva + _recServ.sIva;   // REALIZADO (concluído) até hoje
   const fatComIva = _recMes.cIva + _recServ.cIva;
   const recebido = _recMes.pg + _recServ.pg;
   const divida = Math.max(0, fatComIva - recebido);
+  const previsaoReceitaSemIva = _recMes.agSem + _agServ.sIva;   // agendado/por fazer este mês
+  const previsaoReceitaComIva = _recMes.agCom + _agServ.cIva;
   // Dívida por mês dos clientes "por visita"/"hora" (consistente com a conta corrente)
   const byClientCobrarVisita = (function() {
     var out = {};
@@ -2582,7 +2607,7 @@ function Finance() {
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", marginTop: 2 } }, c.count, " servi\xE7o", c.count !== 1 ? "s" : "", " \u2014 \u26A0 ", rotulo)
       );
     }));
-  })()), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Receitas (ao dia de hoje)"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12, marginBottom: 20 } }, [
+  })()), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Receitas (realizado at\xE9 hoje)"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12, marginBottom: 10 } }, [
     { l: "Faturado s/IVA", v: fmt(fatSemIva), c: "#2E6DA4" },
     { l: "Faturado c/IVA", v: fmt(fatComIva), c: "#0F766E" },
     { l: "Recebido", v: fmt(recebido), s: fatComIva > 0 ? Math.round(recebido / fatComIva * 100) + "%" : "0%", c: "#16A34A" },
@@ -2590,7 +2615,7 @@ function Finance() {
     { l: "Em d\xEDvida (vencido)", v: fmt(dividaTotalAcumulada), c: "#991B1B" }
   ].map(function(k) {
     return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 14, borderTop: "3px solid " + k.c }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 8 } }, k.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 900, color: k.c } }, k.v), k.s && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 4 } }, k.s));
-  })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Custos"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 } }, [
+  })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#7C3AED", background: "#F5F3FF", border: "1px solid #E9D5FF", borderRadius: 8, padding: "9px 12px", marginBottom: 20, fontWeight: 600 } }, "📅 Agendado por fazer este m\xEAs: ", fmt(previsaoReceitaSemIva), " — previs\xE3o, ainda n\xE3o realizado (n\xE3o entra na margem)"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 } }, "Custos"), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 } }, [
     { l: "Total custos", v: fmt(totalCustos), c: "#EF4444" },
     { l: "Combust\xEDvel", v: fmt(custosCat["Combust\xEDvel"] || 0), c: "#F97316" },
     { l: "IVA dedut\xEDvel", v: fmt(totalIVADedutivel), c: "#16A34A" },
