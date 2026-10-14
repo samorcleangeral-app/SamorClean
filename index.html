@@ -1204,6 +1204,7 @@ function Finance() {
   var _diasPassG = 0; var _dG = new Date(_mStartG);
   while (_dG <= now) { if (_dG.getDay() !== 0 && _dG.getDay() !== 6) _diasPassG++; _dG.setDate(_dG.getDate() + 1); }
   var _propMesG = _diasUteisMesG > 0 ? _diasPassG / _diasUteisMesG : 1;
+  var nowStr = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
   // Receita do mês AO DIA DE HOJE = só o que está REALIZADO (serviços concluídos):
   //   mensal → avença base × proporção dos dias decorridos + extras já concluídos;
   //   visita → só visitas com status "completed" (a agendada ainda não aconteceu → é previsão);
@@ -1242,7 +1243,7 @@ function Finance() {
   const _recServ = monthJobs.reduce(function(acc, j) {
     var c = clientsMap[j.client_id];
     var tf = c ? (c.cliente_principal_id ? (clientsMap[c.cliente_principal_id] || {}).tipo_faturacao : c.tipo_faturacao) : null;
-    if (tf === "mensal" || tf === "visita") return acc;   // esses já entram pelo bloco acima
+    if (tf === "mensal" || tf === "visita" || tf === "orcamento") return acc;   // mensal/visita acima; obras no bloco próprio
     acc.sIva += (j.val || 0);
     acc.cIva += withIva(j.val || 0, j);
     acc.pg += valorPagoDoJob(j);
@@ -1254,14 +1255,41 @@ function Finance() {
     if (j.status === "completed" || j.status === "cancelado") return acc;
     var c = clientsMap[j.client_id];
     var tf = c ? (c.cliente_principal_id ? (clientsMap[c.cliente_principal_id] || {}).tipo_faturacao : c.tipo_faturacao) : null;
-    if (tf === "mensal" || tf === "visita") return acc;   // avença/visita já tratados acima
+    if (tf === "mensal" || tf === "visita" || tf === "orcamento") return acc;   // obras no bloco próprio
     acc.sIva += (j.val || 0);
     acc.cIva += withIva(j.val || 0, j);
     return acc;
   }, { sIva: 0, cIva: 0 });
-  const fatSemIva = _recMes.sIva + _recServ.sIva;   // REALIZADO (concluído) até hoje
-  const fatComIva = _recMes.cIva + _recServ.cIva;
-  const recebido = _recMes.pg + _recServ.pg;
+  // Receita de OBRAS atribuída ao mês: a tranche de adjudicação vence no mês da adjudicação;
+  // o restante vence no mês da conclusão. É receita como qualquer outra — entra na margem.
+  const _recObra = (function() {
+    var sIva = 0, cIva = 0, pg = 0;
+    obras.forEach(function(o) {
+      var c = clientsMap[o.client_id];
+      if (!c || c.excluir_financeiro === true) return;
+      var ivaT = c.iva_type;
+      var orc = parseFloat(o.valor_orcamento) || 0;
+      if (orc > 0) {
+        var adj = orc * (obraPctAdj(o) / 100);
+        var resto = orc - adj;
+        if (o.data_adjudicacao && o.data_adjudicacao.slice(0, 7) === mesActualStr && o.data_adjudicacao <= nowStr) {
+          sIva += adj; cIva += aplicaIva(adj, ivaT);
+        }
+        if (o.estado === "concluida" && o.data_conclusao && o.data_conclusao.slice(0, 7) === mesActualStr && o.data_conclusao <= nowStr) {
+          sIva += resto; cIva += aplicaIva(resto, ivaT);
+        }
+      }
+    });
+    pagMovimentos.forEach(function(m) {
+      if (!m.obra_id) return;
+      var dp = m.data_pagamento || "";
+      if (dp.slice(0, 7) === mesActualStr && dp <= nowStr) pg += parseFloat(m.valor) || 0;
+    });
+    return { sIva: sIva, cIva: cIva, pg: pg };
+  })();
+  const fatSemIva = _recMes.sIva + _recServ.sIva + _recObra.sIva;   // REALIZADO (concluído) até hoje — avenças + visitas + horas + OBRAS
+  const fatComIva = _recMes.cIva + _recServ.cIva + _recObra.cIva;
+  const recebido = _recMes.pg + _recServ.pg + _recObra.pg;
   const divida = Math.max(0, fatComIva - recebido);
   const previsaoReceitaSemIva = _recMes.agSem + _agServ.sIva;   // agendado/por fazer este mês
   const previsaoReceitaComIva = _recMes.agCom + _agServ.cIva;
