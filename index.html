@@ -291,6 +291,21 @@ function calcPremioProdutividade(avsClientesMes, avMensal) {
   var premio = fonte < 4 ? 0 : (fonte <= 4.5 ? 25 : 50);
   return { premio: premio, nota: fonte, origem: origem, precisaAvaliar: false };
 }
+function minsHHMM(s) {
+  if (!s) return null;
+  var p = String(s).split(":");
+  var h = parseInt(p[0], 10), m = parseInt(p[1], 10);
+  if (isNaN(h) || isNaN(m)) return null;
+  return h * 60 + m;
+}
+function faltouEntrada(job, tol) {
+  // Esquecimento de entrada: sem check_in, ou check_in depois de (hora marcada + tolerância do cliente).
+  if (!job || !job.check_in) return true;
+  var t1 = minsHHMM(job.t1), ci = minsHHMM(job.check_in);
+  if (t1 == null || ci == null) return false;
+  var t = (tol == null ? 15 : tol);
+  return ci > t1 + t;
+}
 function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajustesRecibo, premiosOpcionais, dadosProdutividade) {
   var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
   if (!rh) return { total: 0, detalhe: [], tipo: null };
@@ -10256,13 +10271,15 @@ function QuadroEsquecimentos(props) {
     var mEnd = ano + "-" + String(mesIdx + 1).padStart(2, "0") + "-" + String(ultimoDia).padStart(2, "0");
     Promise.all([
       db.list("funcionarios", "?select=*"),
-      db.list("servicos", "?select=id,cn,date,t1,team,check_in,check_out,status&date=gte." + mStart + "&date=lte." + mEnd + "&status=eq.completed"),
+      db.list("servicos", "?select=id,client_id,cn,date,t1,team,check_in,check_out,status&date=gte." + mStart + "&date=lte." + mEnd + "&status=eq.completed"),
       db.list("picagens_armazem", "?select=funcionario_id,tipo,created_at&created_at=gte." + mStart + "T00:00:00&created_at=lte." + mEnd + "T23:59:59"),
-      db.list("esquecimentos_anulados", "?select=*")
+      db.list("esquecimentos_anulados", "?select=*"),
+      db.list("clientes", "?select=id,tolerancia_minutos")
     ]).then(function(res) {
       var emps = (res[0] || []).filter(function(e) { return e.ativo !== false; });
       var servicos = res[1] || [];
       var picArm = res[2] || [];
+      var tolById = {}; (res[4] || []).forEach(function(c) { if (c.tolerancia_minutos != null) tolById[c.id] = c.tolerancia_minutos; });
       var anulMap = {};
       var anulArmMap = {};
       (res[3] || []).forEach(function(a) {
@@ -10277,7 +10294,7 @@ function QuadroEsquecimentos(props) {
         servicos.forEach(function(j) {
           if ((j.team || []).indexOf(e.id) === -1) return;
           if (j.date) diasComServico[j.date] = true;
-          if (!j.check_in) faltasServ.push({ sid: j.id, cn: j.cn, date: j.date, t1: j.t1, tipo: "entrada" });
+          if (faltouEntrada(j, tolById[j.client_id])) faltasServ.push({ sid: j.id, cn: j.cn, date: j.date, t1: j.t1, tipo: "entrada", late: !!j.check_in, ci: j.check_in });
           if (!j.check_out) faltasServ.push({ sid: j.id, cn: j.cn, date: j.date, t1: j.t1, tipo: "sa\xEDda" });
         });
         var diasComEntradaArm = {};
@@ -10353,7 +10370,7 @@ function QuadroEsquecimentos(props) {
         estaAberto && d.detalheServ.length > 0 ? /* @__PURE__ */ React.createElement("div", { style: { padding: "0 0 10px 26px" } }, d.detalheServ.slice().sort(function(a, b) { return a.date < b.date ? -1 : 1; }).map(function(f, i) {
           var anulado = anulados[chaveAnul(d.id, f.sid, f.tipo)];
           return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11.5, padding: "4px 0", opacity: anulado ? 0.55 : 1 } },
-            /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B", flex: 1 } }, f.date ? new Date(f.date + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) : "", " \xB7 ", f.cn || "", " \xB7 ", /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, color: anulado ? "#94A3B8" : "#DC2626", textDecoration: anulado ? "line-through" : "none" } }, "faltou ", f.tipo), anulado ? /* @__PURE__ */ React.createElement("span", { style: { color: "#16A34A", fontStyle: "italic" } }, " \u2014 anulado: ", anulado) : null),
+            /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B", flex: 1 } }, f.date ? new Date(f.date + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) : "", " \xB7 ", f.cn || "", " \xB7 ", /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, color: anulado ? "#94A3B8" : "#DC2626", textDecoration: anulado ? "line-through" : "none" } }, f.tipo === "entrada" && f.late ? "entrada fora da toler\xE2ncia — picou " + (f.ci || "") + ", previsto " + (f.t1 || "") : "faltou " + f.tipo), anulado ? /* @__PURE__ */ React.createElement("span", { style: { color: "#16A34A", fontStyle: "italic" } }, " \u2014 anulado: ", anulado) : null),
             anulado ? /* @__PURE__ */ React.createElement("button", { onClick: function() { reativar(d.id, f); }, style: { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline" } }, "reativar") : /* @__PURE__ */ React.createElement("button", { onClick: function() { anular(d.id, f); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, color: "#2E6DA4", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "3px 10px", flexShrink: 0 } }, "anular")
           );
         })) : null,
