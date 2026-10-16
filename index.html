@@ -10259,6 +10259,7 @@ function QuadroEsquecimentos(props) {
   const [anulados, setAnulados] = useState({});
   const [loading, setLoading] = useState(true);
   const [aberto, setAberto] = useState(null);
+  const [grupoAberto, setGrupoAberto] = useState(null);
   const [anularModal, setAnularModal] = useState(null);
   const [anuladosArm, setAnuladosArm] = useState({});
   function chaveAnul(fid, sid, tipo) { return fid + "|" + sid + "|" + tipo; }
@@ -10356,33 +10357,45 @@ function QuadroEsquecimentos(props) {
       var perto = !perde && (d.esqServ >= 7 || d.esqArm >= 3);
       var cor = perde ? "#DC2626" : perto ? "#F59E0B" : "#16A34A";
       var estaAberto = aberto === d.id;
+      var det = d.detalheServ || [];
+      function anuladoDe(f) { return anulados[chaveAnul(d.id, f.sid, f.tipo)]; }
+      function dataCurta(ds) { return ds ? new Date(ds + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) : ""; }
+      var tardias = det.filter(function(f) { return f.tipo === "entrada" && f.late; }).map(function(f) { var mi = (minsHHMM(f.ci) || 0) - (minsHHMM(f.t1) || 0); return { f: f, min: mi }; }).sort(function(a, b) { return b.min - a.min; });
+      var semEnt = det.filter(function(f) { return f.tipo === "entrada" && !f.late; });
+      var semSai = det.filter(function(f) { return f.tipo === "saída"; });
+      var arm = (d.detalheArm || []).map(function(dia) { return { dia: dia, anulado: anuladosArm[d.id + "|" + dia] }; });
+      var nTardias = tardias.filter(function(x) { return !anuladoDe(x.f); }).length;
+      var nSemEnt = semEnt.filter(function(f) { return !anuladoDe(f); }).length;
+      var nSemSai = semSai.filter(function(f) { return !anuladoDe(f); }).length;
+      var nArm = arm.filter(function(x) { return !x.anulado; }).length;
+      function toggleGrupo(k) { setGrupoAberto(grupoAberto === k ? null : k); }
+      function botaoAnular(f) { var an = anuladoDe(f); return an ? /* @__PURE__ */ React.createElement("button", { onClick: function() { reativar(d.id, f); }, style: { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline", flexShrink: 0 } }, "reativar") : /* @__PURE__ */ React.createElement("button", { onClick: function() { anular(d.id, f); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, color: "#2E6DA4", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "4px 10px", flexShrink: 0 } }, "anular"); }
+      function linhaTardia(x, i) { var f = x.f, an = anuladoDe(f); var b = x.min >= 45 ? { bg: "#FEF2F2", c: "#DC2626" } : x.min >= 15 ? { bg: "#FFF7ED", c: "#C2410C" } : { bg: "#F1F5F9", c: "#64748B" }; return /* @__PURE__ */ React.createElement("div", { key: "t" + i, style: { display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid #F4F7FA", opacity: an ? 0.5 : 1 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, fontWeight: 600, color: "#334155", textDecoration: an ? "line-through" : "none" } }, f.cn || ""), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 1 } }, dataCurta(f.date) + " · picou " + (f.ci || "") + ", previsto " + (f.t1 || "") + (an ? " — anulado: " + an : ""))), an ? null : /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 800, borderRadius: 6, padding: "2px 7px", flexShrink: 0, background: b.bg, color: b.c } }, "+" + x.min + " min"), botaoAnular(f)); }
+      function linhaTag(f, i, label, corTag) { var an = anuladoDe(f); return /* @__PURE__ */ React.createElement("div", { key: "s" + i, style: { display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid #F4F7FA", opacity: an ? 0.5 : 1 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, fontWeight: 600, color: "#334155", textDecoration: an ? "line-through" : "none" } }, f.cn || ""), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 1 } }, dataCurta(f.date) + (an ? " — anulado: " + an : ""))), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 7px", flexShrink: 0, background: corTag.bg, color: corTag.c } }, label), botaoAnular(f)); }
+      function chip(txt, bg, bd, c) { return /* @__PURE__ */ React.createElement("div", { style: { borderRadius: 10, padding: "7px 11px", fontSize: 11, fontWeight: 700, border: "1px solid " + bd, background: bg, color: c } }, txt); }
+      function grupo(k, titulo, n, conteudo) { if (!conteudo || conteudo.length === 0) return null; var open = grupoAberto === k; return /* @__PURE__ */ React.createElement("div", { key: k, style: { borderTop: "1px solid #E8EEF5" } }, /* @__PURE__ */ React.createElement("div", { onClick: function() { toggleGrupo(k); }, style: { display: "flex", alignItems: "center", gap: 10, padding: "11px 0", cursor: "pointer" } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#CBD5E1", fontSize: 11, display: "inline-block", transform: open ? "rotate(90deg)" : "none" } }, "▶"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12.5, fontWeight: 700, color: "#1A3A5C" } }, titulo), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12.5, fontWeight: 700, color: "#94A3B8" } }, "(" + n + ")")), open ? /* @__PURE__ */ React.createElement("div", { style: { paddingBottom: 10 } }, conteudo) : null); }
       return /* @__PURE__ */ React.createElement("div", { key: d.id, style: { borderBottom: "1px solid #F1F5F9" } },
-        /* @__PURE__ */ React.createElement("div", { onClick: function() { setAberto(estaAberto ? null : d.id); }, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 0", cursor: (d.detalheServ.length > 0 || (d.detalheArm && d.detalheArm.length > 0)) ? "pointer" : "default" } },
+        /* @__PURE__ */ React.createElement("div", { onClick: function() { setAberto(estaAberto ? null : d.id); setGrupoAberto(null); }, style: { display: "flex", alignItems: "center", gap: 10, padding: "12px 0", cursor: "pointer" } },
           /* @__PURE__ */ React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: cor, flexShrink: 0 } }),
           e_av(d.av, cor),
-          /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } },
+          /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } },
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, d.nome),
-            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, d.esqServ, " no servi\xE7o \xB7 ", d.esqArm, " no armaz\xE9m")
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, d.esqServ + " no serviço · " + d.esqArm + " no armazém")
           ),
-          perde ? /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 700, color: "#fff", background: "#DC2626", borderRadius: 6, padding: "3px 8px" } }, "perde pr\xE9mio") : null,
-          d.detalheServ.length > 0 ? /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#CBD5E1" } }, estaAberto ? "\u25B4" : "\u25BE") : null
+          perde ? /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 700, color: "#fff", background: "#DC2626", borderRadius: 6, padding: "3px 8px", flexShrink: 0 } }, "perde prémio") : null,
+          (d.esqServ > 0 || d.esqArm > 0) ? /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#CBD5E1" } }, estaAberto ? "▴" : "▾") : null
         ),
-        estaAberto && d.detalheServ.length > 0 ? /* @__PURE__ */ React.createElement("div", { style: { padding: "0 0 10px 26px" } }, d.detalheServ.slice().sort(function(a, b) { return a.date < b.date ? -1 : 1; }).map(function(f, i) {
-          var anulado = anulados[chaveAnul(d.id, f.sid, f.tipo)];
-          return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11.5, padding: "4px 0", opacity: anulado ? 0.55 : 1 } },
-            /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B", flex: 1 } }, f.date ? new Date(f.date + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) : "", " \xB7 ", f.cn || "", " \xB7 ", /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, color: anulado ? "#94A3B8" : "#DC2626", textDecoration: anulado ? "line-through" : "none" } }, f.tipo === "entrada" && f.late ? "entrada fora da toler\xE2ncia — picou " + (f.ci || "") + ", previsto " + (f.t1 || "") : "faltou " + f.tipo), anulado ? /* @__PURE__ */ React.createElement("span", { style: { color: "#16A34A", fontStyle: "italic" } }, " \u2014 anulado: ", anulado) : null),
-            anulado ? /* @__PURE__ */ React.createElement("button", { onClick: function() { reativar(d.id, f); }, style: { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline" } }, "reativar") : /* @__PURE__ */ React.createElement("button", { onClick: function() { anular(d.id, f); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, color: "#2E6DA4", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "3px 10px", flexShrink: 0 } }, "anular")
-          );
-        })) : null,
-        estaAberto && d.detalheArm && d.detalheArm.length > 0 ? /* @__PURE__ */ React.createElement("div", { style: { padding: "0 0 10px 26px" } },
-          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 800, color: "#94A3B8", textTransform: "uppercase", margin: "4px 0" } }, "Armaz\xE9m \u2014 dias sem picagem de entrada"),
-          d.detalheArm.map(function(dia, i) {
-            var anuladoA = anuladosArm[d.id + "|" + dia];
-            return /* @__PURE__ */ React.createElement("div", { key: "arm" + i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11.5, padding: "4px 0", opacity: anuladoA ? 0.55 : 1 } },
-              /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B", flex: 1 } }, dia ? new Date(dia + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) : "", " \xB7 ", /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, color: anuladoA ? "#94A3B8" : "#DC2626", textDecoration: anuladoA ? "line-through" : "none" } }, "sem picagem no armaz\xE9m"), anuladoA ? /* @__PURE__ */ React.createElement("span", { style: { color: "#16A34A", fontStyle: "italic" } }, " \u2014 anulado: ", anuladoA) : null),
-              anuladoA ? /* @__PURE__ */ React.createElement("button", { onClick: function() { reativarArm(d.id, dia); }, style: { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline" } }, "reativar") : /* @__PURE__ */ React.createElement("button", { onClick: function() { anularArm(d.id, dia); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, color: "#2E6DA4", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "3px 10px", flexShrink: 0 } }, "anular")
-            );
-          })
+        estaAberto ? /* @__PURE__ */ React.createElement("div", { style: { padding: "0 0 12px 26px" } },
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", margin: "2px 0 4px" } },
+            chip(nTardias + " tardias", "#FFF7ED", "#FED7AA", "#9A3412"),
+            chip(nSemEnt + " sem entrada", "#FEF2F2", "#FECACA", "#991B1B"),
+            chip(nSemSai + " sem saída", "#EFF6FF", "#BBD7F2", "#1E40AF"),
+            nArm > 0 ? chip(nArm + " armazém", "#F8FAFC", "#E8EEF5", "#334155") : null
+          ),
+          grupo(d.id + "|tardias", "Entradas tardias", nTardias, tardias.map(linhaTardia)),
+          grupo(d.id + "|sement", "Sem entrada", nSemEnt, semEnt.map(function(f, i) { return linhaTag(f, i, "sem entrada", { bg: "#FEF2F2", c: "#DC2626" }); })),
+          grupo(d.id + "|semsai", "Sem saída", nSemSai, semSai.map(function(f, i) { return linhaTag(f, i, "sem saída", { bg: "#EFF6FF", c: "#1E40AF" }); })),
+          grupo(d.id + "|arm", "Sem picagem no armazém", nArm, arm.map(function(x, i) { var an = x.anulado; return /* @__PURE__ */ React.createElement("div", { key: "a" + i, style: { display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid #F4F7FA", opacity: an ? 0.5 : 1 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, fontWeight: 600, color: "#334155", textDecoration: an ? "line-through" : "none" } }, dataCurta(x.dia)), an ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#16A34A", fontStyle: "italic", marginTop: 1 } }, "anulado: " + an) : null), an ? /* @__PURE__ */ React.createElement("button", { onClick: function() { reativarArm(d.id, x.dia); }, style: { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline", flexShrink: 0 } }, "reativar") : /* @__PURE__ */ React.createElement("button", { onClick: function() { anularArm(d.id, x.dia); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, color: "#2E6DA4", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "4px 10px", flexShrink: 0 } }, "anular")); }))
         ) : null
       );
     }),
