@@ -1968,6 +1968,8 @@ function Finance() {
             return s2 + (d.l.indexOf("Seg. Social") !== -1 ? d.v : 0);
           }, 0);
         }, 0);
+        ssColabs = Math.round(ssColabs * 100) / 100;
+        ssGerencia = Math.round(ssGerencia * 100) / 100;
         var ssPatronal = ssColabs + ssGerencia;
         var baseSS = ssPatronal / 0.2375;
         var ss11 = baseSS * 0.11;
@@ -4344,6 +4346,7 @@ function Routes() {
 }
 function HistoricoVisitas(props) {
   const cliente = props.cliente;
+  var tolCli = (cliente && cliente.tolerancia_minutos != null) ? cliente.tolerancia_minutos : 15;
   const emps = props.emps || [];
   const [visitas, setVisitas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -4373,7 +4376,7 @@ function HistoricoVisitas(props) {
     const d = props2.diff;
     if (d === null) return /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "\u2014");
     if (d <= 0) return /* @__PURE__ */ React.createElement("span", { style: { background: "#DCFCE7", color: "#15803D", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, "Pontual");
-    if (d <= 10) return /* @__PURE__ */ React.createElement("span", { style: { background: "#FEF3C7", color: "#92400E", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, "+", d, " min");
+    if (d <= tolCli) return /* @__PURE__ */ React.createElement("span", { style: { background: "#FEF3C7", color: "#92400E", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, "+", d, " min");
     return /* @__PURE__ */ React.createElement("span", { style: { background: "#FEE2E2", color: "#991B1B", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, "+", d, " min \u26A0");
   }
   function empName(id) {
@@ -4385,7 +4388,7 @@ function HistoricoVisitas(props) {
   function exportPDF() {
     const rows = visitas.map(function(v) {
       const diff = diffMin(v.t1, v.check_in);
-      const diffStr = diff === null ? "\u2014" : diff <= 0 ? "Pontual" : "+" + diff + " min" + (diff > 10 ? " \u26A0" : "");
+      const diffStr = diff === null ? "\u2014" : diff <= 0 ? "Pontual" : "+" + diff + " min" + (diff > tolCli ? " \u26A0" : "");
       const team = (v.team || []).map(empName).join(", ") || "\u2014";
       const cl = v.cl || [];
       const done = (v.done_tasks || []).length;
@@ -4421,7 +4424,7 @@ function HistoricoVisitas(props) {
       <tbody>${rows}</tbody>
     </table>
     <div style="margin-top:24px;font-size:11px;color:#94A3B8;border-top:1px solid #eee;padding-top:12px">
-      \u26A0 Atraso assinalado quando a entrada \xE9 superior a 10 minutos ap\xF3s a hora prevista.
+      \u26A0 Atraso assinalado quando a entrada \xE9 superior a ${tolCli} minutos ap\xF3s a hora prevista (toler\xE2ncia do cliente).
     </div>
     <script>window.onload=function(){window.print();}<\/script>
     </body></html>`);
@@ -4429,14 +4432,14 @@ function HistoricoVisitas(props) {
   }
   const atrasados = visitas.filter(function(v) {
     const d = diffMin(v.t1, v.check_in);
-    return d !== null && d > 10;
+    return d !== null && d > tolCli;
   }).length;
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#94A3B8" } }, "A carregar hist\xF3rico...");
   return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } }, [7, 30, 90].map(function(p) {
     return /* @__PURE__ */ React.createElement("button", { key: p, onClick: function() {
       setPeriodo(p);
     }, style: { padding: "6px 12px", borderRadius: 7, border: "1.5px solid " + (periodo === p ? "#2E6DA4" : "#E2EBF4"), background: periodo === p ? "#EFF6FF" : "#fff", color: periodo === p ? "#2E6DA4" : "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, p, " dias");
-  })), /* @__PURE__ */ React.createElement("button", { onClick: exportPDF, style: Object.assign({}, btn, { fontSize: 12, padding: "7px 14px" }) }, "Exportar PDF")), atrasados > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", border: "1px solid #FECACA", borderRadius: 8, padding: "10px 14px", marginBottom: 12, fontSize: 12, color: "#991B1B", fontWeight: 600 } }, "\u26A0 ", atrasados, " visita", atrasados !== 1 ? "s" : "", " com atraso superior a 10 minutos nos \xFAltimos ", periodo, " dias"), visitas.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: "24px 0", fontSize: 13 } }, "Sem visitas nos \xFAltimos ", periodo, " dias.") : /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { borderBottom: "2px solid #E2EBF4" } }, ["Data", "Previsto", "Entrada", "Sa\xEDda", "Pontualidade", "Equipa", "Checklist", "Estado", "Fotos", "Nota"].map(function(h) {
+  })), /* @__PURE__ */ React.createElement("button", { onClick: exportPDF, style: Object.assign({}, btn, { fontSize: 12, padding: "7px 14px" }) }, "Exportar PDF")), atrasados > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEE2E2", border: "1px solid #FECACA", borderRadius: 8, padding: "10px 14px", marginBottom: 12, fontSize: 12, color: "#991B1B", fontWeight: 600 } }, "\u26A0 ", atrasados, " visita", atrasados !== 1 ? "s" : "", " com atraso superior a ", tolCli, " minutos nos \xFAltimos ", periodo, " dias"), visitas.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: "24px 0", fontSize: 13 } }, "Sem visitas nos \xFAltimos ", periodo, " dias.") : /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { borderBottom: "2px solid #E2EBF4" } }, ["Data", "Previsto", "Entrada", "Sa\xEDda", "Pontualidade", "Equipa", "Checklist", "Estado", "Fotos", "Nota"].map(function(h) {
     return /* @__PURE__ */ React.createElement("th", { key: h, style: { textAlign: "left", padding: "8px 10px", fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", whiteSpace: "nowrap" } }, h);
   }))), /* @__PURE__ */ React.createElement("tbody", null, visitas.map(function(v) {
     const diff = diffMin(v.t1, v.check_in);
@@ -9387,6 +9390,7 @@ function RelatorioMensal() {
       if (tipoA.indexOf("injustificada") !== -1) byEmp[a.funcionario_id].faltasInjust += conta;
       else if (tipoA.indexOf("justificada") !== -1) byEmp[a.funcionario_id].faltasJust += conta;
     });
+    var tolByIdRel = {}; (clientes || []).forEach(function(c) { if (c.tolerancia_minutos != null) tolByIdRel[c.id] = c.tolerancia_minutos; });
     (servicos || []).forEach(function(j) {
       (j.team || []).forEach(function(eid) {
         if (!byEmp[eid]) return;
@@ -9403,7 +9407,7 @@ function RelatorioMensal() {
           const prev = j.t1.split(":").map(Number);
           const real = j.check_in.split(":").map(Number);
           const diff = real[0] * 60 + real[1] - (prev[0] * 60 + prev[1]);
-          if (diff > 10) byEmp[eid].atrasos++;
+          var tolRel = tolByIdRel[j.client_id]; if (tolRel == null) tolRel = 15; if (diff > tolRel) byEmp[eid].atrasos++;
         }
       });
     });
@@ -10260,6 +10264,8 @@ function QuadroEsquecimentos(props) {
   const [loading, setLoading] = useState(true);
   const [aberto, setAberto] = useState(null);
   const [grupoAberto, setGrupoAberto] = useState(null);
+  const [verMais, setVerMais] = useState({});
+  const [verAnul, setVerAnul] = useState({});
   const [anularModal, setAnularModal] = useState(null);
   const [anuladosArm, setAnuladosArm] = useState({});
   function chaveAnul(fid, sid, tipo) { return fid + "|" + sid + "|" + tipo; }
@@ -10313,12 +10319,17 @@ function QuadroEsquecimentos(props) {
   useEffect(function() { carregar(); }, [mesRef]);
   function anular(fid, f) { setAnularModal({ fid: fid, f: f, tipo: "servico" }); }
   function anularArm(fid, dia) { setAnularModal({ fid: fid, dia: dia, tipo: "armazem" }); }
+  function anularGrupo(lista) { if (lista && lista.length) setAnularModal({ lista: lista }); }
   async function confirmarAnular(motivo) {
     var m = anularModal;
     if (!m) return;
     try {
-      var body = (m.tipo === "armazem") ? { funcionario_id: m.fid, dia_ref: m.dia, tipo_picagem: "armazem", motivo: motivo } : { funcionario_id: m.fid, servico_id: m.f.sid, tipo_picagem: m.f.tipo, motivo: motivo };
-      await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "resolution=merge-duplicates" }), body: JSON.stringify(body) });
+      var itens = m.lista ? m.lista : [m];
+      for (var i = 0; i < itens.length; i++) {
+        var it = itens[i];
+        var body = (it.tipo === "armazem") ? { funcionario_id: it.fid, dia_ref: it.dia, tipo_picagem: "armazem", motivo: motivo } : { funcionario_id: it.fid, servico_id: it.f.sid, tipo_picagem: it.f.tipo, motivo: motivo };
+        await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "resolution=merge-duplicates" }), body: JSON.stringify(body) });
+      }
       setAnularModal(null);
       carregar();
     } catch (e) { window.alert("Erro ao anular: " + e.message); }
@@ -10368,12 +10379,41 @@ function QuadroEsquecimentos(props) {
       var nSemEnt = semEnt.filter(function(f) { return !anuladoDe(f); }).length;
       var nSemSai = semSai.filter(function(f) { return !anuladoDe(f); }).length;
       var nArm = arm.filter(function(x) { return !x.anulado; }).length;
-      function toggleGrupo(k) { setGrupoAberto(grupoAberto === k ? null : k); }
+      function toggleGrupo(k) { setGrupoAberto(grupoAberto === k ? null : k); setVerMais(function(s) { var n = Object.assign({}, s); delete n[k]; return n; }); setVerAnul(function(s) { var n = Object.assign({}, s); delete n[k]; return n; }); }
       function botaoAnular(f) { var an = anuladoDe(f); return an ? /* @__PURE__ */ React.createElement("button", { onClick: function() { reativar(d.id, f); }, style: { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline", flexShrink: 0 } }, "reativar") : /* @__PURE__ */ React.createElement("button", { onClick: function() { anular(d.id, f); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, color: "#2E6DA4", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "4px 10px", flexShrink: 0 } }, "anular"); }
       function linhaTardia(x, i) { var f = x.f, an = anuladoDe(f); var b = x.min >= 45 ? { bg: "#FEF2F2", c: "#DC2626" } : x.min >= 15 ? { bg: "#FFF7ED", c: "#C2410C" } : { bg: "#F1F5F9", c: "#64748B" }; return /* @__PURE__ */ React.createElement("div", { key: "t" + i, style: { display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid #F4F7FA", opacity: an ? 0.5 : 1 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, fontWeight: 600, color: "#334155", textDecoration: an ? "line-through" : "none" } }, f.cn || ""), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 1 } }, dataCurta(f.date) + " · picou " + (f.ci || "") + ", previsto " + (f.t1 || "") + (an ? " — anulado: " + an : ""))), an ? null : /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 800, borderRadius: 6, padding: "2px 7px", flexShrink: 0, background: b.bg, color: b.c } }, "+" + x.min + " min"), botaoAnular(f)); }
       function linhaTag(f, i, label, corTag) { var an = anuladoDe(f); return /* @__PURE__ */ React.createElement("div", { key: "s" + i, style: { display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid #F4F7FA", opacity: an ? 0.5 : 1 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, fontWeight: 600, color: "#334155", textDecoration: an ? "line-through" : "none" } }, f.cn || ""), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 1 } }, dataCurta(f.date) + (an ? " — anulado: " + an : ""))), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 7px", flexShrink: 0, background: corTag.bg, color: corTag.c } }, label), botaoAnular(f)); }
+      function linhaArm(x, i) { var an = x.anulado; return /* @__PURE__ */ React.createElement("div", { key: "a" + i, style: { display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid #F4F7FA", opacity: an ? 0.5 : 1 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, fontWeight: 600, color: "#334155", textDecoration: an ? "line-through" : "none" } }, dataCurta(x.dia)), an ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#16A34A", fontStyle: "italic", marginTop: 1 } }, "anulado: " + an) : null), an ? /* @__PURE__ */ React.createElement("button", { onClick: function() { reativarArm(d.id, x.dia); }, style: { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline", flexShrink: 0 } }, "reativar") : /* @__PURE__ */ React.createElement("button", { onClick: function() { anularArm(d.id, x.dia); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, color: "#2E6DA4", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "4px 10px", flexShrink: 0 } }, "anular")); }
       function chip(txt, bg, bd, c) { return /* @__PURE__ */ React.createElement("div", { style: { borderRadius: 10, padding: "7px 11px", fontSize: 11, fontWeight: 700, border: "1px solid " + bd, background: bg, color: c } }, txt); }
-      function grupo(k, titulo, n, conteudo) { if (!conteudo || conteudo.length === 0) return null; var open = grupoAberto === k; return /* @__PURE__ */ React.createElement("div", { key: k, style: { borderTop: "1px solid #E8EEF5" } }, /* @__PURE__ */ React.createElement("div", { onClick: function() { toggleGrupo(k); }, style: { display: "flex", alignItems: "center", gap: 10, padding: "11px 0", cursor: "pointer" } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#CBD5E1", fontSize: 11, display: "inline-block", transform: open ? "rotate(90deg)" : "none" } }, "▶"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12.5, fontWeight: 700, color: "#1A3A5C" } }, titulo), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12.5, fontWeight: 700, color: "#94A3B8" } }, "(" + n + ")")), open ? /* @__PURE__ */ React.createElement("div", { style: { paddingBottom: 10 } }, conteudo) : null); }
+      function grupo(k, titulo, ativas, anul, listaAnular) {
+        if (ativas.length === 0 && anul.length === 0) return null;
+        var open = grupoAberto === k;
+        var mais = !!verMais[k], mAnul = !!verAnul[k], cap = 6;
+        var ativasVis = mais ? ativas : ativas.slice(0, cap);
+        return /* @__PURE__ */ React.createElement("div", { key: k, style: { borderTop: "1px solid #E8EEF5" } },
+          /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "11px 0" } },
+            /* @__PURE__ */ React.createElement("div", { onClick: function() { toggleGrupo(k); }, style: { display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1, minWidth: 0 } },
+              /* @__PURE__ */ React.createElement("span", { style: { color: "#CBD5E1", fontSize: 11, display: "inline-block", transform: open ? "rotate(90deg)" : "none" } }, "▶"),
+              /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12.5, fontWeight: 700, color: "#1A3A5C" } }, titulo),
+              /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12.5, fontWeight: 700, color: "#94A3B8" } }, "(" + ativas.length + ")")
+            ),
+            (open && listaAnular && listaAnular.length > 0) ? /* @__PURE__ */ React.createElement("button", { onClick: function() { anularGrupo(listaAnular); }, style: { fontSize: 11, fontWeight: 700, color: "#2E6DA4", background: "#EFF6FF", border: "none", borderRadius: 7, padding: "5px 11px", cursor: "pointer", flexShrink: 0 } }, "anular todas") : null
+          ),
+          open ? /* @__PURE__ */ React.createElement("div", { style: { paddingBottom: 10 } },
+            ativasVis,
+            (ativas.length > cap) ? /* @__PURE__ */ React.createElement("button", { onClick: function() { setVerMais(function(s) { var n = Object.assign({}, s); n[k] = !n[k]; return n; }); }, style: { background: "none", border: "none", color: "#2E6DA4", fontSize: 11.5, fontWeight: 700, cursor: "pointer", padding: "6px 0" } }, mais ? "ver menos" : "ver mais (" + (ativas.length - cap) + ")") : null,
+            (anul.length > 0) ? /* @__PURE__ */ React.createElement("div", { style: { marginTop: 2 } },
+              /* @__PURE__ */ React.createElement("button", { onClick: function() { setVerAnul(function(s) { var n = Object.assign({}, s); n[k] = !n[k]; return n; }); }, style: { background: "none", border: "none", color: "#94A3B8", fontSize: 11, fontWeight: 700, cursor: "pointer", padding: "4px 0" } }, mAnul ? "ocultar anuladas" : (anul.length + " anuladas — mostrar")),
+              mAnul ? /* @__PURE__ */ React.createElement("div", null, anul) : null
+            ) : null
+          ) : null
+        );
+      }
+      var tardiasA = tardias.filter(function(x) { return !anuladoDe(x.f); }), tardiasN = tardias.filter(function(x) { return anuladoDe(x.f); });
+      var semEntA = semEnt.filter(function(f) { return !anuladoDe(f); }), semEntN = semEnt.filter(function(f) { return anuladoDe(f); });
+      var semSaiA = semSai.filter(function(f) { return !anuladoDe(f); }), semSaiN = semSai.filter(function(f) { return anuladoDe(f); });
+      var armA = arm.filter(function(x) { return !x.anulado; }), armN = arm.filter(function(x) { return x.anulado; });
+      var ceRosa = { bg: "#FEF2F2", c: "#DC2626" }, ceAzul = { bg: "#EFF6FF", c: "#1E40AF" };
       return /* @__PURE__ */ React.createElement("div", { key: d.id, style: { borderBottom: "1px solid #F1F5F9" } },
         /* @__PURE__ */ React.createElement("div", { onClick: function() { setAberto(estaAberto ? null : d.id); setGrupoAberto(null); }, style: { display: "flex", alignItems: "center", gap: 10, padding: "12px 0", cursor: "pointer" } },
           /* @__PURE__ */ React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: cor, flexShrink: 0 } }),
@@ -10392,17 +10432,17 @@ function QuadroEsquecimentos(props) {
             chip(nSemSai + " sem saída", "#EFF6FF", "#BBD7F2", "#1E40AF"),
             nArm > 0 ? chip(nArm + " armazém", "#F8FAFC", "#E8EEF5", "#334155") : null
           ),
-          grupo(d.id + "|tardias", "Entradas tardias", nTardias, tardias.map(linhaTardia)),
-          grupo(d.id + "|sement", "Sem entrada", nSemEnt, semEnt.map(function(f, i) { return linhaTag(f, i, "sem entrada", { bg: "#FEF2F2", c: "#DC2626" }); })),
-          grupo(d.id + "|semsai", "Sem saída", nSemSai, semSai.map(function(f, i) { return linhaTag(f, i, "sem saída", { bg: "#EFF6FF", c: "#1E40AF" }); })),
-          grupo(d.id + "|arm", "Sem picagem no armazém", nArm, arm.map(function(x, i) { var an = x.anulado; return /* @__PURE__ */ React.createElement("div", { key: "a" + i, style: { display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid #F4F7FA", opacity: an ? 0.5 : 1 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, fontWeight: 600, color: "#334155", textDecoration: an ? "line-through" : "none" } }, dataCurta(x.dia)), an ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#16A34A", fontStyle: "italic", marginTop: 1 } }, "anulado: " + an) : null), an ? /* @__PURE__ */ React.createElement("button", { onClick: function() { reativarArm(d.id, x.dia); }, style: { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline", flexShrink: 0 } }, "reativar") : /* @__PURE__ */ React.createElement("button", { onClick: function() { anularArm(d.id, x.dia); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, color: "#2E6DA4", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "4px 10px", flexShrink: 0 } }, "anular")); }))
+          grupo(d.id + "|tardias", "Entradas tardias", tardiasA.map(linhaTardia), tardiasN.map(linhaTardia), tardiasA.map(function(x) { return { fid: d.id, tipo: "servico", f: x.f }; })),
+          grupo(d.id + "|sement", "Sem entrada", semEntA.map(function(f, i) { return linhaTag(f, i, "sem entrada", ceRosa); }), semEntN.map(function(f, i) { return linhaTag(f, i, "sem entrada", ceRosa); }), semEntA.map(function(f) { return { fid: d.id, tipo: "servico", f: f }; })),
+          grupo(d.id + "|semsai", "Sem saída", semSaiA.map(function(f, i) { return linhaTag(f, i, "sem saída", ceAzul); }), semSaiN.map(function(f, i) { return linhaTag(f, i, "sem saída", ceAzul); }), semSaiA.map(function(f) { return { fid: d.id, tipo: "servico", f: f }; })),
+          grupo(d.id + "|arm", "Sem picagem no armazém", armA.map(linhaArm), armN.map(linhaArm), armA.map(function(x) { return { fid: d.id, tipo: "armazem", dia: x.dia }; }))
         ) : null
       );
     }),
     anularModal && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 600, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }, onClick: function() { setAnularModal(null); } },
       /* @__PURE__ */ React.createElement("div", { onClick: function(e) { e.stopPropagation(); }, style: { background: "#fff", borderRadius: 16, width: "100%", maxWidth: 340, padding: 22 } },
-        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C", marginBottom: 4 } }, "Anular esquecimento"),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", marginBottom: 16 } }, "Porque \xE9 que este esquecimento n\xE3o deve contar?"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C", marginBottom: 4 } }, anularModal.lista ? "Anular " + anularModal.lista.length + " esquecimentos" : "Anular esquecimento"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", marginBottom: 16 } }, anularModal.lista ? "Porque \xE9 que estes esquecimentos n\xE3o devem contar? (aplica a todos)" : "Porque \xE9 que este esquecimento n\xE3o deve contar?"),
         ["QR n\xE3o funcionava", "Sem rede", "Outro"].map(function(cat) {
           return /* @__PURE__ */ React.createElement("button", { key: cat, onClick: function() { if (cat === "Outro") { var t = window.prompt("Descreve o motivo:", ""); if (t === null) return; confirmarAnular(t.trim() || "Outro"); } else { confirmarAnular(cat); } }, style: { width: "100%", background: "#F6FAFD", border: "1.5px solid #E2EBF4", borderRadius: 10, padding: "13px", fontSize: 14, fontWeight: 700, color: "#1A3A5C", cursor: "pointer", marginBottom: 8, textAlign: "left" } }, cat);
         }),
