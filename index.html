@@ -357,9 +357,10 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
   // Esquecimentos de armazém (só entrada) — vêm de fora
   var esquecimentosArmazem = (dadosProdutividade && dadosProdutividade.esquecimentosArmazem) || 0;
   var perdePorPicagem = esquecimentosServico >= 10 || esquecimentosArmazem >= 5;
-  var premio = (temAusencia || diasFalta > 0 || perdePorPicagem) ? 0 : 50;
-  if (tipo === "Recibo Verde") {
-    premio = (premiosOpcionais && premiosOpcionais[emp.id]) || 0;
+  var valorFichaPremio = (rh.tem_premio_assiduidade && parseFloat(rh.valor_premio_assiduidade)) || 0;
+  var premio = (temAusencia || diasFalta > 0 || perdePorPicagem) ? 0 : valorFichaPremio;
+  if (premiosOpcionais && premiosOpcionais[emp.id] != null) {
+    premio = premiosOpcionais[emp.id];
   }
   // Prémio de produtividade calculado já aqui (acima da SS) para poder entrar na base tributável
   var prodResult = null;
@@ -421,7 +422,7 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
     detalhe.push({ l: "Seguro acidentes (1,5%)", v: seguro });
     total = salarioEfectivo + subAlim + subFerias + subNatal + ss + seguro;
   }
-  var labelAssid = tipo === "Recibo Verde" ? "Prémio assiduidade (opcional, decidido pela gest\xE3o)" : "Prémio assiduidade";
+  var labelAssid = "Prémio assiduidade";
   if (premio === 0 && perdePorPicagem && !temAusencia && diasFerias === 0) {
     if (esquecimentosServico >= 10) labelAssid += " (\u26A0 " + esquecimentosServico + " picagens em falta)";
     else if (esquecimentosArmazem >= 5) labelAssid += " (\u26A0 " + esquecimentosArmazem + " faltas de picagem no armaz\xE9m)";
