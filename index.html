@@ -536,6 +536,7 @@ function Finance() {
   const [chartPer, setChartPer] = useState(12);
   const [chartCmp, setChartCmp] = useState(false);
   const [histFin, setHistFin] = useState([]);
+  const [despCatPer, setDespCatPer] = useState([]);
   const [selCobrar, setSelCobrar] = useState(null);
   const [contaCorrenteAberta, setContaCorrenteAberta] = useState(false);
   const [contaCorrenteJobs, setContaCorrenteJobs] = useState([]);
@@ -777,6 +778,7 @@ function Finance() {
       setStockSaidas(results[18] || []);
       db.list("pagamentos_movimentos", "?select=*&order=data_pagamento.desc").then(function(mv) { setPagMovimentos(mv || []); });
       db.list("historico_financeiro", "?select=ano,mes,despesas,faturado&order=ano.asc,mes.asc").then(function(h) { setHistFin(h || []); });
+      db.list("despesas", "?select=data,valor,categoria&data=gte." + localDateStr(new Date(now.getFullYear(), now.getMonth() - 11, 1))).then(function(dc) { setDespCatPer(dc || []); });
       setDespesas(results[3] || []);
       setRhData(results[5] || []);
       setEmps(results[6] || []);
@@ -1563,6 +1565,10 @@ function Finance() {
   })();
   var mdView = serieLonga.slice(serieLonga.length - chartPer);
   var mdPrev = chartCmp ? serieLonga.slice(serieLonga.length - chartPer - 12, serieLonga.length - 12) : [];
+  var mesesLiveView = {};
+  mdView.forEach(function(mm) { if (mm.live) mesesLiveView[mm.key] = true; });
+  var custosCatPer = {};
+  (despCatPer || []).forEach(function(dc) { var k = (dc.data || "").slice(0, 7); if (mesesLiveView[k]) { var cat = dc.categoria || "Outro"; custosCatPer[cat] = (custosCatPer[cat] || 0) + (dc.valor || 0); } });
   const maxB = Math.max.apply(null, monthsData.map(function(m) {
     return m.fat;
   }).concat([1]));
@@ -1901,6 +1907,37 @@ function Finance() {
     var margemPct = receita > 0 ? Math.round(margem / receita * 100) : 0;
     return { name: c.name, receita: receita, custoMO: custoMO, custosOp: custosOp, custoTotal: custoTotal, margem: margem, margemPct: margemPct, jobs: jobs.length, isOrcamento: isOrcamentoCliente, horasCliente: horasCliente, horasEstimadas: parseFloat(c.horas_estimadas_obra) || 0, semCusto: semCusto };
   }).filter(Boolean).sort(function(a, b) { return b.receita - a.receita; });
+  var jobsJanelaLive = last6Months.filter(function(j) { return mesesLiveView[j.date.slice(0, 7)]; });
+  var despesasJanelaLive = (despCatPer || []).reduce(function(s, d) { return mesesLiveView[(d.data || "").slice(0, 7)] ? s + (parseFloat(d.valor) || 0) : s; }, 0);
+  var totalHorasJanela = jobsJanelaLive.reduce(function(s, j) { if (clientesOrcamento[j.client_id]) return s; return s + horasReais(j.t1, j.t2) * ((j.team || []).length || 1); }, 0);
+  var margensClientePer = clientes.map(function(c) {
+    if (c.cliente_principal_id) return null;
+    var jobs = jobsDoGrupo(c, jobsJanelaLive);
+    if (jobs.length === 0) return null;
+    var isOrcamentoCliente = clientesOrcamento[c.id];
+    var nMeses = Object.keys(jobs.reduce(function(acc, j) { acc[j.date.slice(0, 7)] = 1; return acc; }, {})).length;
+    var receita;
+    if (isOrcamentoCliente) {
+      receita = jobs.reduce(function(s, j) { return s + (j.val || 0); }, 0);
+    } else if (c.tipo_faturacao === "visita") {
+      receita = jobs.reduce(function(s, j) { return s + (j.val_manual ? (parseFloat(j.val) || 0) : (parseFloat(c.valor_visita) || 0)); }, 0);
+    } else if (c.tipo_faturacao === "mensal") {
+      receita = (parseFloat(c.valor_visita) || 0) * nMeses;
+    } else {
+      receita = jobs.reduce(function(s, j) { var vv = parseFloat(c.valor_visita) || 0; return s + (j.val_manual ? (parseFloat(j.val) || 0) : (vv > 0 ? vv : (parseFloat(j.val) || 0))); }, 0);
+    }
+    var custoMO = 0, horasCliente = 0;
+    jobs.forEach(function(j) {
+      var horas = horasReais(j.t1, j.t2);
+      horasCliente += horas * ((j.team || []).length || 1);
+      (j.team || []).forEach(function(eid) { var ch = custoHoraAlocadaMap[eid] || 0; if (ch > 0) custoMO += ch * horas; });
+    });
+    var proporcao = (!isOrcamentoCliente && totalHorasJanela > 0) ? horasCliente / totalHorasJanela : 0;
+    var custosOp = isOrcamentoCliente ? 0 : despesasJanelaLive * proporcao;
+    var margem = receita - custoMO - custosOp;
+    var margemPct = receita > 0 ? Math.round(margem / receita * 100) : 0;
+    return { name: c.name, receita: receita, custoMO: custoMO, custosOp: custosOp, margem: margem, margemPct: margemPct, jobs: jobs.length, meses: nMeses };
+  }).filter(Boolean).sort(function(a, b) { return b.receita - a.receita; });
 
   // Colaboradores sem custo de RH a afectar margens este mês (raiz do problema, ao nível da empresa)
   var colabsSemCustoGlobal = (function() {
@@ -2079,18 +2116,18 @@ function Finance() {
       ),
       /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 } },
         /* @__PURE__ */ React.createElement("div", { style: card },
-          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Custos por categoria (este m\xEAs)"),
-          Object.keys(custosCat).length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 40, fontSize: 12 } }, "Sem custos registados este m\xEAs.") :
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Custos por categoria (do per\xEDodo \u2014 s\xF3 ao vivo)"),
+          Object.keys(custosCatPer).length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 40, fontSize: 12 } }, "Sem custos no per\xEDodo (ao vivo).") :
           /* @__PURE__ */ React.createElement(ChartCanvas, { type: "doughnut", height: 260, data: {
-            labels: Object.keys(custosCat),
-            datasets: [{ data: Object.values(custosCat).map(function(v) { return v.toFixed(2); }), backgroundColor: ["#2E6DA4", "#F97316", "#16A34A", "#7C3AED", "#F59E0B", "#EF4444", "#0369A1", "#B45309", "#0F766E"] }]
+            labels: Object.keys(custosCatPer),
+            datasets: [{ data: Object.values(custosCatPer).map(function(v) { return v.toFixed(2); }), backgroundColor: ["#2E6DA4", "#F97316", "#16A34A", "#7C3AED", "#F59E0B", "#EF4444", "#0369A1", "#B45309", "#0F766E"] }]
           }, options: { plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 10 } } } } } })
         ),
         /* @__PURE__ */ React.createElement("div", { style: card },
-          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Margem por cliente (top 8)"),
-          margensPorCliente.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 40, fontSize: 12 } }, "Sem dados este m\xEAs.") :
+          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Margem por cliente \u2014 top 8 (do per\xEDodo, s\xF3 ao vivo)"),
+          margensClientePer.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 40, fontSize: 12 } }, "Sem dados no per\xEDodo (ao vivo).") :
           (function() {
-            var top8 = margensPorCliente.slice().sort(function(a, b) { return b.margem - a.margem; }).slice(0, 8);
+            var top8 = margensClientePer.slice().sort(function(a, b) { return b.margem - a.margem; }).slice(0, 8);
             return /* @__PURE__ */ React.createElement(ChartCanvas, { type: "bar", height: 260, data: {
               labels: top8.map(function(c) { return c.name.length > 14 ? c.name.slice(0, 14) + "\u2026" : c.name; }),
               datasets: [{ label: "Margem (\u20AC)", data: top8.map(function(c) { return c.margem.toFixed(2); }), backgroundColor: top8.map(function(c) { return c.margem >= 0 ? "#16A34A" : "#EF4444"; }), borderRadius: 6 }]
