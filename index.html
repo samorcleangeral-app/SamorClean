@@ -358,10 +358,10 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
   var esquecimentosArmazem = (dadosProdutividade && dadosProdutividade.esquecimentosArmazem) || 0;
   var perdePorPicagem = esquecimentosServico >= 10 || esquecimentosArmazem >= 5;
   var valorFichaPremio = (rh.tem_premio_assiduidade && parseFloat(rh.valor_premio_assiduidade)) || 0;
-  var premio = (temAusencia || diasFalta > 0 || perdePorPicagem) ? 0 : valorFichaPremio;
-  if (premiosOpcionais && premiosOpcionais[emp.id] != null) {
-    premio = premiosOpcionais[emp.id];
-  }
+  var premioAuto = (temAusencia || diasFalta > 0 || perdePorPicagem) ? 0 : valorFichaPremio;
+  var premioOverride = (premiosOpcionais && premiosOpcionais[emp.id] != null) ? premiosOpcionais[emp.id] : null;
+  var premio = premioOverride != null ? premioOverride : premioAuto;
+  var premioMotivo = temAusencia ? "ausência" : (diasFalta > 0 ? "faltas" : (perdePorPicagem ? (esquecimentosServico >= 10 ? (esquecimentosServico + " picagens em falta") : (esquecimentosArmazem + " faltas no armazém")) : ""));
   // Prémio de produtividade calculado já aqui (acima da SS) para poder entrar na base tributável
   var prodResult = null;
   if (dadosProdutividade) {
@@ -438,7 +438,7 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
     detalhe.push({ l: labelProd, v: prod.premio });
     total += prod.premio;
   }
-  return { total: total, detalhe: detalhe, tipo: tipo };
+  return { total: total, detalhe: detalhe, tipo: tipo, premioAuto: premioAuto, premioOverride: premioOverride, premioBase: valorFichaPremio, premioMotivo: premioMotivo };
 }
 // Monta os dados de produtividade de um colaborador (avaliações de clientes, nota mensal, esquecimentos de armazém).
 // Fonte ÚNICA, partilhada pelo Financeiro e pelo Relatório Mensal, para os dois baterem ao cêntimo.
@@ -1747,8 +1747,8 @@ function Finance() {
     }
     setSavingOrdenado(false);
   }
-  async function salvarPremioOpcional(funcionarioId) {
-    var valor = parseFloat(premiosOpcionaisInput[funcionarioId]) || 0;
+  async function salvarPremioOpcional(funcionarioId, valorExplicito) {
+    var valor = (valorExplicito != null) ? valorExplicito : (parseFloat(premiosOpcionaisInput[funcionarioId]) || 0);
     var payload = { funcionario_id: funcionarioId, ano: now.getFullYear(), mes: now.getMonth() + 1, valor: valor };
     var res = await fetch(SUPABASE_URL + "/rest/v1/premio_assiduidade_opcional", {
       method: "POST",
@@ -1757,6 +1757,13 @@ function Finance() {
     });
     if (res.ok) {
       setPremiosOpcionais(Object.assign({}, premiosOpcionais, { [funcionarioId]: valor }));
+    }
+  }
+  async function reporPremioOpcional(funcionarioId) {
+    var res = await fetch(SUPABASE_URL + "/rest/v1/premio_assiduidade_opcional?funcionario_id=eq." + encodeURIComponent(funcionarioId) + "&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1), { method: "DELETE", headers: dbHeaders() });
+    if (res.ok) {
+      var np = Object.assign({}, premiosOpcionais); delete np[funcionarioId]; setPremiosOpcionais(np);
+      var ni = Object.assign({}, premiosOpcionaisInput); delete ni[funcionarioId]; setPremiosOpcionaisInput(ni);
     }
   }
   function jobsDoGrupo(c, jobsAll) {
@@ -2396,20 +2403,22 @@ function Finance() {
           });
         })()
       ),
-      custosColab.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#F5F3FF", border: "1.5px solid #7C3AED" }) },
-        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "\uD83C\uDF81 Prémio de assiduidade — Recibo Verde (opcional)"),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 12 } }, "Para colaboradores a Recibo Verde, o prémio n\xE3o \xE9 autom\xE1tico \u2014 decides tu, colaborador a colaborador, se atribuis ou n\xE3o este m\xEAs."),
-        emps.filter(function(e) {
-          if (e.ativo === false) return false;
-          var rh = rhData.find(function(r) { return r.funcionario_id === e.id; });
-          return rh && rh.tipo_contrato === "Recibo Verde";
-        }).map(function(e) {
-          return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 8 } },
-            /* @__PURE__ */ React.createElement("div", { style: { flex: 1, fontSize: 13, color: "#334155", fontWeight: 600 } }, e.name),
-            /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { width: 100 }), type: "number", step: "0.01", value: premiosOpcionaisInput[e.id] !== undefined ? premiosOpcionaisInput[e.id] : (premiosOpcionais[e.id] || ""), placeholder: "0", onFocus: function(ev) { ev.target.select(); }, onChange: function(ev) {
-              setPremiosOpcionaisInput(Object.assign({}, premiosOpcionaisInput, { [e.id]: ev.target.value }));
-            } }),
-            /* @__PURE__ */ React.createElement("button", { onClick: function() { salvarPremioOpcional(e.id); }, style: Object.assign({}, btnG, { padding: "6px 14px", fontSize: 12 }) }, "Guardar")
+      custosColab.length > 0 && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#F8F7FF", border: "1.5px solid #7C3AED" }) },
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "🎁 Prémio de assiduidade — ajustes da gestão"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 10 } }, "Cada colaborador recebe o valor da ficha se cumprir. Deixa em branco para manter o automático, mete um valor para ajustar, ou carrega em retirar para pôr a 0 este mês."),
+        emps.filter(function(e) { if (e.ativo === false) return false; return !!rhData.find(function(r) { return r.funcionario_id === e.id; }); }).map(function(e) {
+          var rCol = custoColaborador(e);
+          var rhE = rhData.find(function(r) { return r.funcionario_id === e.id; });
+          var isRV = rhE && rhE.tipo_contrato === "Recibo Verde";
+          var temOv = rCol.premioOverride != null;
+          return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderTop: "1px solid #EDE9FE" } },
+            /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13.5, fontWeight: 700, color: "#1A3A5C" } }, e.name, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 9.5, fontWeight: 800, borderRadius: 5, padding: "1px 6px", marginLeft: 6, background: isRV ? "#FFF7ED" : "#EFF6FF", color: isRV ? "#C2410C" : "#1E40AF" } }, isRV ? "Recibo Verde" : "Contrato")),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, marginTop: 2, color: rCol.premioMotivo ? "#DC2626" : "#64748B" } }, rCol.premioMotivo ? ("0 € — perde (" + rCol.premioMotivo + ")") : ("Automático: " + fmt(rCol.premioAuto) + " (da ficha)"), temOv ? /* @__PURE__ */ React.createElement("span", { style: { color: rCol.premioOverride === 0 ? "#DC2626" : "#2E6DA4", fontWeight: 700 } }, rCol.premioOverride === 0 ? " · retirado" : (" · ajustado: " + fmt(rCol.premioOverride))) : null)
+            ),
+            /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { width: 72, padding: "6px 8px", textAlign: "right" }), type: "number", step: "0.01", value: premiosOpcionaisInput[e.id] !== undefined ? premiosOpcionaisInput[e.id] : (rCol.premioOverride != null ? rCol.premioOverride : ""), placeholder: String(rCol.premioAuto), onFocus: function(ev) { ev.target.select(); }, onChange: function(ev) { setPremiosOpcionaisInput(Object.assign({}, premiosOpcionaisInput, { [e.id]: ev.target.value })); } }),
+            /* @__PURE__ */ React.createElement("button", { onClick: function() { salvarPremioOpcional(e.id); }, style: Object.assign({}, btnG, { padding: "6px 12px", fontSize: 11.5 }) }, "Guardar"),
+            /* @__PURE__ */ React.createElement("button", { onClick: function() { if (temOv) reporPremioOpcional(e.id); else salvarPremioOpcional(e.id, 0); }, style: { background: "none", border: "none", color: temOv ? "#2E6DA4" : "#DC2626", fontSize: 10.5, fontWeight: 700, cursor: "pointer", textDecoration: "underline", flexShrink: 0 } }, temOv ? "repor" : "retirar")
           );
         })
       ),
