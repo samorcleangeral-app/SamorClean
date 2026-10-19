@@ -306,7 +306,7 @@ function faltouEntrada(job, tol) {
   var t = (tol == null ? 15 : tol);
   return ci > t1 + t;
 }
-function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajustesRecibo, premiosOpcionais, dadosProdutividade) {
+function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajustesRecibo, premiosOpcionais, dadosProdutividade, anuladosServ, tolById) {
   var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
   if (!rh) return { total: 0, detalhe: [], tipo: null };
   var tipo = rh.tipo_contrato || "Contrato";
@@ -346,11 +346,13 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
   var temAusencia = temAusenciaPenalizante || diasBaixa > 0;
   // Esquecimentos de picagem nos serviços (Opção A: cada picagem em falta conta 1)
   var esquecimentosServico = 0;
+  var _anulServ = anuladosServ || {};
+  var _tolMap = tolById || {};
   (monthJobs || []).forEach(function(j) {
     if (j.status !== "completed") return;
     if ((j.team || []).indexOf(emp.id) === -1) return;
-    if (!j.check_in) esquecimentosServico++;
-    if (!j.check_out) esquecimentosServico++;
+    if (faltouEntrada(j, _tolMap[j.client_id]) && !_anulServ[emp.id + "|" + j.id + "|entrada"]) esquecimentosServico++;
+    if (!j.check_out && !_anulServ[emp.id + "|" + j.id + "|sa\xEDda"]) esquecimentosServico++;
   });
   // Esquecimentos de armazém (só entrada) — vêm de fora
   var esquecimentosArmazem = (dadosProdutividade && dadosProdutividade.esquecimentosArmazem) || 0;
@@ -461,7 +463,7 @@ function calcDadosProdColab(emp, ctx) {
     if (dia) diasComEntradaArm[dia] = true;
   });
   var esqArm = 0;
-  Object.keys(diasComServico).forEach(function(dia) { if (!diasComEntradaArm[dia]) esqArm++; });
+  Object.keys(diasComServico).forEach(function(dia) { if (!diasComEntradaArm[dia] && !(ctx.anuladosArm && ctx.anuladosArm[emp.id + "|" + dia])) esqArm++; });
   return { avsClientes: avsCli, notaMensal: avMensal ? Number(avMensal.nota_final) : null, esquecimentosArmazem: esqArm };
 }
 function ChartCanvas(props) {
@@ -537,6 +539,9 @@ function Finance() {
   const [chartCmp, setChartCmp] = useState(false);
   const [histFin, setHistFin] = useState([]);
   const [despCatPer, setDespCatPer] = useState([]);
+  const [anulServ, setAnulServ] = useState({});
+  const [anulArm, setAnulArm] = useState({});
+  const [tolCli, setTolCli] = useState({});
   const [selCobrar, setSelCobrar] = useState(null);
   const [contaCorrenteAberta, setContaCorrenteAberta] = useState(false);
   const [contaCorrenteJobs, setContaCorrenteJobs] = useState([]);
@@ -779,6 +784,8 @@ function Finance() {
       db.list("pagamentos_movimentos", "?select=*&order=data_pagamento.desc").then(function(mv) { setPagMovimentos(mv || []); });
       db.list("historico_financeiro", "?select=ano,mes,despesas,faturado&order=ano.asc,mes.asc").then(function(h) { setHistFin(h || []); });
       db.list("despesas", "?select=data,valor,categoria&data=gte." + localDateStr(new Date(now.getFullYear(), now.getMonth() - 11, 1))).then(function(dc) { setDespCatPer(dc || []); });
+      db.list("esquecimentos_anulados", "?select=*").then(function(an) { var ms = {}, ma = {}; (an || []).forEach(function(a) { if (a.tipo_picagem === "armazem") { ma[a.funcionario_id + "|" + a.dia_ref] = a.motivo || "x"; } else { ms[a.funcionario_id + "|" + a.servico_id + "|" + a.tipo_picagem] = a.motivo || "x"; } }); setAnulServ(ms); setAnulArm(ma); });
+      db.list("clientes", "?select=id,tolerancia_minutos").then(function(cl) { var tm = {}; (cl || []).forEach(function(c) { if (c.tolerancia_minutos != null) tm[c.id] = c.tolerancia_minutos; }); setTolCli(tm); });
       setDespesas(results[3] || []);
       setRhData(results[5] || []);
       setEmps(results[6] || []);
@@ -1522,7 +1529,7 @@ function Finance() {
       var b = buckets[key];
       var jobsDoMes = last6Months.filter(function(j) { return j.date.slice(0, 7) === key; });
       b.mo = emps.filter(function(e) { return contaNoPeriodo(e, jobsDoMes); }).reduce(function(s, e) {
-        return s + calcCustoColaboradorMes(e, rhData, absData6Months, jobsDoMes, b.refDate).total;
+        return s + calcCustoColaboradorMes(e, rhData, absData6Months, jobsDoMes, b.refDate, undefined, undefined, undefined, anulServ, tolCli).total;
       }, 0);
     });
     return Object.keys(buckets).sort().map(function(k) {
@@ -1552,7 +1559,7 @@ function Finance() {
         jobsMes.forEach(function(j) { fatS += (j.val || 0); if (j.paid) recS += (j.val || 0); });
         var custoMat = 0;
         despesas6Months.forEach(function(dd) { if ((dd.data || "").slice(0, 7) === key) custoMat += dd.valor || 0; });
-        var moC = emps.filter(function(e) { return contaNoPeriodo(e, jobsMes); }).reduce(function(s, e) { return s + calcCustoColaboradorMes(e, rhData, absData6Months, jobsMes, b.refDate).total; }, 0);
+        var moC = emps.filter(function(e) { return contaNoPeriodo(e, jobsMes); }).reduce(function(s, e) { return s + calcCustoColaboradorMes(e, rhData, absData6Months, jobsMes, b.refDate, undefined, undefined, undefined, anulServ, tolCli).total; }, 0);
         b.fatSemIva = fatS;
         b.despTotal = custoMat + moC;
         b.rec = recS;
@@ -1597,8 +1604,8 @@ function Finance() {
 
   function custoColaborador(emp) {
     var mesYM = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
-    var dadosProd = calcDadosProdColab(emp, { avaliacoes: avsClientesFin, avaliacoesMensais: avsMensaisFin, svcDatas: svcDatasFin, picagensArm: picagensArmFin, monthJobs: monthJobs, mesYM: mesYM });
-    return calcCustoColaboradorMes(emp, rhData, absData, monthJobs, now, ajustesRecibo, premiosOpcionais, dadosProd);
+    var dadosProd = calcDadosProdColab(emp, { avaliacoes: avsClientesFin, avaliacoesMensais: avsMensaisFin, svcDatas: svcDatasFin, picagensArm: picagensArmFin, monthJobs: monthJobs, mesYM: mesYM, anuladosArm: anulArm });
+    return calcCustoColaboradorMes(emp, rhData, absData, monthJobs, now, ajustesRecibo, premiosOpcionais, dadosProd, anulServ, tolCli);
   }
 
   async function setupCash() {
@@ -10528,7 +10535,7 @@ function QuadroEsquecimentos(props) {
       /* @__PURE__ */ React.createElement("button", { onClick: function() { if (!fila.length) return; setRevIdx(0); setRevMarc([]); setRevAberto(true); }, style: { background: fila.length ? "#fff" : "rgba(255,255,255,0.3)", color: fila.length ? "#1A3A5C" : "rgba(255,255,255,0.8)", border: "none", borderRadius: 10, padding: "9px 15px", fontSize: 12.5, fontWeight: 800, cursor: fila.length ? "pointer" : "default", flexShrink: 0 } }, "⚡ Rever (" + fila.length + ")")
     )
   ),
-    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 12 } }, "Servi\xE7o: perde o pr\xE9mio com mais de 10 \xB7 Armaz\xE9m: com 5 ou mais"),
+    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 12 } }, "Servi\xE7o: perde o pr\xE9mio com 10 ou mais \xB7 Armaz\xE9m: com 5 ou mais"),
     loading ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", padding: 20, fontSize: 13 } }, "A carregar...") : lente === "pessoa" && dados.map(function(d) {
       var perde = d.esqServ >= 10 || d.esqArm >= 5;
       var perto = !perde && (d.esqServ >= 7 || d.esqArm >= 3);
