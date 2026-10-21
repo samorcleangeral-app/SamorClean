@@ -13381,12 +13381,26 @@ function ManagerLogin(props) {
     var rows = [];
     try {
       var __auth = await supabaseRT.auth.signInWithPassword({ email: __em, password: __pw });
-      if (__auth && !__auth.error && __auth.data && __auth.data.session) {
-        SC_AUTH_TOKEN = __auth.data.session.access_token;
-        var __pr = await fetch(SUPABASE_URL + "/rest/v1/gestores?select=*&email=eq." + encodeURIComponent(__em), { headers: dbHeaders() });
-        rows = __pr.ok ? await __pr.json() : [];
+      if (!__auth || __auth.error || !__auth.data || !__auth.data.session) {
+        setLoading(false);
+        setErr("Email ou palavra-passe incorretos." + (__auth && __auth.error && __auth.error.message ? " (" + __auth.error.message + ")" : ""));
+        return;
       }
-    } catch (e) {}
+      // buscar o perfil de gestor com a chave anon (SC_AUTH_TOKEN ainda null aqui): leitura conhecida.
+      // email=ilike.<x> faz correspondencia sem ligar a maiusculas/minusculas.
+      var __pr = await fetch(SUPABASE_URL + "/rest/v1/gestores?select=*&email=ilike." + encodeURIComponent(__em), { headers: dbHeaders() });
+      rows = __pr.ok ? await __pr.json() : [];
+      SC_AUTH_TOKEN = __auth.data.session.access_token;
+      if (!rows || rows.length === 0) {
+        setLoading(false);
+        setErr("Entraste, mas nao encontrei o teu perfil de gestor com o email " + __em + ". Confirma o email na tabela gestores.");
+        return;
+      }
+    } catch (e) {
+      setLoading(false);
+      setErr("Falha no login: " + (e && e.message ? e.message : String(e)));
+      return;
+    }
     setLoading(false);
     if (rows && rows.length > 0) {
       onSuccess(rows[0]);
