@@ -13386,11 +13386,12 @@ function ManagerLogin(props) {
         setErr("Email ou palavra-passe incorretos." + (__auth && __auth.error && __auth.error.message ? " (" + __auth.error.message + ")" : ""));
         return;
       }
-      // buscar o perfil de gestor com a chave anon (SC_AUTH_TOKEN ainda null aqui): leitura conhecida.
+      // definir o crachá PRIMEIRO, para a leitura do perfil ir ja autenticada
+      // (assim podemos trancar a tabela gestores so para autenticados sem partir o login).
+      SC_AUTH_TOKEN = __auth.data.session.access_token;
       // email=ilike.<x> faz correspondencia sem ligar a maiusculas/minusculas.
       var __pr = await fetch(SUPABASE_URL + "/rest/v1/gestores?select=*&email=ilike." + encodeURIComponent(__em), { headers: dbHeaders() });
       rows = __pr.ok ? await __pr.json() : [];
-      SC_AUTH_TOKEN = __auth.data.session.access_token;
       if (!rows || rows.length === 0) {
         setLoading(false);
         setErr("Entraste, mas nao encontrei o teu perfil de gestor com o email " + __em + ". Confirma o email na tabela gestores.");
