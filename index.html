@@ -29,10 +29,24 @@ const { useState, useEffect } = React;
 const SUPABASE_URL = "https://dtydrnezzaykiaglwxfv.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR0eWRybmV6emF5a2lhZ2x3eGZ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3MDA3ODQsImV4cCI6MjA5NzI3Njc4NH0.aDujsByOVcbqZPnz36AKJukWahIbJKkxb6imbInHG5s";
 const supabaseRT = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+// --- Fase 1 seguranca: identidade real da gestao (Supabase Auth) ---
+// SC_AUTH_TOKEN guarda o token da sessao de gestao. Enquanto for null (portal de
+// clientes, ou antes do login), usa-se a chave anon como ate aqui -> nao parte nada.
+let SC_AUTH_TOKEN = null;
+if (supabaseRT && supabaseRT.auth) {
+  try {
+    supabaseRT.auth.getSession().then(function (r) {
+      try { SC_AUTH_TOKEN = (r && r.data && r.data.session && r.data.session.access_token) || null; } catch (e) {}
+    });
+    supabaseRT.auth.onAuthStateChange(function (_event, session) {
+      SC_AUTH_TOKEN = (session && session.access_token) || null;
+    });
+  } catch (e) {}
+}
 function dbHeaders(extra) {
   const h = {
     "apikey": SUPABASE_KEY,
-    "Authorization": "Bearer " + SUPABASE_KEY,
+    "Authorization": "Bearer " + (SC_AUTH_TOKEN || SUPABASE_KEY),
     "Content-Type": "application/json"
   };
   if (extra) {
@@ -13363,12 +13377,16 @@ function ManagerLogin(props) {
     if (!email.trim() || !password.trim()) return;
     setLoading(true);
     setErr("");
-    const res = await fetch(SUPABASE_URL + "/rest/v1/rpc/login_gestor", {
-      method: "POST",
-      headers: dbHeaders(),
-      body: JSON.stringify({ p_email: email.trim().toLowerCase(), p_password: password.trim() })
-    });
-    const rows = res.ok ? await res.json() : [];
+    var __em = email.trim().toLowerCase(), __pw = password.trim();
+    var rows = [];
+    try {
+      var __auth = await supabaseRT.auth.signInWithPassword({ email: __em, password: __pw });
+      if (__auth && !__auth.error && __auth.data && __auth.data.session) {
+        SC_AUTH_TOKEN = __auth.data.session.access_token;
+        var __pr = await fetch(SUPABASE_URL + "/rest/v1/gestores?select=*&email=eq." + encodeURIComponent(__em), { headers: dbHeaders() });
+        rows = __pr.ok ? await __pr.json() : [];
+      }
+    } catch (e) {}
     setLoading(false);
     if (rows && rows.length > 0) {
       onSuccess(rows[0]);
