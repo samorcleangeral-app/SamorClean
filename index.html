@@ -12733,10 +12733,10 @@ function ClientPortal(props) {
           setClient(results[0][0]);
           if (aberturaRegistadaRef.current !== clientId) {
             aberturaRegistadaRef.current = clientId;
-            fetch(SUPABASE_URL + "/rest/v1/qr_aberturas", {
+            fetch(SUPABASE_URL + "/rest/v1/rpc/portal_insert", {
               method: "POST",
               headers: dbHeaders(),
-              body: JSON.stringify({ client_id: clientId, client_nome: results[0][0].name }),
+              body: JSON.stringify({ p_tabela: "qr_aberturas", p_dados: { client_id: clientId, client_nome: results[0][0].name } }),
               keepalive: true
             }).catch(function(e) { console.warn("Falha ao registar abertura QR:", e); });
           }
@@ -12750,10 +12750,10 @@ function ClientPortal(props) {
   }, [clientId]);
   function registarIntencao(tipo) {
     try {
-      fetch(SUPABASE_URL + "/rest/v1/qr_aberturas", {
+      fetch(SUPABASE_URL + "/rest/v1/rpc/portal_insert", {
         method: "POST",
         headers: dbHeaders(),
-        body: JSON.stringify({ client_id: clientId || null, client_nome: client ? client.name : null, tipo: tipo }),
+        body: JSON.stringify({ p_tabela: "qr_aberturas", p_dados: { client_id: clientId || null, client_nome: client ? client.name : null, tipo: tipo } }),
         keepalive: true
       }).catch(function(e) { console.warn("Falha ao registar inten\xE7\xE3o:", e); });
     } catch (e) { console.warn("Falha ao registar inten\xE7\xE3o:", e); }
@@ -12763,10 +12763,10 @@ function ClientPortal(props) {
       origem_cliente_id: clientId || null,
       origem_cliente_nome: client ? client.name : null
     });
-    const res = await fetch(SUPABASE_URL + "/rest/v1/leads", {
+    const res = await fetch(SUPABASE_URL + "/rest/v1/rpc/portal_insert", {
       method: "POST",
-      headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }),
-      body: JSON.stringify(data)
+      headers: dbHeaders(),
+      body: JSON.stringify({ p_tabela: "leads", p_dados: data })
     });
     if (res.ok) {
       setLeadSent(true);
@@ -13078,7 +13078,7 @@ function ClientPortal(props) {
           ),
           /* @__PURE__ */ React.createElement("button", { onClick: async function() {
             if (!recrutForm.nome || !recrutForm.telefone) { alert("Por favor preenche o nome e telefone."); return; }
-            await fetch(SUPABASE_URL + "/rest/v1/leads_recrutamento", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "return=representation" }), body: JSON.stringify({ nome: recrutForm.nome, telefone: recrutForm.telefone, disponibilidade: recrutForm.disponibilidade, carta_conducao: recrutForm.carta_conducao, experiencia: recrutForm.experiencia, client_id: clientId, origem: "portal_cliente" }) });
+            await fetch(SUPABASE_URL + "/rest/v1/rpc/portal_insert", { method: "POST", headers: dbHeaders(), body: JSON.stringify({ p_tabela: "leads_recrutamento", p_dados: { nome: recrutForm.nome, telefone: recrutForm.telefone, disponibilidade: recrutForm.disponibilidade, carta_conducao: recrutForm.carta_conducao, experiencia: recrutForm.experiencia, client_id: clientId, origem: "portal_cliente" } }) });
             setLeadSent(true);
           }, style: { width: "100%", background: "#38B6D8", border: "none", borderRadius: 14, padding: "16px 0", color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer" } }, "Enviar candidatura")
         )
