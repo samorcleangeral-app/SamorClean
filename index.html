@@ -13609,6 +13609,8 @@ function App() {
     setMod("sel");
   } });
   if (mod === "manager") return /* @__PURE__ */ React.createElement(Manager, { gestor, onExit: function() {
+    try { if (supabaseRT && supabaseRT.auth) { supabaseRT.auth.signOut(); } } catch (e) {}
+    SC_AUTH_TOKEN = null;
     setGestor(null);
     setMod("sel");
   } });
