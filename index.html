@@ -12633,6 +12633,7 @@ function ClientPortal(props) {
   }, [phase]);
   const [client, setClient] = useState(null);
   const [contacts, setContacts] = useState([]);
+  const [temContactos, setTemContactos] = useState(false);
   const [allEmps, setAllEmps] = useState([]);
   const [currentContact, setCurrentContact] = useState(null);
   const [currentEmp, setCurrentEmp] = useState(null);
@@ -12717,9 +12718,15 @@ function ClientPortal(props) {
     });
     if (clientId) {
       setLoading(true);
+      // Porta do cliente: ja nao descarregamos os PINs. Perguntamos so ao servidor se ha contactos.
+      fetch(SUPABASE_URL + "/rest/v1/rpc/portal_cliente_tem_contactos", {
+        method: "POST", headers: dbHeaders(),
+        body: JSON.stringify({ p_client_id: String(clientId) })
+      }).then(function(r) { return r.ok ? r.json() : 0; })
+        .then(function(n) { setTemContactos((n || 0) > 0); })
+        .catch(function() { setTemContactos(false); });
       Promise.all([
         db.list("clientes", "?select=*&id=eq." + encodeURIComponent(clientId)),
-        db.list("client_contacts", "?select=*&client_id=eq." + encodeURIComponent(clientId)),
         db.list("funcionarios", "?select=*&ativo=neq.false&order=id")
       ]).then(function(results) {
         if (results[0] && results[0].length) {
@@ -12734,8 +12741,7 @@ function ClientPortal(props) {
             }).catch(function(e) { console.warn("Falha ao registar abertura QR:", e); });
           }
         }
-        setContacts(results[1] || []);
-        const empList = results[2] || [];
+        const empList = results[1] || [];
         setEmps(empList);
         setAllEmps(empList);
         setLoading(false);
@@ -12773,9 +12779,16 @@ function ClientPortal(props) {
     if (n.length === 6) {
       setTimeout(async function() {
         if (pinMode === "client") {
-          const match = contacts.find(function(c) {
-            return c.pin === n;
-          });
+          // Validacao do PIN do cliente no servidor (os PINs ja nao vivem no browser)
+          let match = null;
+          try {
+            const lr = await fetch(SUPABASE_URL + "/rest/v1/rpc/portal_cliente_login", {
+              method: "POST", headers: dbHeaders(),
+              body: JSON.stringify({ p_client_id: String(clientId), p_pin: n })
+            });
+            const lrows = lr.ok ? await lr.json() : [];
+            match = (lrows && lrows.length) ? lrows[0] : null;
+          } catch (e) { match = null; }
           if (match) {
             setCurrentContact(match);
             setPhase("client-portal");
@@ -13073,7 +13086,7 @@ function ClientPortal(props) {
     );
   }
   if (phase === "choose") {
-    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, maxWidth: 420, margin: "0 auto" } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 14, marginBottom: 16 } }, /* @__PURE__ */ React.createElement("img", { src: logoUrl, style: { width: 76, height: 76, display: "block" } })), client && /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 20, marginBottom: 4, textAlign: "center" } }, client.name), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.5)", fontSize: 13, marginBottom: 32, textAlign: "center" } }, "Como pretendes entrar?"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 14, width: "100%" } }, contacts.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, maxWidth: 420, margin: "0 auto" } }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 14, marginBottom: 16 } }, /* @__PURE__ */ React.createElement("img", { src: logoUrl, style: { width: 76, height: 76, display: "block" } })), client && /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 20, marginBottom: 4, textAlign: "center" } }, client.name), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.5)", fontSize: 13, marginBottom: 32, textAlign: "center" } }, "Como pretendes entrar?"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 14, width: "100%" } }, temContactos && /* @__PURE__ */ React.createElement("button", { onClick: function() {
       setPinMode("client");
       setPin("");
       setPinErr(false);
