@@ -56,22 +56,42 @@ function dbHeaders(extra) {
   }
   return h;
 }
+// --- memoria curta + dedup, para cortar a enxurrada de pedidos (velocidade) ---
+// Guarda o resultado de cada leitura por poucos segundos e reaproveita-o entre modulos.
+// Qualquer gravacao limpa esta memoria na hora, por isso os numeros estao sempre certos.
+const __DB_TTL_MS = 45000;
+const __dbCache = new Map();
+const __dbInflight = new Map();
+function __dbClearCache() { __dbCache.clear(); }
 const db = {
   async list(table, query) {
-    try {
-      const url = SUPABASE_URL + "/rest/v1/" + table + (query || "?select=*");
-      const res = await fetch(url, { headers: dbHeaders() });
-      if (!res.ok) {
-        console.error("db.list error", table, await res.text());
+    const key = table + (query || "?select=*");
+    const hit = __dbCache.get(key);
+    if (hit && (Date.now() - hit.t) < __DB_TTL_MS) return hit.data.slice();
+    if (__dbInflight.has(key)) return __dbInflight.get(key);
+    const p = (async () => {
+      try {
+        const url = SUPABASE_URL + "/rest/v1/" + table + (query || "?select=*");
+        const res = await fetch(url, { headers: dbHeaders() });
+        if (!res.ok) {
+          console.error("db.list error", table, await res.text());
+          return [];
+        }
+        const data = await res.json();
+        __dbCache.set(key, { t: Date.now(), data: data });
+        return data.slice();
+      } catch (err) {
+        console.error("db.list network error", table, err);
         return [];
+      } finally {
+        __dbInflight.delete(key);
       }
-      return await res.json();
-    } catch (err) {
-      console.error("db.list network error", table, err);
-      return [];
-    }
+    })();
+    __dbInflight.set(key, p);
+    return p;
   },
   async insert(table, row) {
+    __dbClearCache();
     try {
       const url = SUPABASE_URL + "/rest/v1/" + table;
       const res = await fetch(url, {
@@ -91,6 +111,7 @@ const db = {
     }
   },
   async update(table, id, patch) {
+    __dbClearCache();
     try {
       const url = SUPABASE_URL + "/rest/v1/" + table + "?id=eq." + encodeURIComponent(id);
       const res = await fetch(url, {
@@ -110,6 +131,7 @@ const db = {
     }
   },
   async remove(table, id) {
+    __dbClearCache();
     try {
       const url = SUPABASE_URL + "/rest/v1/" + table + "?id=eq." + encodeURIComponent(id);
       const res = await fetch(url, { method: "DELETE", headers: dbHeaders() });
@@ -120,6 +142,7 @@ const db = {
     }
   },
   async insertVerbose(table, row) {
+    __dbClearCache();
     try {
       const url = SUPABASE_URL + "/rest/v1/" + table;
       const res = await fetch(url, {
