@@ -12727,7 +12727,7 @@ function ClientPortal(props) {
         .catch(function() { setTemContactos(false); });
       Promise.all([
         db.list("clientes", "?select=*&id=eq." + encodeURIComponent(clientId)),
-        db.list("funcionarios", "?select=*&ativo=neq.false&order=id")
+        db.list("funcionarios", "?select=id,name,role,av,rating,ativo&ativo=neq.false&order=id")
       ]).then(function(results) {
         if (results[0] && results[0].length) {
           setClient(results[0][0]);
@@ -13491,7 +13491,7 @@ function PortalArmazem() {
   const [lastTipo, setLastTipo] = useState(null);
   const [checking, setChecking] = useState(false);
   useEffect(function() {
-    db.list("funcionarios", "?select=*&ativo=neq.false&order=name").then(function(rows) {
+    db.list("funcionarios", "?select=id,name,role,av,rating,ativo&ativo=neq.false&order=name").then(function(rows) {
       setEmps(rows || []);
       setLoading(false);
     });
