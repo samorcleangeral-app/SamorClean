@@ -163,6 +163,15 @@ const db = {
     }
   }
 };
+// Chamada a uma funcao do servidor (RPC) usada pelos portais publicos.
+// Devolve o JSON da funcao, ou null em caso de erro.
+function portalRpc(fn, args) {
+  return fetch(SUPABASE_URL + "/rest/v1/rpc/" + fn, {
+    method: "POST",
+    headers: dbHeaders(),
+    body: JSON.stringify(args || {})
+  }).then(function(r) { return r.ok ? r.json() : null; });
+}
 async function removerFuncionarioDeServicosFuturos(empId, dataInicio, dataFim) {
   const hoje = localDateStr();
   const inicio = dataInicio > hoje ? dataInicio : hoje;
@@ -12706,7 +12715,7 @@ function ClientPortal(props) {
   const extras = ["Limpeza de estofos adicional", "Limpeza de vidros exteriores", "Limpeza de garagem", "Limpeza de varandas", "Desinfec\xE7\xE3o profunda", "Outro"];
   useEffect(function() {
     Promise.all([
-      db.list("avaliacoes", "?select=stars"),
+      portalRpc("portal_stars", {}).then(function(r) { return r || []; }),
       db.list("clientes", "?select=id&freq=neq.Pontual")
     ]).then(function(results) {
       const avs = results[0] || [];
@@ -12871,7 +12880,7 @@ function ClientPortal(props) {
     const todayStr = localDateStr();
     Promise.all([
       db.list("servicos", "?select=*&client_id=eq." + encodeURIComponent(clientId) + "&order=date"),
-      db.list("pedidos_extra", "?select=*&client_id=eq." + encodeURIComponent(clientId) + "&order=created_at.desc")
+      portalRpc("portal_pedidos_extra", { p_client_id: String(clientId) })
     ]).then(function(results) {
       const all = results[0] || [];
       setHistory(all.filter(function(j) {
@@ -12889,20 +12898,20 @@ function ClientPortal(props) {
     setSavingRate(true);
     try {
       const promises = (job.team || []).map(function(eid) {
-        return db.insert("avaliacoes", {
+        return portalRpc("portal_insert", { p_tabela: "avaliacoes", p_dados: {
           servico_id: job.id,
           funcionario_id: eid,
           client_id: clientId,
           stars: ratings[eid],
           comment: comment || null,
           contact_name: currentContact ? currentContact.name : null
-        });
+        } });
       });
       await Promise.all(promises);
       await db.update("servicos", job.id, { rated: true });
       for (let i = 0; i < (job.team || []).length; i++) {
         const eid = job.team[i];
-        const allAvs = await db.list("avaliacoes", "?select=stars&funcionario_id=eq." + encodeURIComponent(eid));
+        const allAvs = await portalRpc("portal_stars", { p_funcionario_id: String(eid) });
         if (allAvs && allAvs.length > 0) {
           const avg = allAvs.reduce(function(s, a) {
             return s + (a.stars || 0);
@@ -12929,12 +12938,12 @@ function ClientPortal(props) {
     }
   }
   async function submitExtra() {
-    const inserted = await db.insert("pedidos_extra", {
+    const inserted = await portalRpc("portal_insert", { p_tabela: "pedidos_extra", p_dados: {
       client_id: clientId,
       tipo: extraSel,
       descricao: extraNote || null,
       contact_name: currentContact ? currentContact.name : null
-    });
+    } });
     if (inserted) {
       setMeusPedidosExtra(function(p) { return [inserted].concat(p); });
       setExtraSent(true);
@@ -13367,7 +13376,7 @@ function ClientPortal(props) {
         setExtraRespondidos(0);
         var idsParaMarcar = meusPedidosExtra.filter(function(p) { return p.status !== "pendente" && !p.visto_cliente; }).map(function(p) { return p.id; });
         idsParaMarcar.forEach(function(id) {
-          fetch(SUPABASE_URL + "/rest/v1/pedidos_extra?id=eq." + id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ visto_cliente: true }), keepalive: true });
+          portalRpc("portal_pedido_extra_visto", { p_id: String(id) });
         });
         setMeusPedidosExtra(function(p) { return p.map(function(x) { return idsParaMarcar.indexOf(x.id) !== -1 ? Object.assign({}, x, { visto_cliente: true }) : x; }); });
       }
