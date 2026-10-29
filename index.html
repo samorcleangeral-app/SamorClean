@@ -63,23 +63,6 @@ const __DB_TTL_MS = 45000;
 const __dbCache = new Map();
 const __dbInflight = new Map();
 function __dbClearCache() { __dbCache.clear(); }
-// Rede de segurança: muitas gravações usam fetch() directo em vez do helper db.
-// Qualquer gravação (POST/PATCH/DELETE) à base de dados limpa a memória, antes e
-// depois de responder, para nenhum ecrã voltar a mostrar dados antigos.
-(function() {
-  const __fetchOrig = window.fetch.bind(window);
-  window.fetch = function(input, init) {
-    let escrita = false;
-    try {
-      const metodo = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
-      const url = typeof input === "string" ? input : (input && input.url) || "";
-      escrita = metodo !== "GET" && metodo !== "HEAD" && url.indexOf(SUPABASE_URL + "/rest/v1/") === 0;
-    } catch (e) {}
-    if (!escrita) return __fetchOrig(input, init);
-    __dbClearCache(); __dbInflight.clear();
-    return __fetchOrig(input, init).then(function(r) { __dbClearCache(); __dbInflight.clear(); return r; });
-  };
-})();
 const db = {
   async list(table, query) {
     const key = table + (query || "?select=*");
@@ -3054,6 +3037,174 @@ function Routes() {
       setVoltasFixas(function(p) { return p.map(function(x) { return x.id === v.id ? d[0] : x; }); });
     }
   }
+  // ===== Peça 3: as voltas mandam na agenda =====
+  const [aplicarDesde, setAplicarDesde] = useState("");
+  const [planoAlteracao, setPlanoAlteracao] = useState(null);
+  const [aplicandoPlano, setAplicandoPlano] = useState(false);
+  const [fimVolta, setFimVolta] = useState(null);
+  const DIAS_CURTOS = ["Seg", "Ter", "Qua", "Qui", "Sex", "S\xE1b", "Dom"];
+  const DIAS_LONGOS = ["segunda", "ter\xE7a", "quarta", "quinta", "sexta", "s\xE1bado", "domingo"];
+  function addDiasStr(ds, n) { var d = new Date(ds + "T12:00:00"); d.setDate(d.getDate() + n); return localDateStr(d); }
+  function proximaSegunda() { var d = new Date(); d.setHours(12, 0, 0, 0); do { d.setDate(d.getDate() + 1); } while (d.getDay() !== 1); return localDateStr(d); }
+  function fimJanelaGeracao() { var h = new Date(); return localDateStr(new Date(h.getFullYear(), h.getMonth() + 2, 0)); }
+  function fmtDataCurta(ds) { var p = ds.split("-"); return DIAS_CURTOS[weekdayIdx(ds)] + " " + parseInt(p[2]) + "/" + parseInt(p[1]); }
+  function servicoDaVolta(j, v) {
+    if (j.volta_id) return j.volta_id === v.id;
+    return j.client_id === v.client_id && j.t1 === v.hora_inicio && j.t2 === v.hora_fim && (v.frequencia === "mensal_dia_fixo" || v.dia_semana === weekdayIdx(j.date));
+  }
+  function nomeEquipa(ids) {
+    return (ids || []).map(function(eid) { var e = emps.find(function(x) { return x.id === eid; }); return e ? e.name.split(" ")[0] : eid; }).join(", ") || "—";
+  }
+  function desdeSugerido() {
+    var seg = proximaSegunda();
+    if (novaVolta.frequencia !== "quinzenal") return seg;
+    var novoIdx = parseInt(novaVolta.dia_semana) || 0;
+    var antiga = voltasFixas.find(function(x) { return x.id === editVoltaId; });
+    var ancora = antiga && antiga.frequencia === "quinzenal" ? (antiga.ultima_gerada || antiga.data_inicio) : null;
+    if (!ancora) return addDiasStr(seg, novoIdx);
+    var d = ancora;
+    while (d < seg) d = addDiasStr(d, 14);
+    while (addDiasStr(d, -14) >= seg) d = addDiasStr(d, -14);
+    return addDiasStr(addDiasStr(d, -weekdayIdx(d)), novoIdx);
+  }
+  function prepararAlteracao() {
+    var antiga = voltasFixas.find(function(x) { return x.id === editVoltaId; });
+    if (!antiga) return;
+    var desde = aplicarDesde || desdeSugerido();
+    if (desde < localDateStr()) { alert("A data n\xE3o pode ser anterior a hoje."); return; }
+    var fr = novaVolta.frequencia;
+    var nova = {
+      client_id: novaVolta.client_id, frequencia: fr,
+      dia_semana: (fr === "semanal" || fr === "quinzenal" || fr === "mensal_enesimo") ? parseInt(novaVolta.dia_semana) : null,
+      dia_mes: fr === "mensal_dia_fixo" ? parseInt(novaVolta.dia_mes) : null,
+      semana_do_mes: fr === "mensal_enesimo" ? parseInt(novaVolta.semana_do_mes) : null,
+      hora_inicio: novaVolta.hora_inicio, hora_fim: novaVolta.hora_fim, equipa: novaVolta.equipa
+    };
+    if (fr === "quinzenal" && weekdayIdx(desde) !== nova.dia_semana) {
+      alert("A 1.\xAA visita tem de ser numa " + DIAS_LONGOS[nova.dia_semana] + "."); return;
+    }
+    var fim = fimJanelaGeracao();
+    var vSim = Object.assign({}, antiga, nova, { data_inicio: desde, ultima_gerada: fr === "quinzenal" ? addDiasStr(desde, -14) : null });
+    var excl = antiga.datas_excluidas || [];
+    var novasDatas = desde > fim ? [] : datasDaVolta(vSim, desde, fim).filter(function(ds) { return excl.indexOf(ds) === -1; });
+    // Emparelha cada serviço existente com a nova data da MESMA semana (mensais: mesmo mês),
+    // para que "seg 9/11" passe a "ter 10/11" e não a outra semana qualquer.
+    var mensal = fr === "mensal_dia_fixo" || fr === "mensal_enesimo";
+    var chave = function(ds) { return mensal ? ds.slice(0, 7) : addDiasStr(ds, -weekdayIdx(ds)); };
+    var inicioSemana = addDiasStr(desde, -weekdayIdx(desde));
+    var hojeStr = localDateStr();
+    var inicioAfetados = mensal ? desde.slice(0, 7) + "-01" : inicioSemana;
+    if (inicioAfetados < hojeStr) inicioAfetados = hojeStr;
+    var candidatos = jobs.filter(function(j) { return j.status !== "completed" && j.date >= inicioAfetados && servicoDaVolta(j, antiga); })
+      .sort(function(a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+    var equipaAtivos = (nova.equipa || []).filter(function(eid) { var e = emps.find(function(x) { return x.id === eid; }); return e && e.ativo !== false; });
+    var equipaMudou = JSON.stringify((antiga.equipa || []).slice().sort()) !== JSON.stringify((nova.equipa || []).slice().sort());
+    var c = clients.find(function(x) { return x.id === nova.client_id; });
+    var mover = [], criar = [], remover = [], avisos = [];
+    var usadas = {};
+    candidatos.forEach(function(j) {
+      var par = novasDatas.find(function(ds) { return !usadas[ds] && chave(ds) === chave(j.date); });
+      if (par) {
+        usadas[par] = true;
+        var team = equipaMudou ? equipaAtivos : (j.team || []);
+        mover.push({ job: j, date: par, t1: nova.hora_inicio, t2: nova.hora_fim, team: team,
+          igual: j.date === par && j.t1 === nova.hora_inicio && j.t2 === nova.hora_fim && JSON.stringify(j.team || []) === JSON.stringify(team) });
+      } else if (j.date >= desde) {
+        remover.push(j);
+      }
+      // sem par e antes da data escolhida: fica como está
+    });
+    var idsAfetados = mover.map(function(a) { return a.job.id; }).concat(remover.map(function(j) { return j.id; }));
+    novasDatas.forEach(function(ds) {
+      if (usadas[ds]) return;
+      var jaTem = jobs.find(function(o) { return o.client_id === nova.client_id && o.date === ds && idsAfetados.indexOf(o.id) === -1; });
+      if (jaTem) { avisos.push(fmtDataCurta(ds) + ": j\xE1 existe um servi\xE7o deste cliente nesse dia, por isso n\xE3o \xE9 criado outro."); return; }
+      criar.push({ date: ds, t1: nova.hora_inicio, t2: nova.hora_fim, team: equipaMudou ? equipaAtivos : [] });
+    });
+    var toMin = function(t) { var p = (t || "0:0").split(":"); return parseInt(p[0]) * 60 + parseInt(p[1]); };
+    mover.concat(criar).forEach(function(a) {
+      if (a.igual) return;
+      (a.team || []).forEach(function(eid) {
+        var outro = jobs.find(function(o) { return idsAfetados.indexOf(o.id) === -1 && o.date === a.date && (o.team || []).indexOf(eid) !== -1 && toMin(o.t1) < toMin(a.t2) && toMin(a.t1) < toMin(o.t2); });
+        if (outro) avisos.push(nomeEquipa([eid]) + " j\xE1 tem " + outro.cn + " em " + fmtDataCurta(a.date) + " \xE0s " + outro.t1 + ".");
+      });
+    });
+    var ultima = novasDatas.length ? novasDatas[novasDatas.length - 1] : (fr === "quinzenal" ? addDiasStr(desde, -14) : (antiga.ultima_gerada || null));
+    setPlanoAlteracao({ antiga: antiga, nova: Object.assign({}, nova, { data_inicio: desde, ultima_gerada: ultima }), desde: desde,
+      mover: mover, criar: criar, remover: remover, avisos: avisos, cliente: c, equipaMudou: equipaMudou, teamSize: equipaAtivos.length || 1 });
+  }
+  async function recarregarAgendaEVoltas() {
+    __dbClearCache();
+    var fj = await db.list("servicos", "?select=*&order=date");
+    setJobs(fj || []);
+    var fv = await db.list("voltas_fixas", "?select=*&order=created_at.desc");
+    setVoltasFixas(fv || []);
+  }
+  async function aplicarAlteracao() {
+    var p = planoAlteracao;
+    if (!p || aplicandoPlano) return;
+    setAplicandoPlano(true);
+    try {
+      var c = p.cliente;
+      var r = await fetch(SUPABASE_URL + "/rest/v1/voltas_fixas?id=eq." + p.antiga.id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify(p.nova) });
+      if (!r.ok) throw new Error("volta: " + await r.text());
+      for (var i = 0; i < p.mover.length; i++) {
+        var a = p.mover[i];
+        if (a.igual && a.job.volta_id === p.antiga.id) continue;
+        var patch = { date: a.date, t1: a.t1, t2: a.t2, team: a.team, volta_id: p.antiga.id };
+        if (c && !a.job.val_manual && (a.t1 !== a.job.t1 || a.t2 !== a.job.t2 || p.equipaMudou)) patch.val = valorServicoVolta(c, a.t1, a.t2, p.teamSize);
+        r = await fetch(SUPABASE_URL + "/rest/v1/servicos?id=eq." + a.job.id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify(patch) });
+        if (!r.ok) throw new Error("servi\xE7o " + a.job.date + ": " + await r.text());
+      }
+      if (p.criar.length && c) {
+        var rows = p.criar.map(function(a) {
+          return { client_id: c.id, cn: c.name, addr: c.address, svc: c.service || "", t1: a.t1, t2: a.t2, team: a.team, status: "pending",
+            cl: c.checklist || [], prods: [], val: valorServicoVolta(c, a.t1, a.t2, p.teamSize), iva_override: c.iva_type || "normal", paid: false, date: a.date, volta_id: p.antiga.id };
+        });
+        r = await fetch(SUPABASE_URL + "/rest/v1/servicos", { method: "POST", headers: dbHeaders(), body: JSON.stringify(rows) });
+        if (!r.ok) throw new Error("novos servi\xE7os: " + await r.text());
+      }
+      for (var k = 0; k < p.remover.length; k++) {
+        r = await fetch(SUPABASE_URL + "/rest/v1/servicos?id=eq." + p.remover[k].id, { method: "DELETE", headers: dbHeaders() });
+        if (!r.ok) throw new Error("remover " + p.remover[k].date + ": " + await r.text());
+      }
+      await recarregarAgendaEVoltas();
+      setPlanoAlteracao(null);
+      setShowNovaVolta(false);
+      setEditVoltaId(null);
+      setAplicarDesde("");
+    } catch (e) {
+      alert("Erro ao aplicar a altera\xE7\xE3o: " + e.message + "\n\nParte da altera\xE7\xE3o pode ter ficado gravada. Recarrega a p\xE1gina e confirma a agenda deste cliente.");
+      await recarregarAgendaEVoltas();
+    }
+    setAplicandoPlano(false);
+  }
+  function servicosAposFim(v, ultima) {
+    return jobs.filter(function(j) { return j.status !== "completed" && j.date > ultima && servicoDaVolta(j, v); })
+      .sort(function(a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  }
+  async function confirmarFimVolta() {
+    var f = fimVolta;
+    if (!f || aplicandoPlano) return;
+    setAplicandoPlano(true);
+    try {
+      var sai = servicosAposFim(f.v, f.ultima);
+      var r = f.modo === "remover"
+        ? await fetch(SUPABASE_URL + "/rest/v1/voltas_fixas?id=eq." + f.v.id, { method: "DELETE", headers: dbHeaders() })
+        : await fetch(SUPABASE_URL + "/rest/v1/voltas_fixas?id=eq." + f.v.id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ ativo: false }) });
+      if (!r.ok) throw new Error("volta: " + await r.text());
+      for (var i = 0; i < sai.length; i++) {
+        r = await fetch(SUPABASE_URL + "/rest/v1/servicos?id=eq." + sai[i].id, { method: "DELETE", headers: dbHeaders() });
+        if (!r.ok) throw new Error("remover " + sai[i].date + ": " + await r.text());
+      }
+      await recarregarAgendaEVoltas();
+      setFimVolta(null);
+    } catch (e) {
+      alert("Erro: " + e.message + "\n\nRecarrega a p\xE1gina e confirma a agenda deste cliente.");
+      await recarregarAgendaEVoltas();
+    }
+    setAplicandoPlano(false);
+  }
   const [migrando, setMigrando] = useState(false);
   async function migrarClientesExistentes() {
     if (!window.confirm("Isto vai criar voltas fixas automaticamente para todos os clientes que ainda t\xEAm \"Dias de visita\" configurados na ficha (clientes pontuais/obra ficam de fora). \n\n\u26A0 Se j\xE1 criaste voltas manualmente para algum cliente (ex: Protecnil), este processo N\xC3O verifica duplicados \u2014 vais ficar com voltas repetidas para esse cliente, e ter\xE1s de apagar as extra. Continuar?")) return;
@@ -3108,6 +3259,43 @@ function Routes() {
     }
     return n === 5 ? lastMatch : null;
   }
+  // Datas em que uma volta tem serviço entre dataMin e fimJanela (inclusive).
+  // Fonte única: usada pela geração automática e pela alteração de voltas.
+  function datasDaVolta(v, dataMin, fimJanela) {
+    var datasAlvo = [];
+    var diaSem = parseInt(v.dia_semana) || 0;
+    var jsDiaAlvo = diaSem === 6 ? 0 : diaSem + 1;
+    if (v.frequencia === "semanal") {
+      var d = new Date(dataMin + "T12:00:00");
+      while (d.getDay() !== jsDiaAlvo) d.setDate(d.getDate() + 1);
+      while (localDateStr(d) <= fimJanela) { datasAlvo.push(localDateStr(d)); d.setDate(d.getDate() + 7); }
+    } else if (v.frequencia === "quinzenal") {
+      // Âncora fixa: conta de 14 em 14 a partir da última data gerada (ou da data de início),
+      // nunca a partir do dia em que a app é aberta.
+      var ref = v.ultima_gerada ? new Date(v.ultima_gerada + "T12:00:00") : null;
+      var d2 = new Date((v.ultima_gerada || v.data_inicio || dataMin) + "T12:00:00");
+      while (d2.getDay() !== jsDiaAlvo) d2.setDate(d2.getDate() + 1);
+      while (localDateStr(d2) < dataMin || (ref && d2 <= ref)) d2.setDate(d2.getDate() + 14);
+      while (localDateStr(d2) <= fimJanela) { datasAlvo.push(localDateStr(d2)); d2.setDate(d2.getDate() + 14); }
+    } else if (v.frequencia === "mensal_dia_fixo" || v.frequencia === "mensal_enesimo") {
+      var ini = new Date(dataMin + "T12:00:00"), fim = new Date(fimJanela + "T12:00:00");
+      var ano = ini.getFullYear(), mes = ini.getMonth();
+      while (ano < fim.getFullYear() || (ano === fim.getFullYear() && mes <= fim.getMonth())) {
+        var alvo = v.frequencia === "mensal_dia_fixo" ? new Date(ano, mes, parseInt(v.dia_mes)) : nthWeekdayOfMonth(ano, mes, diaSem, parseInt(v.semana_do_mes));
+        if (alvo) {
+          var alvoStr = localDateStr(alvo);
+          if (alvoStr >= dataMin && alvoStr <= fimJanela && datasAlvo.indexOf(alvoStr) === -1) datasAlvo.push(alvoStr);
+        }
+        mes++; if (mes > 11) { mes = 0; ano++; }
+      }
+    }
+    return datasAlvo;
+  }
+  function valorServicoVolta(c, t1, t2, teamSize) {
+    var tipoFat = c.tipo_faturacao || "hora";
+    if (tipoFat === "visita" || tipoFat === "mensal") return parseFloat(c.valor_visita) || 0;
+    return (teamSize || 1) * horasReais(t1, t2) * (c.price_per_hour || PRICE_PER_HOUR);
+  }
   async function garantirServicosGerados(voltasParaUsar, jobsExistentes, clientesParaUsar) {
     if (window.__geracaoEmAndamento) return 0;
     window.__geracaoEmAndamento = true;
@@ -3123,40 +3311,8 @@ function Routes() {
     voltasParaUsar.filter(function(v) { return v.ativo !== false; }).forEach(function(v) {
       const c = clientesParaUsar.find(function(x) { return x.id === v.client_id; });
       if (!c || c.ativo === false) return;
-      var datasAlvo = [];
       var dataMin = v.data_inicio > inicioJanela ? v.data_inicio : inicioJanela;
-      if (v.frequencia === "semanal") {
-        var d = new Date(dataMin + "T12:00:00");
-        while (d.getDay() !== (v.dia_semana === 6 ? 0 : v.dia_semana + 1)) d.setDate(d.getDate() + 1);
-        while (localDateStr(d) <= fimJanela) {
-          datasAlvo.push(localDateStr(d));
-          d.setDate(d.getDate() + 7);
-        }
-      } else if (v.frequencia === "quinzenal") {
-        var ref = v.ultima_gerada ? new Date(v.ultima_gerada + "T12:00:00") : null;
-        var d2 = new Date(dataMin + "T12:00:00");
-        while (d2.getDay() !== (v.dia_semana === 6 ? 0 : v.dia_semana + 1)) d2.setDate(d2.getDate() + 1);
-        if (ref) {
-          while (d2 <= ref) d2.setDate(d2.getDate() + 14);
-        }
-        while (localDateStr(d2) <= fimJanela) {
-          datasAlvo.push(localDateStr(d2));
-          d2.setDate(d2.getDate() + 14);
-        }
-      } else if (v.frequencia === "mensal_dia_fixo") {
-        for (var mOff = 0; mOff < 2; mOff++) {
-          var alvo = new Date(hoje.getFullYear(), hoje.getMonth() + mOff, v.dia_mes);
-          var alvoStr = localDateStr(alvo);
-          if (alvoStr >= dataMin && alvoStr <= fimJanela) datasAlvo.push(alvoStr);
-        }
-      } else if (v.frequencia === "mensal_enesimo") {
-        for (var mOff2 = 0; mOff2 < 2; mOff2++) {
-          var alvo2 = nthWeekdayOfMonth(hoje.getFullYear(), hoje.getMonth() + mOff2, v.dia_semana, v.semana_do_mes);
-          if (!alvo2) continue;
-          var alvo2Str = localDateStr(alvo2);
-          if (alvo2Str >= dataMin && alvo2Str <= fimJanela) datasAlvo.push(alvo2Str);
-        }
-      }
+      var datasAlvo = datasDaVolta(v, dataMin, fimJanela);
       var excluidas = v.datas_excluidas || [];
       datasAlvo = datasAlvo.filter(function(ds) { return excluidas.indexOf(ds) === -1; });
       var jaGerouAntes = !!v.ultima_gerada;
@@ -3171,15 +3327,12 @@ function Routes() {
           return e && e.ativo !== false;
         });
         var teamSize = equipaMolde.length || 1;
-        var tipoFat = c.tipo_faturacao || "hora";
-        var val;
-        if (tipoFat === "visita" || tipoFat === "mensal") val = parseFloat(c.valor_visita) || 0;
-        else val = teamSize * horas * (c.price_per_hour || PRICE_PER_HOUR);
+        var val = valorServicoVolta(c, v.hora_inicio, v.hora_fim, teamSize);
         var equipaAAtribuir = (!jaGerouAntes && dataStr === primeiraDesteLote) ? equipaMolde : [];
         novosServicos.push({
           client_id: c.id, cn: c.name, addr: c.address, svc: c.service || "", t1: v.hora_inicio, t2: v.hora_fim,
           team: equipaAAtribuir, status: "pending", cl: c.checklist || [], prods: [], val: val,
-          iva_override: c.iva_type || "normal", paid: false, date: dataStr
+          iva_override: c.iva_type || "normal", paid: false, date: dataStr, volta_id: v.id
         });
         if (!atualizarUltimaGerada[v.id] || dataStr > atualizarUltimaGerada[v.id]) atualizarUltimaGerada[v.id] = dataStr;
       });
@@ -3612,6 +3765,7 @@ function Routes() {
     });
     setSelJob(null);
     var voltaRef = voltasFixas.find(function(v) {
+      if (job.volta_id) return v.id === job.volta_id;
       return v.client_id === job.client_id && v.hora_inicio === job.t1 && v.hora_fim === job.t2 && (v.frequencia === "mensal_dia_fixo" || v.dia_semana === weekdayIdx(job.date));
     });
     if (voltaRef) {
@@ -3636,30 +3790,6 @@ function Routes() {
     var horas = horasReais(t1, t2);
     var preco = c.price_per_hour || PRICE_PER_HOUR;
     return (teamSize || 1) * horas * preco;
-  }
-  async function recalcularValoresEmLote() {
-    var pendentes = jobs.filter(function(j) { return j.status !== "completed" && !j.val_manual; });
-    if (!window.confirm("Recalcular o valor de " + pendentes.length + " servi\xE7o(s) ainda n\xE3o conclu\xEDdo(s), com base no pre\xE7o actual de cada cliente?")) return;
-    var atualizados = 0;
-    for (var i = 0; i < pendentes.length; i++) {
-      var j = pendentes[i];
-      var c = clients.find(function(x) { return x.id === j.client_id; });
-      var novoVal = calcularValorJob(c, j.t1, j.t2, (j.team || []).length, j.date, j.id);
-      if (novoVal === null) continue;
-      if (Math.abs((j.val || 0) - novoVal) > 0.01) {
-        await db.update("servicos", j.id, { val: novoVal });
-        atualizados++;
-      }
-    }
-    setJobs(function(p) {
-      return p.map(function(j) {
-        if (j.status === "completed") return j;
-        var c = clients.find(function(x) { return x.id === j.client_id; });
-        var novoVal = calcularValorJob(c, j.t1, j.t2, (j.team || []).length, j.date, j.id);
-        return novoVal !== null ? Object.assign({}, j, { val: novoVal }) : j;
-      });
-    });
-    alert(atualizados + " servi\xE7o(s) actualizado(s) com o valor correcto.");
   }
   async function moveJob() {
     if (!moveDate || !moveT1 || !moveT2) return;
@@ -3848,6 +3978,62 @@ function Routes() {
       if (v.frequencia === "mensal_enesimo") return ["1\xBA", "2\xBA", "3\xBA", "4\xBA", "\xDAltimo"][v.semana_do_mes - 1] + " " + diasNomes[v.dia_semana] + " do m\xEAs";
       return v.frequencia;
     }
+    var hP = React.createElement;
+    var thS = { textAlign: "left", fontSize: 10.5, textTransform: "uppercase", color: "#64748B", letterSpacing: 0.4, padding: "6px", borderBottom: "1.5px solid #E2E8F0" };
+    var tdS = { padding: "8px 6px", borderBottom: "1px solid #F1F5F9", verticalAlign: "top" };
+    var tdOld = Object.assign({}, tdS, { color: "#94A3B8", textDecoration: "line-through" });
+    var tdNew = Object.assign({}, tdS, { color: "#1A3A5C", fontWeight: 700 });
+    var tdArrow = Object.assign({}, tdS, { color: "#7C3AED", fontWeight: 800 });
+    var boxS = function(bg, bd, col) { return { borderRadius: 9, padding: "10px 12px", fontSize: 12.5, lineHeight: 1.45, marginTop: 12, background: bg, border: "1.5px solid " + bd, color: col }; };
+    var renderPlano = function() {
+      var p = planoAlteracao;
+      var mudam = p.mover.filter(function(a) { return !a.igual; });
+      var total = mudam.length + p.criar.length + p.remover.length;
+      var linhas = [];
+      mudam.forEach(function(a) {
+        linhas.push(hP("tr", { key: "m" + a.job.id }, hP("td", { style: tdOld }, fmtDataCurta(a.job.date) + " \xB7 " + a.job.t1 + "–" + a.job.t2), hP("td", { style: tdArrow }, "→"), hP("td", { style: tdNew }, fmtDataCurta(a.date) + " \xB7 " + a.t1 + "–" + a.t2), hP("td", { style: tdS }, nomeEquipa(a.team))));
+      });
+      p.criar.forEach(function(a) {
+        linhas.push(hP("tr", { key: "c" + a.date }, hP("td", { style: Object.assign({}, tdS, { color: "#16A34A", fontWeight: 700 }) }, "+ novo"), hP("td", { style: tdArrow }, "→"), hP("td", { style: tdNew }, fmtDataCurta(a.date) + " \xB7 " + a.t1 + "–" + a.t2), hP("td", { style: tdS }, nomeEquipa(a.team))));
+      });
+      p.remover.forEach(function(j) {
+        linhas.push(hP("tr", { key: "r" + j.id }, hP("td", { style: tdOld }, fmtDataCurta(j.date) + " \xB7 " + j.t1 + "–" + j.t2), hP("td", { style: tdArrow }, "→"), hP("td", { style: Object.assign({}, tdS, { color: "#DC2626", fontWeight: 700 }) }, "sai da agenda"), hP("td", { style: tdS }, nomeEquipa(j.team))));
+      });
+      return hP("div", { style: Object.assign({}, card, { marginBottom: 20, maxWidth: 680 }) },
+        hP("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C", marginBottom: 4 } }, total === 0 ? "Nenhum servi\xE7o da agenda muda" : "V\xE3o ser alterados " + total + " servi\xE7o" + (total === 1 ? "" : "s")),
+        hP("div", { style: { fontSize: 12.5, color: "#64748B", marginBottom: 12 } }, (p.cliente ? p.cliente.name : "") + " \xB7 s\xF3 servi\xE7os por fazer, a partir de " + fmtDataCurta(p.desde)),
+        total > 0 && hP("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } },
+          hP("thead", null, hP("tr", null, hP("th", { style: thS }, "Antes"), hP("th", { style: thS }, ""), hP("th", { style: thS }, "Depois"), hP("th", { style: thS }, "Equipa"))),
+          hP("tbody", null, linhas)),
+        hP("div", { style: boxS("#EFF6FF", "#93C5FD", "#1E40AF") }, p.equipaMudou ? "Mudaste a equipa da volta: a nova equipa passa para estes servi\xE7os." : "Os servi\xE7os mudam de data/hora mas mant\xEAm a equipa j\xE1 atribu\xEDda."),
+        p.avisos.length > 0 && hP("div", { style: boxS("#FFFBEB", "#F59E0B", "#92400E") }, p.avisos.map(function(t, i) { return hP("div", { key: i }, "⚠ " + t); })),
+        hP("div", { style: { fontSize: 12, color: "#64748B", marginTop: 10 } }, "Servi\xE7os j\xE1 conclu\xEDdos nunca s\xE3o tocados. Os meses seguintes j\xE1 s\xE3o gerados com a nova configura\xE7\xE3o."),
+        hP("div", { style: { display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" } },
+          hP("button", { onClick: function() { setPlanoAlteracao(null); }, disabled: aplicandoPlano, style: btnO }, "← Voltar"),
+          hP("button", { onClick: aplicarAlteracao, disabled: aplicandoPlano, style: Object.assign({}, btn, { opacity: aplicandoPlano ? 0.6 : 1 }) }, aplicandoPlano ? "A gravar..." : "Confirmar e gravar"))
+      );
+    };
+    var renderFimVolta = function() {
+      var f = fimVolta;
+      var sai = servicosAposFim(f.v, f.ultima);
+      var cF = clients.find(function(x) { return x.id === f.v.client_id; });
+      return hP("div", { style: Object.assign({}, card, { marginBottom: 20, maxWidth: 560 }) },
+        hP("div", { style: { fontWeight: 800, fontSize: 16, color: "#1A3A5C", marginBottom: 4 } }, f.modo === "remover" ? "Remover volta fixa" : "Pausar volta fixa"),
+        hP("div", { style: { fontSize: 12.5, color: "#64748B", marginBottom: 12 } }, (cF ? cF.name : f.v.client_id) + " \xB7 " + labelVolta(f.v) + " \xB7 " + f.v.hora_inicio + "–" + f.v.hora_fim),
+        hP("label", { style: lbl }, "\xDAltima visita"),
+        hP("input", { style: inp, type: "date", value: f.ultima, onChange: function(e) { if (e.target.value) setFimVolta(Object.assign({}, f, { ultima: e.target.value })); } }),
+        hP("div", { style: { fontSize: 11.5, color: "#64748B", margin: "6px 0 10px", lineHeight: 1.4 } }, "Os servi\xE7os desta volta por fazer depois desta data saem da agenda. Os j\xE1 conclu\xEDdos n\xE3o s\xE3o tocados."),
+        sai.length === 0 ? hP("div", { style: { fontSize: 13, color: "#64748B" } }, "N\xE3o h\xE1 servi\xE7os por fazer depois desta data.") :
+          hP("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } },
+            hP("thead", null, hP("tr", null, hP("th", { style: thS }, "Sai da agenda"), hP("th", { style: thS }, "Equipa"))),
+            hP("tbody", null, sai.map(function(j) { return hP("tr", { key: j.id }, hP("td", { style: tdOld }, fmtDataCurta(j.date) + " \xB7 " + j.t1 + "–" + j.t2), hP("td", { style: tdS }, nomeEquipa(j.team))); }))),
+        f.modo === "pausar" && hP("div", { style: boxS("#EFF6FF", "#93C5FD", "#1E40AF") }, "Para retomar, carrega em Reactivar: a agenda volta a ser gerada a partir desse dia."),
+        hP("div", { style: { display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" } },
+          hP("button", { onClick: function() { setFimVolta(null); }, disabled: aplicandoPlano, style: btnO }, "Cancelar"),
+          hP("button", { onClick: confirmarFimVolta, disabled: aplicandoPlano, style: Object.assign({}, btnR, { opacity: aplicandoPlano ? 0.6 : 1 }) },
+            aplicandoPlano ? "A gravar..." : (f.modo === "remover" ? "Remover" : "Pausar") + (sai.length ? " e limpar " + sai.length + " servi\xE7o" + (sai.length === 1 ? "" : "s") : "")))
+      );
+    };
     return /* @__PURE__ */ React.createElement("div", { style: { padding: "0 0 40px" } },
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 } },
         /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 900, fontSize: 20, color: "#1A3A5C" } }, "\u2699 Voltas Fixas"),
@@ -3862,7 +4048,9 @@ function Routes() {
           }, style: btn }, "+ Nova volta fixa")
         )
       ),
-      showNovaVolta && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, background: "#F8FAFC" }) },
+      planoAlteracao && renderPlano(),
+      fimVolta && renderFimVolta(),
+      showNovaVolta && !planoAlteracao && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, background: "#F8FAFC" }) },
         /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, editVoltaId ? "Editar volta fixa" : "Nova volta fixa"),
         /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } },
           /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } },
@@ -3876,7 +4064,7 @@ function Routes() {
           ),
           /* @__PURE__ */ React.createElement("div", null,
             /* @__PURE__ */ React.createElement("label", { style: lbl }, "Frequ\xEAncia"),
-            /* @__PURE__ */ React.createElement("select", { style: inp, value: novaVolta.frequencia, onChange: function(e) { setNovaVolta(Object.assign({}, novaVolta, { frequencia: e.target.value })); } },
+            /* @__PURE__ */ React.createElement("select", { style: inp, value: novaVolta.frequencia, onChange: function(e) { setAplicarDesde(""); setNovaVolta(Object.assign({}, novaVolta, { frequencia: e.target.value })); } },
               /* @__PURE__ */ React.createElement("option", { value: "semanal" }, "Semanal"),
               /* @__PURE__ */ React.createElement("option", { value: "quinzenal" }, "Quinzenal"),
               /* @__PURE__ */ React.createElement("option", { value: "mensal_dia_fixo" }, "Mensal \u2014 dia fixo do m\xEAs"),
@@ -3885,7 +4073,7 @@ function Routes() {
           ),
           (novaVolta.frequencia === "semanal" || novaVolta.frequencia === "quinzenal" || novaVolta.frequencia === "mensal_enesimo") && /* @__PURE__ */ React.createElement("div", null,
             /* @__PURE__ */ React.createElement("label", { style: lbl }, "Dia da semana"),
-            /* @__PURE__ */ React.createElement("select", { style: inp, value: novaVolta.dia_semana, onChange: function(e) { setNovaVolta(Object.assign({}, novaVolta, { dia_semana: e.target.value })); } },
+            /* @__PURE__ */ React.createElement("select", { style: inp, value: novaVolta.dia_semana, onChange: function(e) { setAplicarDesde(""); setNovaVolta(Object.assign({}, novaVolta, { dia_semana: e.target.value })); } },
               diasNomes.slice(0, 6).map(function(d, i) { return /* @__PURE__ */ React.createElement("option", { key: i, value: i }, d); })
             )
           ),
@@ -3915,9 +4103,15 @@ function Routes() {
               TIME_SLOTS.map(function(t) { return /* @__PURE__ */ React.createElement("option", { key: t }, t); })
             )
           ),
-          /* @__PURE__ */ React.createElement("div", null,
+          !editVoltaId && /* @__PURE__ */ React.createElement("div", null,
             /* @__PURE__ */ React.createElement("label", { style: lbl }, "Data de in\xEDcio (se ainda n\xE3o come\xE7ou)"),
             /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: novaVolta.data_inicio, onChange: function(e) { setNovaVolta(Object.assign({}, novaVolta, { data_inicio: e.target.value })); } })
+          ),
+          editVoltaId && /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1", border: "2px solid #7C3AED", borderRadius: 10, padding: "12px 12px 10px", background: "#FAF8FF" } },
+            React.createElement("div", { style: { fontSize: 12, fontWeight: 800, color: "#7C3AED", marginBottom: 8 } }, "APLICAR A MUDAN\xC7A"),
+            React.createElement("label", { style: lbl }, novaVolta.frequencia === "quinzenal" ? "1.\xAA visita no novo hor\xE1rio" : "A partir de"),
+            React.createElement("input", { style: inp, type: "date", min: localDateStr(), value: aplicarDesde || desdeSugerido(), onChange: function(e) { setAplicarDesde(e.target.value); } }),
+            React.createElement("div", { style: { fontSize: 11.5, color: "#64748B", marginTop: 6, lineHeight: 1.4 } }, novaVolta.frequencia === "quinzenal" ? "Sugerido: a pr\xF3xima visita, j\xE1 no novo dia. A partir daqui conta de 14 em 14 dias." : "Sugerido: a pr\xF3xima segunda-feira. Os servi\xE7os antes desta data ficam como est\xE3o.")
           ),
           /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } },
             /* @__PURE__ */ React.createElement("label", { style: lbl }, "Equipa"),
@@ -3933,8 +4127,8 @@ function Routes() {
           )
         ),
         /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 16 } },
-          /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowNovaVolta(false); setEditVoltaId(null); }, style: Object.assign({}, btnX, { flex: 1, textAlign: "center" }) }, "Cancelar"),
-          /* @__PURE__ */ React.createElement("button", { onClick: salvarVoltaFixa, disabled: savingVolta || !novaVolta.client_id, style: Object.assign({}, btnG, { flex: 1, textAlign: "center", opacity: savingVolta || !novaVolta.client_id ? 0.5 : 1 }) }, savingVolta ? "A guardar..." : "Guardar")
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowNovaVolta(false); setEditVoltaId(null); setAplicarDesde(""); }, style: Object.assign({}, btnX, { flex: 1, textAlign: "center" }) }, "Cancelar"),
+          /* @__PURE__ */ React.createElement("button", { onClick: editVoltaId ? prepararAlteracao : salvarVoltaFixa, disabled: savingVolta || !novaVolta.client_id, style: Object.assign({}, editVoltaId ? btn : btnG, { flex: 1, textAlign: "center", opacity: savingVolta || !novaVolta.client_id ? 0.5 : 1 }) }, savingVolta ? "A guardar..." : (editVoltaId ? "Ver o que muda \u2192" : "Guardar"))
         )
       ),
       /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 16 }), placeholder: "Pesquisar cliente...", value: voltasSearch, onChange: function(e) { setVoltasSearch(e.target.value); } }),
@@ -3953,10 +4147,13 @@ function Routes() {
                 /* @__PURE__ */ React.createElement("button", { onClick: function() {
                   setNovaVolta({ client_id: v.client_id, frequencia: v.frequencia, dia_semana: v.dia_semana || 0, dia_mes: v.dia_mes || 1, semana_do_mes: v.semana_do_mes || 1, hora_inicio: v.hora_inicio, hora_fim: v.hora_fim, equipa: v.equipa || [], data_inicio: v.data_inicio });
                   setEditVoltaId(v.id);
+                  setAplicarDesde("");
+                  setPlanoAlteracao(null);
+                  setFimVolta(null);
                   setShowNovaVolta(true);
                 }, style: Object.assign({}, btnO, { fontSize: 11, padding: "5px 10px" }) }, "Editar"),
-                /* @__PURE__ */ React.createElement("button", { onClick: function() { toggleAtivaVolta(v); }, style: Object.assign({}, btnO, { fontSize: 11, padding: "5px 10px" }) }, v.ativo === false ? "Reactivar" : "Pausar"),
-                /* @__PURE__ */ React.createElement("button", { onClick: function() { removerVoltaFixa(v.id); }, style: Object.assign({}, btnR, { fontSize: 11, padding: "5px 10px" }) }, "Del")
+                /* @__PURE__ */ React.createElement("button", { onClick: function() { if (v.ativo === false) toggleAtivaVolta(v); else { setShowNovaVolta(false); setFimVolta({ v: v, modo: "pausar", ultima: localDateStr() }); } }, style: Object.assign({}, btnO, { fontSize: 11, padding: "5px 10px" }) }, v.ativo === false ? "Reactivar" : "Pausar"),
+                /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowNovaVolta(false); setFimVolta({ v: v, modo: "remover", ultima: localDateStr() }); }, style: Object.assign({}, btnR, { fontSize: 11, padding: "5px 10px" }) }, "Del")
               )
             );
           })
@@ -3989,7 +4186,7 @@ function Routes() {
     setNj({ cn: "", addr: "", svc: "", date: localDateStr(), date_end: "", t1: "08:00", t2: "10:00", team: [], val: "", obra_ref: "" });
     setClientSearch("");
     setShowNew(true);
-  }, style: btn }, "+ Servi\xE7o"), /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowVoltasFixas(true); }, style: Object.assign({}, btnO, { fontSize: 13, background: "#F5F3FF", border: "1.5px solid #7C3AED", color: "#7C3AED" }) }, "\u2699 Voltas Fixas"), /* @__PURE__ */ React.createElement("button", { onClick: recalcularValoresEmLote, style: Object.assign({}, btnO, { fontSize: 13 }) }, "\uD83D\uDD04 Recalcular valores"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: alocarEquipaSemana, style: Object.assign({}, btnG, { fontSize: 13, whiteSpace: "nowrap" }) }, "\u26A1 Gerar Semana (equipa)"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: function() { abrirEquipasLivres(); }, style: Object.assign({}, btnO, { fontSize: 13, whiteSpace: "nowrap", background: "#FFF7ED", border: "1.5px solid #F59E0B", color: "#B45309" }) }, "\uD83D\uDCA1 Equipas a definir"), calView === "week" && wJobs.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: function() {
+  }, style: btn }, "+ Servi\xE7o"), /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowVoltasFixas(true); }, style: Object.assign({}, btnO, { fontSize: 13, background: "#F5F3FF", border: "1.5px solid #7C3AED", color: "#7C3AED" }) }, "\u2699 Voltas Fixas"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: alocarEquipaSemana, style: Object.assign({}, btnG, { fontSize: 13, whiteSpace: "nowrap" }) }, "\u26A1 Gerar Semana (equipa)"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: function() { abrirEquipasLivres(); }, style: Object.assign({}, btnO, { fontSize: 13, whiteSpace: "nowrap", background: "#FFF7ED", border: "1.5px solid #F59E0B", color: "#B45309" }) }, "\uD83D\uDCA1 Equipas a definir"), calView === "week" && wJobs.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: function() {
     const win = window.open("", "_blank");
     const byEmp = {};
     emps.forEach(function(e) {
@@ -10428,33 +10625,7 @@ function QuadroEsquecimentos(props) {
   const [revMarc, setRevMarc] = useState([]);
   const [anularModal, setAnularModal] = useState(null);
   const [anuladosArm, setAnuladosArm] = useState({});
-  const [confirmados, setConfirmados] = useState({});
-  const [revFila, setRevFila] = useState([]);
-  const [revMotivo, setRevMotivo] = useState(false);
-  const revPend = React.useRef(Promise.resolve());
   function chaveAnul(fid, sid, tipo) { return fid + "|" + sid + "|" + tipo; }
-  // Confirmados = esquecimentos revistos que CONTAM (botão "Conta"). Não mexem no prémio:
-  // só tiram a linha da fila "por rever". Tabela própria, separada dos anulados.
-  function chaveConfItem(it) { return it.tipo === "armazem" ? (it.fid + "|" + it.dia + "|armazem") : chaveAnul(it.fid, it.f.sid, it.f.tipo); }
-  function confServ(fid, f) { return !!confirmados[chaveAnul(fid, f.sid, f.tipo)]; }
-  function confArm(fid, dia) { return !!confirmados[fid + "|" + dia + "|armazem"]; }
-  async function confirmar(lista, recarregar) {
-    if (!lista || !lista.length) return;
-    var linhas = lista.map(function(it) { return { chave: chaveConfItem(it), funcionario_id: it.fid, servico_id: it.tipo === "armazem" ? null : it.f.sid, dia_ref: it.tipo === "armazem" ? it.dia : null, tipo_picagem: it.tipo === "armazem" ? "armazem" : it.f.tipo }; });
-    setConfirmados(function(s) { var n = Object.assign({}, s); linhas.forEach(function(l) { n[l.chave] = true; }); return n; });
-    try {
-      var resp = await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_confirmados?on_conflict=chave", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "resolution=ignore-duplicates" }), body: JSON.stringify(linhas) });
-      if (!resp.ok) throw new Error("a base de dados recusou (" + resp.status + "): " + (await resp.text()).slice(0, 160));
-    } catch (e) { window.alert("Erro ao confirmar: " + e.message); recarregar = true; }
-    if (recarregar) carregar();
-  }
-  async function desconfirmar(it) {
-    try {
-      var resp = await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_confirmados?chave=eq." + encodeURIComponent(chaveConfItem(it)), { method: "DELETE", headers: dbHeaders() });
-      if (!resp.ok) throw new Error("a base de dados recusou (" + resp.status + ")");
-    } catch (e) { window.alert("Erro: " + e.message); }
-    carregar();
-  }
   function carregar() {
     setLoading(true);
     var partes = mesRef.split("-");
@@ -10467,11 +10638,8 @@ function QuadroEsquecimentos(props) {
       db.list("servicos", "?select=id,client_id,cn,date,t1,team,check_in,check_out,status&date=gte." + mStart + "&date=lte." + mEnd + "&status=eq.completed"),
       db.list("picagens_armazem", "?select=funcionario_id,tipo,created_at&created_at=gte." + mStart + "T00:00:00&created_at=lte." + mEnd + "T23:59:59"),
       db.list("esquecimentos_anulados", "?select=*"),
-      db.list("clientes", "?select=id,tolerancia_minutos"),
-      db.list("esquecimentos_confirmados", "?select=chave")
+      db.list("clientes", "?select=id,tolerancia_minutos")
     ]).then(function(res) {
-      var confMap = {}; (res[5] || []).forEach(function(c) { confMap[c.chave] = true; });
-      setConfirmados(confMap);
       var emps = (res[0] || []).filter(function(e) { return e.ativo !== false; });
       var servicos = res[1] || [];
       var picArm = res[2] || [];
@@ -10509,14 +10677,6 @@ function QuadroEsquecimentos(props) {
   function anular(fid, f) { setAnularModal({ fid: fid, f: f, tipo: "servico" }); }
   function anularArm(fid, dia) { setAnularModal({ fid: fid, dia: dia, tipo: "armazem" }); }
   function anularGrupo(lista) { if (lista && lista.length) setAnularModal({ lista: lista }); }
-  async function gravarAnulacoes(itens, motivo) {
-    for (var i = 0; i < itens.length; i++) {
-      var it = itens[i];
-      var body = (it.tipo === "armazem") ? { funcionario_id: it.fid, dia_ref: it.dia, tipo_picagem: "armazem", motivo: motivo } : { funcionario_id: it.fid, servico_id: it.f.sid, tipo_picagem: it.f.tipo, motivo: motivo };
-      var resp = await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "resolution=merge-duplicates" }), body: JSON.stringify(body) });
-      if (!resp.ok) throw new Error("a base de dados recusou (" + resp.status + "): " + (await resp.text()).slice(0, 160));
-    }
-  }
   async function confirmarAnular(motivo) {
     var m = anularModal;
     if (!m) return;
@@ -10525,8 +10685,7 @@ function QuadroEsquecimentos(props) {
       for (var i = 0; i < itens.length; i++) {
         var it = itens[i];
         var body = (it.tipo === "armazem") ? { funcionario_id: it.fid, dia_ref: it.dia, tipo_picagem: "armazem", motivo: motivo } : { funcionario_id: it.fid, servico_id: it.f.sid, tipo_picagem: it.f.tipo, motivo: motivo };
-        var resp = await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "resolution=merge-duplicates" }), body: JSON.stringify(body) });
-        if (!resp.ok) throw new Error("a base de dados recusou (" + resp.status + "): " + (await resp.text()).slice(0, 160));
+        await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "resolution=merge-duplicates" }), body: JSON.stringify(body) });
       }
       setAnularModal(null);
       carregar();
@@ -10551,12 +10710,11 @@ function QuadroEsquecimentos(props) {
     setAberto(null);
   }
   var mesLabel = (function() { var p = mesRef.split("-"); return new Date(parseInt(p[0]), parseInt(p[1]) - 1, 1).toLocaleDateString("pt-PT", { month: "long", year: "numeric" }); })();
-  var totalRever = 0, nPerde = 0, nConf = 0, porCliente = {}, fila = [];
+  var totalRever = 0, nPerde = 0, porCliente = {}, fila = [];
   (dados || []).forEach(function(d) {
     if (d.esqServ >= 10 || d.esqArm >= 5) nPerde++;
     (d.detalheServ || []).forEach(function(f) {
       if (anulados[chaveAnul(d.id, f.sid, f.tipo)]) return;
-      if (confServ(d.id, f)) { nConf++; return; }
       totalRever++;
       var late = f.tipo === "entrada" && f.late;
       var min = late ? ((minsHHMM(f.ci) || 0) - (minsHHMM(f.t1) || 0)) : null;
@@ -10568,7 +10726,6 @@ function QuadroEsquecimentos(props) {
     });
     (d.detalheArm || []).forEach(function(dia) {
       if (anuladosArm[d.id + "|" + dia]) return;
-      if (confArm(d.id, dia)) { nConf++; return; }
       totalRever++;
       fila.push({ id: d.id, nome: d.nome, av: d.av, arm: dia, tipo: "armazem", min: null });
     });
@@ -10580,30 +10737,15 @@ function QuadroEsquecimentos(props) {
       /* @__PURE__ */ React.createElement("div", { style: { width: 40, height: 40, borderRadius: 11, background: "#EFF6FF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, flexShrink: 0 } }, "📋"),
       /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } },
         /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", textTransform: "capitalize" } }, "Esquecimentos · " + mesLabel),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, loading ? "a carregar…" : (totalRever + " por rever · " + nConf + " confirmado" + (nConf === 1 ? "" : "s") + " · " + nPerde + " perde" + (nPerde === 1 ? "" : "m") + " prémio"))
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, loading ? "a carregar…" : (totalRever + " por rever · " + nPerde + " perde" + (nPerde === 1 ? "" : "m") + " prémio"))
       ),
       /* @__PURE__ */ React.createElement("button", { style: { background: "#1A3A5C", color: "#fff", border: "none", borderRadius: 10, padding: "9px 15px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", flexShrink: 0 } }, "Abrir ›")
     );
   }
   function buildItem(it) { return it.tipo === "armazem" ? { fid: it.id, tipo: "armazem", dia: it.arm } : { fid: it.id, tipo: "servico", f: it.f }; }
-  // O Rever trabalha sobre uma fotografia da fila (revFila), para os índices não saltarem quando se grava.
-  // Rever: cada decisão grava logo. As gravações vão em fila (revPend) e o fecho
-  // espera por todas antes de recarregar, para nada voltar a aparecer como "por rever".
-  function revEnfila(fn) { revPend.current = revPend.current.then(fn).catch(function(e) { window.alert("Erro ao gravar: " + e.message); }); }
-  function revConta() { var it = revFila[revIdx]; if (it) { var item = buildItem(it); revEnfila(function() { return confirmar([item], false); }); setRevMarc(revMarc.concat([{ acao: "conta" }])); } setRevMotivo(false); setRevIdx(revIdx + 1); }
-  function revAnula() { setRevMotivo(true); }
-  function revAnulaMotivo(motivo) {
-    var it = revFila[revIdx];
-    if (it) {
-      var item = buildItem(it);
-      if (item.tipo === "armazem") setAnuladosArm(function(s) { var n = Object.assign({}, s); n[item.fid + "|" + item.dia] = motivo; return n; });
-      else setAnulados(function(s) { var n = Object.assign({}, s); n[chaveAnul(item.fid, item.f.sid, item.f.tipo)] = motivo; return n; });
-      revEnfila(function() { return gravarAnulacoes([item], motivo); });
-      setRevMarc(revMarc.concat([{ acao: "anula" }]));
-    }
-    setRevMotivo(false); setRevIdx(revIdx + 1);
-  }
-  function revFim() { setRevAberto(false); setRevIdx(0); setRevMarc([]); setRevMotivo(false); revPend.current.then(function() { carregar(); }); }
+  function revConta() { setRevIdx(revIdx + 1); }
+  function revAnula() { var it = fila[revIdx]; if (it) setRevMarc(revMarc.concat([buildItem(it)])); setRevIdx(revIdx + 1); }
+  function revFim() { var m = revMarc; setRevAberto(false); setRevIdx(0); setRevMarc([]); if (m.length) anularGrupo(m); }
   function renderCliente() {
     if (clienteList.length === 0) return /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", fontSize: 13, padding: 24 } }, "Sem esquecimentos este mês.");
     return /* @__PURE__ */ React.createElement("div", null, clienteList.map(function(c, i) {
@@ -10617,37 +10759,31 @@ function QuadroEsquecimentos(props) {
     }));
   }
   function renderRever() {
-    var it = revFila[revIdx], inner;
+    var it = fila[revIdx], inner;
     if (!it) {
       inner = /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: "10px 0" } },
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 34 } }, "✅"),
         /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, color: "#1A3A5C", marginTop: 8 } }, "Tudo revisto!"),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, color: "#94A3B8", marginTop: 4 } }, (function() { var nc = revMarc.filter(function(x) { return x.acao === "conta"; }).length, na = revMarc.filter(function(x) { return x.acao === "anula"; }).length; return nc + " confirmado" + (nc === 1 ? "" : "s") + " · " + na + " anulado" + (na === 1 ? "" : "s") + " — já gravados"; })()),
-        /* @__PURE__ */ React.createElement("button", { onClick: revFim, style: { marginTop: 18, width: "100%", background: "#1A3A5C", color: "#fff", border: "none", borderRadius: 12, padding: 14, fontSize: 14, fontWeight: 800, cursor: "pointer" } }, "Fechar")
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, color: "#94A3B8", marginTop: 4 } }, revMarc.length ? (revMarc.length + " para anular — dás o motivo a seguir") : "Nada a anular."),
+        /* @__PURE__ */ React.createElement("button", { onClick: revFim, style: { marginTop: 18, width: "100%", background: "#1A3A5C", color: "#fff", border: "none", borderRadius: 12, padding: 14, fontSize: 14, fontWeight: 800, cursor: "pointer" } }, revMarc.length ? ("Anular os " + revMarc.length + " marcados") : "Fechar")
       );
     } else {
       var titulo = it.tipo === "armazem" ? "Sem picagem no armazém" : (it.tipo === "entrada" && it.late ? ("+" + it.min + " min de atraso") : (it.tipo === "saída" ? "Não picou a saída" : "Não picou a entrada"));
       var sub = it.tipo === "armazem" ? (it.arm ? new Date(it.arm + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) : "") : ((it.cn || "") + (it.date ? " · " + new Date(it.date + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) : ""));
       var det = (it.tipo === "entrada" && it.late && it.f) ? ("picou " + (it.f.ci || "") + " · previsto " + (it.f.t1 || "")) : "";
       inner = /* @__PURE__ */ React.createElement("div", null,
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#94A3B8", marginBottom: 14 } }, (revIdx + 1) + " de " + revFila.length + " · as mais graves primeiro"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#94A3B8", marginBottom: 14 } }, (revIdx + 1) + " de " + fila.length + " · as mais graves primeiro"),
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 19, fontWeight: 900, color: "#1A3A5C" } }, it.nome),
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", margin: "2px 0 14px" } }, sub),
         /* @__PURE__ */ React.createElement("div", { style: { display: "inline-block", fontSize: 15, fontWeight: 900, color: "#DC2626", background: "#FEF2F2", borderRadius: 10, padding: "8px 16px" } }, titulo),
         det ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, color: "#94A3B8", marginTop: 6 } }, det) : null,
-        revMotivo ? /* @__PURE__ */ React.createElement("div", { style: { marginTop: 18 } },
-          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", marginBottom: 8 } }, "Porque n\xE3o deve contar?"),
-          ["QR n\xE3o funcionava", "Sem rede", "Outro"].map(function(cat) {
-            return /* @__PURE__ */ React.createElement("button", { key: cat, onClick: function() { if (cat === "Outro") { var t = window.prompt("Descreve o motivo:", ""); if (t === null) return; revAnulaMotivo(t.trim() || "Outro"); } else { revAnulaMotivo(cat); } }, style: { width: "100%", background: "#F6FAFD", border: "1.5px solid #E2EBF4", borderRadius: 10, padding: 12, fontSize: 14, fontWeight: 700, color: "#1A3A5C", cursor: "pointer", marginBottom: 8, textAlign: "left" } }, cat);
-          }),
-          /* @__PURE__ */ React.createElement("button", { onClick: function() { setRevMotivo(false); }, style: { width: "100%", background: "transparent", border: "none", color: "#94A3B8", fontSize: 13, cursor: "pointer" } }, "\u2039 Voltar")
-        ) : /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 20 } },
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 20 } },
           /* @__PURE__ */ React.createElement("button", { onClick: revConta, style: { flex: 1, background: "#FEE2E2", color: "#991B1B", border: "none", borderRadius: 12, padding: 14, fontSize: 14, fontWeight: 800, cursor: "pointer" } }, "Conta"),
           /* @__PURE__ */ React.createElement("button", { onClick: revAnula, style: { flex: 1, background: "#DCFCE7", color: "#15803D", border: "none", borderRadius: 12, padding: 14, fontSize: 14, fontWeight: 800, cursor: "pointer" } }, "Anular ✓")
         )
       );
     }
-    return /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(21,50,78,0.55)", zIndex: 650, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }, onClick: function() { revFim(); } },
+    return /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(21,50,78,0.55)", zIndex: 650, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }, onClick: function() { setRevAberto(false); } },
       /* @__PURE__ */ React.createElement("div", { onClick: function(e) { e.stopPropagation(); }, style: { background: "#fff", borderRadius: 20, width: "100%", maxWidth: 380, padding: 22 } }, inner)
     );
   }
@@ -10666,7 +10802,7 @@ function QuadroEsquecimentos(props) {
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 4, background: "rgba(255,255,255,0.14)", borderRadius: 11, padding: 4, flex: 1, minWidth: 180 } }, ["pessoa", "cliente"].map(function(lx) {
         return /* @__PURE__ */ React.createElement("button", { key: lx, onClick: function() { setLente(lx); }, style: { flex: 1, border: "none", background: lente === lx ? "#fff" : "transparent", color: lente === lx ? "#1A3A5C" : "rgba(255,255,255,0.85)", fontSize: 12.5, fontWeight: 700, padding: "8px 6px", borderRadius: 8, cursor: "pointer" } }, lx === "pessoa" ? "Por pessoa" : "Por cliente");
       })),
-      /* @__PURE__ */ React.createElement("button", { onClick: function() { if (!fila.length) return; setRevFila(fila.slice()); setRevIdx(0); setRevMarc([]); setRevAberto(true); }, style: { background: fila.length ? "#fff" : "rgba(255,255,255,0.3)", color: fila.length ? "#1A3A5C" : "rgba(255,255,255,0.8)", border: "none", borderRadius: 10, padding: "9px 15px", fontSize: 12.5, fontWeight: 800, cursor: fila.length ? "pointer" : "default", flexShrink: 0 } }, "⚡ Rever (" + fila.length + ")")
+      /* @__PURE__ */ React.createElement("button", { onClick: function() { if (!fila.length) return; setRevIdx(0); setRevMarc([]); setRevAberto(true); }, style: { background: fila.length ? "#fff" : "rgba(255,255,255,0.3)", color: fila.length ? "#1A3A5C" : "rgba(255,255,255,0.8)", border: "none", borderRadius: 10, padding: "9px 15px", fontSize: 12.5, fontWeight: 800, cursor: fila.length ? "pointer" : "default", flexShrink: 0 } }, "⚡ Rever (" + fila.length + ")")
     )
   ),
     /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 12 } }, "Servi\xE7o: perde o pr\xE9mio com 10 ou mais \xB7 Armaz\xE9m: com 5 ou mais"),
@@ -10687,21 +10823,12 @@ function QuadroEsquecimentos(props) {
       var nSemSai = semSai.filter(function(f) { return !anuladoDe(f); }).length;
       var nArm = arm.filter(function(x) { return !x.anulado; }).length;
       function toggleGrupo(k) { setGrupoAberto(grupoAberto === k ? null : k); setVerMais(function(s) { var n = Object.assign({}, s); delete n[k]; return n; }); setVerAnul(function(s) { var n = Object.assign({}, s); delete n[k]; return n; }); }
-      var btnConta = { background: "#FEF2F2", border: "none", borderRadius: 6, color: "#991B1B", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "4px 10px", flexShrink: 0 };
-      var tagConf = { fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 7px", flexShrink: 0, background: "#FEE2E2", color: "#991B1B" };
-      var btnDesfazer = { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline", flexShrink: 0 };
-      function botaoAnular(f) {
-        var an = anuladoDe(f);
-        if (!an && confServ(d.id, f)) return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("span", { style: tagConf }, "confirmado"), /* @__PURE__ */ React.createElement("button", { onClick: function() { desconfirmar({ fid: d.id, tipo: "servico", f: f }); }, style: btnDesfazer }, "desfazer"));
-        if (!an) return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { onClick: function() { confirmar([{ fid: d.id, tipo: "servico", f: f }], true); }, style: btnConta }, "conta"), botaoAnularOrig(f));
-        return botaoAnularOrig(f);
-      }
-      function botaoAnularOrig(f) { var an = anuladoDe(f); return an ?/* @__PURE__ */ React.createElement("button", { onClick: function() { reativar(d.id, f); }, style: { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline", flexShrink: 0 } }, "reativar") : /* @__PURE__ */ React.createElement("button", { onClick: function() { anular(d.id, f); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, color: "#2E6DA4", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "4px 10px", flexShrink: 0 } }, "anular"); }
+      function botaoAnular(f) { var an = anuladoDe(f); return an ? /* @__PURE__ */ React.createElement("button", { onClick: function() { reativar(d.id, f); }, style: { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline", flexShrink: 0 } }, "reativar") : /* @__PURE__ */ React.createElement("button", { onClick: function() { anular(d.id, f); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, color: "#2E6DA4", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "4px 10px", flexShrink: 0 } }, "anular"); }
       function linhaTardia(x, i) { var f = x.f, an = anuladoDe(f); var b = x.min >= 45 ? { bg: "#FEF2F2", c: "#DC2626" } : x.min >= 15 ? { bg: "#FFF7ED", c: "#C2410C" } : { bg: "#F1F5F9", c: "#64748B" }; return /* @__PURE__ */ React.createElement("div", { key: "t" + i, style: { display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid #F4F7FA", opacity: an ? 0.5 : 1 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, fontWeight: 600, color: "#334155", textDecoration: an ? "line-through" : "none" } }, f.cn || ""), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 1 } }, dataCurta(f.date) + " · picou " + (f.ci || "") + ", previsto " + (f.t1 || "") + (an ? " — anulado: " + an : ""))), an ? null : /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 800, borderRadius: 6, padding: "2px 7px", flexShrink: 0, background: b.bg, color: b.c } }, "+" + x.min + " min"), botaoAnular(f)); }
       function linhaTag(f, i, label, corTag) { var an = anuladoDe(f); return /* @__PURE__ */ React.createElement("div", { key: "s" + i, style: { display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid #F4F7FA", opacity: an ? 0.5 : 1 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, fontWeight: 600, color: "#334155", textDecoration: an ? "line-through" : "none" } }, f.cn || ""), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 1 } }, dataCurta(f.date) + (an ? " — anulado: " + an : ""))), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 7px", flexShrink: 0, background: corTag.bg, color: corTag.c } }, label), botaoAnular(f)); }
-      function linhaArm(x, i) { var an = x.anulado; return /* @__PURE__ */ React.createElement("div", { key: "a" + i, style: { display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid #F4F7FA", opacity: an ? 0.5 : 1 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, fontWeight: 600, color: "#334155", textDecoration: an ? "line-through" : "none" } }, dataCurta(x.dia)), an ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#16A34A", fontStyle: "italic", marginTop: 1 } }, "anulado: " + an) : null), an ? /* @__PURE__ */ React.createElement("button", { onClick: function() { reativarArm(d.id, x.dia); }, style: { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline", flexShrink: 0 } }, "reativar") : confArm(d.id, x.dia) ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("span", { style: tagConf }, "confirmado"), /* @__PURE__ */ React.createElement("button", { onClick: function() { desconfirmar({ fid: d.id, tipo: "armazem", dia: x.dia }); }, style: btnDesfazer }, "desfazer")) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { onClick: function() { confirmar([{ fid: d.id, tipo: "armazem", dia: x.dia }], true); }, style: btnConta }, "conta"), /* @__PURE__ */ React.createElement("button", { onClick: function() { anularArm(d.id, x.dia); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, color: "#2E6DA4", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "4px 10px", flexShrink: 0 } }, "anular"))); }
+      function linhaArm(x, i) { var an = x.anulado; return /* @__PURE__ */ React.createElement("div", { key: "a" + i, style: { display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid #F4F7FA", opacity: an ? 0.5 : 1 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, fontWeight: 600, color: "#334155", textDecoration: an ? "line-through" : "none" } }, dataCurta(x.dia)), an ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#16A34A", fontStyle: "italic", marginTop: 1 } }, "anulado: " + an) : null), an ? /* @__PURE__ */ React.createElement("button", { onClick: function() { reativarArm(d.id, x.dia); }, style: { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline", flexShrink: 0 } }, "reativar") : /* @__PURE__ */ React.createElement("button", { onClick: function() { anularArm(d.id, x.dia); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, color: "#2E6DA4", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "4px 10px", flexShrink: 0 } }, "anular")); }
       function chip(txt, bg, bd, c) { return /* @__PURE__ */ React.createElement("div", { style: { borderRadius: 10, padding: "7px 11px", fontSize: 11, fontWeight: 700, border: "1px solid " + bd, background: bg, color: c } }, txt); }
-      function grupo(k, titulo, ativas, anul, listaAnular, listaConfirmar) {
+      function grupo(k, titulo, ativas, anul, listaAnular) {
         if (ativas.length === 0 && anul.length === 0) return null;
         var open = grupoAberto === k;
         var mais = !!verMais[k], mAnul = !!verAnul[k], cap = 6;
@@ -10713,8 +10840,7 @@ function QuadroEsquecimentos(props) {
               /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12.5, fontWeight: 700, color: "#1A3A5C" } }, titulo),
               /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12.5, fontWeight: 700, color: "#94A3B8" } }, "(" + ativas.length + ")")
             ),
-            (open && listaConfirmar && listaConfirmar.length > 0) ? /* @__PURE__ */ React.createElement("button", { onClick: function() { confirmar(listaConfirmar, true); }, style: { fontSize: 11, fontWeight: 700, color: "#991B1B", background: "#FEF2F2", border: "none", borderRadius: 7, padding: "5px 11px", cursor: "pointer", flexShrink: 0 } }, "confirmar todas") : null,
-            (open && listaAnular && listaAnular.length > 0) ?/* @__PURE__ */ React.createElement("button", { onClick: function() { anularGrupo(listaAnular); }, style: { fontSize: 11, fontWeight: 700, color: "#2E6DA4", background: "#EFF6FF", border: "none", borderRadius: 7, padding: "5px 11px", cursor: "pointer", flexShrink: 0 } }, "anular todas") : null
+            (open && listaAnular && listaAnular.length > 0) ? /* @__PURE__ */ React.createElement("button", { onClick: function() { anularGrupo(listaAnular); }, style: { fontSize: 11, fontWeight: 700, color: "#2E6DA4", background: "#EFF6FF", border: "none", borderRadius: 7, padding: "5px 11px", cursor: "pointer", flexShrink: 0 } }, "anular todas") : null
           ),
           open ? /* @__PURE__ */ React.createElement("div", { style: { paddingBottom: 10 } },
             ativasVis,
@@ -10749,10 +10875,10 @@ function QuadroEsquecimentos(props) {
             chip(nSemSai + " sem saída", "#EFF6FF", "#BBD7F2", "#1E40AF"),
             nArm > 0 ? chip(nArm + " armazém", "#F8FAFC", "#E8EEF5", "#334155") : null
           ),
-          grupo(d.id + "|tardias", "Entradas tardias", tardiasA.map(linhaTardia), tardiasN.map(linhaTardia), tardiasA.map(function(x) { return { fid: d.id, tipo: "servico", f: x.f }; }), tardiasA.filter(function(x) { return !confServ(d.id, x.f); }).map(function(x) { return { fid: d.id, tipo: "servico", f: x.f }; })),
-          grupo(d.id + "|sement", "Sem entrada", semEntA.map(function(f, i) { return linhaTag(f, i, "sem entrada", ceRosa); }), semEntN.map(function(f, i) { return linhaTag(f, i, "sem entrada", ceRosa); }), semEntA.map(function(f) { return { fid: d.id, tipo: "servico", f: f }; }), semEntA.filter(function(f) { return !confServ(d.id, f); }).map(function(f) { return { fid: d.id, tipo: "servico", f: f }; })),
-          grupo(d.id + "|semsai", "Sem saída", semSaiA.map(function(f, i) { return linhaTag(f, i, "sem saída", ceAzul); }), semSaiN.map(function(f, i) { return linhaTag(f, i, "sem saída", ceAzul); }), semSaiA.map(function(f) { return { fid: d.id, tipo: "servico", f: f }; }), semSaiA.filter(function(f) { return !confServ(d.id, f); }).map(function(f) { return { fid: d.id, tipo: "servico", f: f }; })),
-          grupo(d.id + "|arm", "Sem picagem no armazém", armA.map(linhaArm), armN.map(linhaArm), armA.map(function(x) { return { fid: d.id, tipo: "armazem", dia: x.dia }; }), armA.filter(function(x) { return !confArm(d.id, x.dia); }).map(function(x) { return { fid: d.id, tipo: "armazem", dia: x.dia }; }))
+          grupo(d.id + "|tardias", "Entradas tardias", tardiasA.map(linhaTardia), tardiasN.map(linhaTardia), tardiasA.map(function(x) { return { fid: d.id, tipo: "servico", f: x.f }; })),
+          grupo(d.id + "|sement", "Sem entrada", semEntA.map(function(f, i) { return linhaTag(f, i, "sem entrada", ceRosa); }), semEntN.map(function(f, i) { return linhaTag(f, i, "sem entrada", ceRosa); }), semEntA.map(function(f) { return { fid: d.id, tipo: "servico", f: f }; })),
+          grupo(d.id + "|semsai", "Sem saída", semSaiA.map(function(f, i) { return linhaTag(f, i, "sem saída", ceAzul); }), semSaiN.map(function(f, i) { return linhaTag(f, i, "sem saída", ceAzul); }), semSaiA.map(function(f) { return { fid: d.id, tipo: "servico", f: f }; })),
+          grupo(d.id + "|arm", "Sem picagem no armazém", armA.map(linhaArm), armN.map(linhaArm), armA.map(function(x) { return { fid: d.id, tipo: "armazem", dia: x.dia }; }))
         ) : null
       );
     }),
@@ -11403,7 +11529,7 @@ function EmpPedidos(props) {
   const [saving, setSaving] = useState(false);
   const [stockProdutos, setStockProdutos] = useState([]);
   useEffect(function() {
-    portalRpc("portal_stock_produtos", {}).then(function(rows) { setStockProdutos(rows || []); });
+    db.list("stock_produtos", "?select=id,nome&order=nome").then(function(rows) { setStockProdutos(rows || []); });
     db.list("ausencias", "?select=tipo,data_inicio,data_fim,estado&tipo=eq.F\xE9rias&funcionario_id=eq." + encodeURIComponent(empId) + "&order=data_inicio").then(function(rows) {
       setMinhasFerias(rows || []);
     });
