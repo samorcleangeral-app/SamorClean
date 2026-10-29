@@ -63,6 +63,23 @@ const __DB_TTL_MS = 45000;
 const __dbCache = new Map();
 const __dbInflight = new Map();
 function __dbClearCache() { __dbCache.clear(); }
+// Rede de segurança: muitas gravações usam fetch() directo em vez do helper db.
+// Qualquer gravação (POST/PATCH/DELETE) à base de dados limpa a memória, antes e
+// depois de responder, para nenhum ecrã voltar a mostrar dados antigos.
+(function() {
+  const __fetchOrig = window.fetch.bind(window);
+  window.fetch = function(input, init) {
+    let escrita = false;
+    try {
+      const metodo = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
+      const url = typeof input === "string" ? input : (input && input.url) || "";
+      escrita = metodo !== "GET" && metodo !== "HEAD" && url.indexOf(SUPABASE_URL + "/rest/v1/") === 0;
+    } catch (e) {}
+    if (!escrita) return __fetchOrig(input, init);
+    __dbClearCache(); __dbInflight.clear();
+    return __fetchOrig(input, init).then(function(r) { __dbClearCache(); __dbInflight.clear(); return r; });
+  };
+})();
 const db = {
   async list(table, query) {
     const key = table + (query || "?select=*");
@@ -10471,7 +10488,8 @@ function QuadroEsquecimentos(props) {
       for (var i = 0; i < itens.length; i++) {
         var it = itens[i];
         var body = (it.tipo === "armazem") ? { funcionario_id: it.fid, dia_ref: it.dia, tipo_picagem: "armazem", motivo: motivo } : { funcionario_id: it.fid, servico_id: it.f.sid, tipo_picagem: it.f.tipo, motivo: motivo };
-        await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "resolution=merge-duplicates" }), body: JSON.stringify(body) });
+        var resp = await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "resolution=merge-duplicates" }), body: JSON.stringify(body) });
+        if (!resp.ok) throw new Error("a base de dados recusou (" + resp.status + "): " + (await resp.text()).slice(0, 160));
       }
       setAnularModal(null);
       carregar();
