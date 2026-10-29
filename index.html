@@ -11315,7 +11315,7 @@ function EmpPedidos(props) {
   const [saving, setSaving] = useState(false);
   const [stockProdutos, setStockProdutos] = useState([]);
   useEffect(function() {
-    db.list("stock_produtos", "?select=id,nome&order=nome").then(function(rows) { setStockProdutos(rows || []); });
+    portalRpc("portal_stock_produtos", {}).then(function(rows) { setStockProdutos(rows || []); });
     db.list("ausencias", "?select=tipo,data_inicio,data_fim,estado&tipo=eq.F\xE9rias&funcionario_id=eq." + encodeURIComponent(empId) + "&order=data_inicio").then(function(rows) {
       setMinhasFerias(rows || []);
     });
