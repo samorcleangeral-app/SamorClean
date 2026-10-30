@@ -2988,6 +2988,9 @@ function Routes() {
     });
   }, [showVoltasFixas]);
   async function salvarVoltaFixa() {
+    var cSel = clients.find(function(x) { return x.id === novaVolta.client_id; });
+    if (cSel && !freqDaFicha(cSel)) { alert("Este cliente est\xE1 como Pontual (ou sem frequ\xEAncia) na ficha. Muda a frequ\xEAncia na ficha primeiro."); return; }
+    if (cSel && freqDaFicha(cSel) === "trimestral") { alert("Trimestral ainda n\xE3o \xE9 suportado nas voltas fixas."); return; }
     setSavingVolta(true);
     var payload = {
       client_id: novaVolta.client_id,
@@ -3012,6 +3015,7 @@ function Routes() {
         setVoltasFixas(function(p) { return p.map(function(v) { return v.id === editVoltaId ? d[0] : v; }); });
       } else {
         setVoltasFixas(function(p) { return [d[0]].concat(p); });
+        await aposCriarVolta(d[0]);
       }
       setShowNovaVolta(false);
       setEditVoltaId(null);
@@ -3048,6 +3052,7 @@ function Routes() {
   function proximaSegunda() { var d = new Date(); d.setHours(12, 0, 0, 0); do { d.setDate(d.getDate() + 1); } while (d.getDay() !== 1); return localDateStr(d); }
   function fimJanelaGeracao() { var h = new Date(); return localDateStr(new Date(h.getFullYear(), h.getMonth() + 2, 0)); }
   function fmtDataCurta(ds) { var p = ds.split("-"); return DIAS_CURTOS[weekdayIdx(ds)] + " " + parseInt(p[2]) + "/" + parseInt(p[1]); }
+  function labelFreqCurta(f) { return { semanal: "semanal", quinzenal: "quinzenal", mensal_dia_fixo: "mensal", mensal_enesimo: "mensal", trimestral: "trimestral" }[f] || f; }
   function servicoDaVolta(j, v) {
     if (j.volta_id) return j.volta_id === v.id;
     return j.client_id === v.client_id && j.t1 === v.hora_inicio && j.t2 === v.hora_fim && (v.frequencia === "mensal_dia_fixo" || v.dia_semana === weekdayIdx(j.date));
@@ -3205,6 +3210,179 @@ function Routes() {
     }
     setAplicandoPlano(false);
   }
+  // ===== Peça 1: entrada de clientes nas voltas =====
+  const FREQ_FICHA = { "Semanal": "semanal", "Quinzenal": "quinzenal", "Mensal": "mensal", "Trimestral": "trimestral" };
+  // Frequência que a volta deve ter segundo a ficha: "semanal" | "quinzenal" | "mensal" | "trimestral" | null (pontual/sem ficha)
+  function freqDaFicha(c) { return c ? (FREQ_FICHA[c.freq] || null) : null; }
+  // Ajusta a frequência da volta ao que a ficha diz (nos mensais mantém a variante escolhida).
+  function freqVoltaParaCliente(c, atual) {
+    var f = freqDaFicha(c);
+    if (f === "mensal") return (atual === "mensal_dia_fixo" || atual === "mensal_enesimo") ? atual : "mensal_enesimo";
+    if (f === "semanal" || f === "quinzenal") return f;
+    return atual;
+  }
+  function freqBate(c, freqVolta) {
+    var f = freqDaFicha(c);
+    if (!f) return true;
+    if (f === "mensal") return freqVolta === "mensal_dia_fixo" || freqVolta === "mensal_enesimo";
+    return f === freqVolta;
+  }
+  function ehObra(c) { return c.service === "Limpeza P\xF3s-Obra" || c.service === "Limpeza Profunda"; }
+  function clientesPorConfigurar() {
+    return clients.filter(function(c) {
+      if (c.ativo === false || ehObra(c) || !freqDaFicha(c)) return false;
+      return !voltasFixas.some(function(v) { return v.client_id === c.id; });
+    });
+  }
+  // Sugere dia/hora/equipa a partir dos últimos serviços feitos (padrão em pelo menos 2 dos últimos 4).
+  function sugestaoVolta(c) {
+    var hoje = localDateStr();
+    var feitos = jobs.filter(function(j) { return j.client_id === c.id && j.status === "completed" && j.date <= hoje; })
+      .sort(function(a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; }).slice(0, 4);
+    if (feitos.length < 2) return null;
+    var cont = {};
+    feitos.forEach(function(j) { var k = weekdayIdx(j.date) + "|" + j.t1 + "|" + j.t2; cont[k] = (cont[k] || 0) + 1; });
+    var melhor = Object.keys(cont).sort(function(a, b) { return cont[b] - cont[a]; })[0];
+    if (cont[melhor] < 2) return null;
+    var partes = melhor.split("|");
+    var dia = parseInt(partes[0]);
+    var ultimo = feitos.find(function(j) { return weekdayIdx(j.date) + "|" + j.t1 + "|" + j.t2 === melhor; });
+    var team = (ultimo.team || []).filter(function(eid) { var e = emps.find(function(x) { return x.id === eid; }); return e && e.ativo !== false; });
+    var amanha = addDiasStr(hoje, 1);
+    var f = freqDaFicha(c);
+    var comeca;
+    if (f === "quinzenal") { comeca = ultimo.date; while (comeca < amanha) comeca = addDiasStr(comeca, 14); }
+    else { comeca = amanha; while (weekdayIdx(comeca) !== dia) comeca = addDiasStr(comeca, 1); }
+    var dd = parseInt(ultimo.date.slice(8, 10));
+    return { dia_semana: dia, t1: partes[1], t2: partes[2], team: team, comeca: comeca, n: cont[melhor], total: feitos.length,
+      semana_do_mes: Math.min(5, Math.ceil(dd / 7)), dia_mes: dd };
+  }
+  function abrirConfigurar(c) {
+    var sg = sugestaoVolta(c);
+    var freq = freqVoltaParaCliente(c, "semanal");
+    setPlanoAlteracao(null);
+    setFimVolta(null);
+    setEditVoltaId(null);
+    setAplicarDesde("");
+    setNovaVolta({ client_id: c.id, frequencia: freq,
+      dia_semana: sg ? sg.dia_semana : 0, dia_mes: sg ? sg.dia_mes : 1, semana_do_mes: sg ? sg.semana_do_mes : 1,
+      hora_inicio: sg ? sg.t1 : "08:00", hora_fim: sg ? sg.t2 : "10:00", equipa: sg ? sg.team : [],
+      data_inicio: sg ? sg.comeca : localDateStr(), _sugestao: sg ? sg.n + " dos \xFAltimos " + sg.total : null });
+    setShowNovaVolta(true);
+    try { window.scrollTo(0, 0); } catch (e) {}
+  }
+  async function marcarComoPontual(c) {
+    if (!window.confirm("Mudar \"" + c.name + "\" para Pontual na ficha? Sai da lista \"Por configurar\" e deixa de ser tratado como cliente regular.")) return;
+    var r = await fetch(SUPABASE_URL + "/rest/v1/clientes?id=eq." + c.id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ freq: "Pontual" }) });
+    if (!r.ok) { alert("Erro ao mudar a ficha: " + await r.text()); return; }
+    __dbClearCache();
+    setClients(function(p) { return p.map(function(x) { return x.id === c.id ? Object.assign({}, x, { freq: "Pontual" }) : x; }); });
+  }
+  // Depois de criar uma volta: liga os serviços já postos à mão que encaixam nela e gera a agenda logo.
+  async function aposCriarVolta(v) {
+    try {
+      var hoje = localDateStr();
+      var manuais = jobs.filter(function(j) {
+        if (j.client_id !== v.client_id || j.status === "completed" || j.date < hoje || j.volta_id) return false;
+        if (j.t1 !== v.hora_inicio || j.t2 !== v.hora_fim) return false;
+        if (v.frequencia === "mensal_dia_fixo" || v.frequencia === "mensal_enesimo") return datasDaVolta(v, j.date, j.date).length === 1;
+        if (weekdayIdx(j.date) !== v.dia_semana) return false;
+        if (v.frequencia === "quinzenal") { var dif = Math.round((new Date(j.date + "T12:00:00") - new Date(v.data_inicio + "T12:00:00")) / 86400000); return dif % 14 === 0; }
+        return true;
+      });
+      for (var i = 0; i < manuais.length; i++) {
+        await fetch(SUPABASE_URL + "/rest/v1/servicos?id=eq." + manuais[i].id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ volta_id: v.id }) });
+      }
+      __dbClearCache();
+      var freshJobs = await db.list("servicos", "?select=*&order=date");
+      await garantirServicosGerados(null, freshJobs || jobs, clients);
+      await recarregarAgendaEVoltas();
+    } catch (e) {
+      console.error("aposCriarVolta", e);
+    }
+  }
+  // ===== Peça 2: cartão por cliente =====
+  const [voltasFiltro, setVoltasFiltro] = useState("todos");
+  const [corrFat, setCorrFat] = useState(null); // { cid, tipo, valor }
+  const [gravandoFat, setGravandoFat] = useState(false);
+  function euros(n) { return (parseFloat(n) || 0).toFixed(2).replace(".", ",") + " €"; }
+  function tipoFatCliente(c) {
+    if (ehObra(c)) return "orcamento";
+    return c.tipo_faturacao || "hora";
+  }
+  function avisosDoCliente(c, voltasC) {
+    var av = [];
+    if (!c) return ["Cliente n\xE3o encontrado na lista de clientes."];
+    var ativas = voltasC.filter(function(v) { return v.ativo !== false; });
+    var tf = tipoFatCliente(c);
+    if (tf === "hora") av.push({ k: "hora", t: "Fatura\xE7\xE3o “\xE0 hora” j\xE1 n\xE3o \xE9 usada. Os servi\xE7os deste cliente est\xE3o a ser valorizados como horas \xD7 pre\xE7o/hora." });
+    else if ((tf === "visita" || tf === "mensal") && !(parseFloat(c.valor_visita) > 0)) av.push({ k: "valor", t: "A ficha n\xE3o tem valor (" + (tf === "visita" ? "por visita" : "mensal") + " a 0)." });
+    if (c.ativo === false && ativas.length) av.push({ k: "inativo", t: "O cliente est\xE1 inativo mas tem voltas ativas." });
+    if (ativas.some(function(v) { return !freqBate(c, v.frequencia); })) av.push({ k: "freq", t: "A frequ\xEAncia da volta n\xE3o bate com a ficha (" + (c.freq || "—") + ")." });
+    ativas.forEach(function(v) {
+      var inat = (v.equipa || []).filter(function(eid) { var e = emps.find(function(x) { return x.id === eid; }); return !e || e.ativo === false; });
+      if (inat.length) av.push({ k: "equipa", t: "Volta de " + labelFreqCurta(v.frequencia) + " \xE0s " + v.hora_inicio + " tem na equipa algu\xE9m inativo (" + inat.join(", ") + ")." });
+    });
+    return av;
+  }
+  function valorSugeridoCliente(c) {
+    var feitos = jobs.filter(function(j) { return j.client_id === c.id && j.status === "completed" && parseFloat(j.val) > 0; })
+      .sort(function(a, b) { return a.date < b.date ? 1 : -1; }).slice(0, 8);
+    var cont = {};
+    feitos.forEach(function(j) { var k = (parseFloat(j.val) || 0).toFixed(2); cont[k] = (cont[k] || 0) + 1; });
+    var melhor = Object.keys(cont).sort(function(a, b) { return cont[b] - cont[a]; })[0];
+    return melhor || "";
+  }
+  function servicosPorFazerCliente(cid) {
+    var hoje = localDateStr();
+    return jobs.filter(function(j) { return j.client_id === cid && j.status !== "completed" && j.date >= hoje && !j.val_manual; });
+  }
+  async function gravarFaturacaoFicha() {
+    var cf = corrFat;
+    if (!cf || gravandoFat) return;
+    var valor = parseFloat(String(cf.valor).replace(",", "."));
+    if (!(valor > 0)) { alert("Indica um valor maior que 0."); return; }
+    setGravandoFat(true);
+    try {
+      var r = await fetch(SUPABASE_URL + "/rest/v1/clientes?id=eq." + cf.cid, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ tipo_faturacao: cf.tipo, valor_visita: valor }) });
+      if (!r.ok) throw new Error("ficha: " + await r.text());
+      __dbClearCache();
+      var hojeF = localDateStr();
+      var frescos = await db.list("servicos", "?select=id,date,status,val_manual&client_id=eq." + encodeURIComponent(cf.cid));
+      var pend = (frescos || []).filter(function(j) { return j.status !== "completed" && j.date >= hojeF && !j.val_manual; });
+      for (var i = 0; i < pend.length; i++) {
+        r = await fetch(SUPABASE_URL + "/rest/v1/servicos?id=eq." + pend[i].id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ val: valor }) });
+        if (!r.ok) throw new Error("servi\xE7o " + pend[i].date + ": " + await r.text());
+      }
+      setClients(function(p) { return p.map(function(x) { return x.id === cf.cid ? Object.assign({}, x, { tipo_faturacao: cf.tipo, valor_visita: valor }) : x; }); });
+      await recarregarAgendaEVoltas();
+      setCorrFat(null);
+    } catch (e) {
+      alert("Erro ao gravar: " + e.message + "\n\nRecarrega a p\xE1gina e confirma a ficha e os servi\xE7os deste cliente.");
+      await recarregarAgendaEVoltas();
+    }
+    setGravandoFat(false);
+  }
+  function abrirEditarVolta(v) {
+    setNovaVolta({ client_id: v.client_id, frequencia: freqVoltaParaCliente(clients.find(function(x) { return x.id === v.client_id; }), v.frequencia), dia_semana: v.dia_semana || 0, dia_mes: v.dia_mes || 1, semana_do_mes: v.semana_do_mes || 1, hora_inicio: v.hora_inicio, hora_fim: v.hora_fim, equipa: v.equipa || [], data_inicio: v.data_inicio });
+    setEditVoltaId(v.id);
+    setAplicarDesde("");
+    setPlanoAlteracao(null);
+    setFimVolta(null);
+    setShowNovaVolta(true);
+    try { window.scrollTo(0, 0); } catch (e) {}
+  }
+  function abrirAdicionarDia(c, voltasC) {
+    var base = voltasC[0] || {};
+    setPlanoAlteracao(null);
+    setFimVolta(null);
+    setEditVoltaId(null);
+    setAplicarDesde("");
+    setNovaVolta({ client_id: c.id, frequencia: freqVoltaParaCliente(c, base.frequencia || "semanal"), dia_semana: 0, dia_mes: 1, semana_do_mes: 1,
+      hora_inicio: base.hora_inicio || "08:00", hora_fim: base.hora_fim || "10:00", equipa: (base.equipa || []).slice(), data_inicio: localDateStr(), _sugestao: null });
+    setShowNovaVolta(true);
+    try { window.scrollTo(0, 0); } catch (e) {}
+  }
   const [migrando, setMigrando] = useState(false);
   async function migrarClientesExistentes() {
     if (!window.confirm("Isto vai criar voltas fixas automaticamente para todos os clientes que ainda t\xEAm \"Dias de visita\" configurados na ficha (clientes pontuais/obra ficam de fora). \n\n\u26A0 Se j\xE1 criaste voltas manualmente para algum cliente (ex: Protecnil), este processo N\xC3O verifica duplicados \u2014 vais ficar com voltas repetidas para esse cliente, e ter\xE1s de apagar as extra. Continuar?")) return;
@@ -3343,6 +3521,7 @@ function Routes() {
       headers: dbHeaders(),
       body: JSON.stringify(novosServicos)
     });
+    __dbClearCache();
     for (var vid in atualizarUltimaGerada) {
       await fetch(SUPABASE_URL + "/rest/v1/voltas_fixas?id=eq." + vid, {
         method: "PATCH",
@@ -4052,25 +4231,36 @@ function Routes() {
       fimVolta && renderFimVolta(),
       showNovaVolta && !planoAlteracao && /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, background: "#F8FAFC" }) },
         /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, editVoltaId ? "Editar volta fixa" : "Nova volta fixa"),
+        !editVoltaId && novaVolta._sugestao && React.createElement("div", { style: { borderRadius: 9, padding: "10px 12px", fontSize: 12.5, marginBottom: 14, background: "#F0FDF4", border: "1.5px solid #86EFAC", color: "#166534" } }, "\u2713 Preenchido a partir dos \xFAltimos servi\xE7os feitos (padr\xE3o em " + novaVolta._sugestao + "). Confirma e grava."),
         /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } },
           /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } },
             /* @__PURE__ */ React.createElement("label", { style: lbl }, "Cliente"),
-            /* @__PURE__ */ React.createElement("select", { style: inp, value: novaVolta.client_id, onChange: function(e) { setNovaVolta(Object.assign({}, novaVolta, { client_id: e.target.value })); } },
+            /* @__PURE__ */ React.createElement("select", { style: inp, value: novaVolta.client_id, onChange: function(e) { var cc = clients.find(function(x) { return x.id === e.target.value; }); setAplicarDesde(""); setNovaVolta(Object.assign({}, novaVolta, { client_id: e.target.value, frequencia: freqVoltaParaCliente(cc, novaVolta.frequencia), _sugestao: null })); } },
               /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014 Escolhe um cliente \u2014"),
               clients.filter(function(c) { return c.service !== "Limpeza P\xF3s-Obra" && c.service !== "Limpeza Profunda"; }).map(function(c) {
                 return /* @__PURE__ */ React.createElement("option", { key: c.id, value: c.id }, c.name);
               })
             )
           ),
-          /* @__PURE__ */ React.createElement("div", null,
-            /* @__PURE__ */ React.createElement("label", { style: lbl }, "Frequ\xEAncia"),
-            /* @__PURE__ */ React.createElement("select", { style: inp, value: novaVolta.frequencia, onChange: function(e) { setAplicarDesde(""); setNovaVolta(Object.assign({}, novaVolta, { frequencia: e.target.value })); } },
-              /* @__PURE__ */ React.createElement("option", { value: "semanal" }, "Semanal"),
-              /* @__PURE__ */ React.createElement("option", { value: "quinzenal" }, "Quinzenal"),
-              /* @__PURE__ */ React.createElement("option", { value: "mensal_dia_fixo" }, "Mensal \u2014 dia fixo do m\xEAs"),
-              /* @__PURE__ */ React.createElement("option", { value: "mensal_enesimo" }, "Mensal \u2014 ex: 3\xBA segunda-feira")
-            )
-          ),
+          (function() {
+            var cF = clients.find(function(x) { return x.id === novaVolta.client_id; });
+            var fF = freqDaFicha(cF);
+            var nomeF = { semanal: "Semanal", quinzenal: "Quinzenal", mensal: "Mensal", trimestral: "Trimestral" };
+            var roS = Object.assign({}, inp, { background: "#F1F5F9", color: "#475569" });
+            var antigaF = editVoltaId ? voltasFixas.find(function(x) { return x.id === editVoltaId; }) : null;
+            return React.createElement("div", null,
+              React.createElement("label", { style: lbl }, "Frequ\xEAncia"),
+              !cF ? React.createElement("div", { style: roS }, "— escolhe o cliente —") :
+              !fF ? React.createElement("div", { style: Object.assign({}, roS, { background: "#FEF2F2", color: "#991B1B" }) }, "Pontual na ficha — n\xE3o leva volta") :
+              fF === "trimestral" ? React.createElement("div", { style: Object.assign({}, roS, { background: "#FFFBEB", color: "#92400E" }) }, "Trimestral — ainda n\xE3o suportado") :
+              fF === "mensal" ? React.createElement("select", { style: inp, value: novaVolta.frequencia, onChange: function(e) { setAplicarDesde(""); setNovaVolta(Object.assign({}, novaVolta, { frequencia: e.target.value })); } },
+                React.createElement("option", { value: "mensal_dia_fixo" }, "Mensal (da ficha) — dia fixo do m\xEAs"),
+                React.createElement("option", { value: "mensal_enesimo" }, "Mensal (da ficha) — ex: 3\xBA segunda-feira")) :
+              React.createElement("div", { style: roS }, nomeF[fF], React.createElement("span", { style: { fontSize: 11 } }, " (da ficha)")),
+              antigaF && cF && !freqBate(cF, antigaF.frequencia) && React.createElement("div", { style: { fontSize: 11.5, color: "#B45309", marginTop: 5, lineHeight: 1.4 } },
+                "⚠ A volta estava como " + labelFreqCurta(antigaF.frequencia) + " e a ficha diz " + (cF.freq || "—") + ". Ao gravar, a volta passa a seguir a ficha.")
+            );
+          })(),
           (novaVolta.frequencia === "semanal" || novaVolta.frequencia === "quinzenal" || novaVolta.frequencia === "mensal_enesimo") && /* @__PURE__ */ React.createElement("div", null,
             /* @__PURE__ */ React.createElement("label", { style: lbl }, "Dia da semana"),
             /* @__PURE__ */ React.createElement("select", { style: inp, value: novaVolta.dia_semana, onChange: function(e) { setAplicarDesde(""); setNovaVolta(Object.assign({}, novaVolta, { dia_semana: e.target.value })); } },
@@ -4104,7 +4294,7 @@ function Routes() {
             )
           ),
           !editVoltaId && /* @__PURE__ */ React.createElement("div", null,
-            /* @__PURE__ */ React.createElement("label", { style: lbl }, "Data de in\xEDcio (se ainda n\xE3o come\xE7ou)"),
+            /* @__PURE__ */ React.createElement("label", { style: lbl }, "Come\xE7a em"),
             /* @__PURE__ */ React.createElement("input", { style: inp, type: "date", value: novaVolta.data_inicio, onChange: function(e) { setNovaVolta(Object.assign({}, novaVolta, { data_inicio: e.target.value })); } })
           ),
           editVoltaId && /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1", border: "2px solid #7C3AED", borderRadius: 10, padding: "12px 12px 10px", background: "#FAF8FF" } },
@@ -4131,34 +4321,122 @@ function Routes() {
           /* @__PURE__ */ React.createElement("button", { onClick: editVoltaId ? prepararAlteracao : salvarVoltaFixa, disabled: savingVolta || !novaVolta.client_id, style: Object.assign({}, editVoltaId ? btn : btnG, { flex: 1, textAlign: "center", opacity: savingVolta || !novaVolta.client_id ? 0.5 : 1 }) }, savingVolta ? "A guardar..." : (editVoltaId ? "Ver o que muda \u2192" : "Guardar"))
         )
       ),
-      /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 16 }), placeholder: "Pesquisar cliente...", value: voltasSearch, onChange: function(e) { setVoltasSearch(e.target.value); } }),
-      Object.keys(voltasPorCliente).length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Ainda n\xE3o h\xE1 voltas fixas criadas.") :
-      Object.keys(voltasPorCliente).map(function(cid) {
-        var c = clients.find(function(x) { return x.id === cid; });
-        return /* @__PURE__ */ React.createElement("div", { key: cid, style: Object.assign({}, card, { marginBottom: 14 }) },
-          /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 10 } }, c ? c.name : cid),
-          voltasPorCliente[cid].map(function(v) {
-            return /* @__PURE__ */ React.createElement("div", { key: v.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #F1F5F9", opacity: v.ativo === false ? 0.5 : 1 } },
-              /* @__PURE__ */ React.createElement("div", null,
-                /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#334155" } }, labelVolta(v), " \u2022 ", v.hora_inicio, "\u2013", v.hora_fim, v.ativo === false ? " (pausada)" : ""),
-                /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, "Equipa: ", (v.equipa || []).map(function(eid) { var e = emps.find(function(x) { return x.id === eid; }); return e ? (e.name.split(" ")[0] + (e.ativo === false ? " (inactivo)" : "")) : eid; }).join(", ") || "\u2014", " \u2022 Desde ", v.data_inicio)
-              ),
-              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } },
-                /* @__PURE__ */ React.createElement("button", { onClick: function() {
-                  setNovaVolta({ client_id: v.client_id, frequencia: v.frequencia, dia_semana: v.dia_semana || 0, dia_mes: v.dia_mes || 1, semana_do_mes: v.semana_do_mes || 1, hora_inicio: v.hora_inicio, hora_fim: v.hora_fim, equipa: v.equipa || [], data_inicio: v.data_inicio });
-                  setEditVoltaId(v.id);
-                  setAplicarDesde("");
-                  setPlanoAlteracao(null);
-                  setFimVolta(null);
-                  setShowNovaVolta(true);
-                }, style: Object.assign({}, btnO, { fontSize: 11, padding: "5px 10px" }) }, "Editar"),
-                /* @__PURE__ */ React.createElement("button", { onClick: function() { if (v.ativo === false) toggleAtivaVolta(v); else { setShowNovaVolta(false); setFimVolta({ v: v, modo: "pausar", ultima: localDateStr() }); } }, style: Object.assign({}, btnO, { fontSize: 11, padding: "5px 10px" }) }, v.ativo === false ? "Reactivar" : "Pausar"),
-                /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowNovaVolta(false); setFimVolta({ v: v, modo: "remover", ultima: localDateStr() }); }, style: Object.assign({}, btnR, { fontSize: 11, padding: "5px 10px" }) }, "Del")
-              )
+      (function() {
+        var lista = clientesPorConfigurar();
+        if (!lista.length) return null;
+        var grupos = {};
+        lista.forEach(function(c) {
+          var pr = c.cliente_principal_id ? clients.find(function(x) { return x.id === c.cliente_principal_id; }) : null;
+          var g = pr ? pr.name : "";
+          (grupos[g] = grupos[g] || []).push(c);
+        });
+        var nomesG = Object.keys(grupos).sort(function(a, b) { return a === "" ? 1 : b === "" ? -1 : a.localeCompare(b); });
+        var pillS = { display: "inline-block", fontSize: 11, fontWeight: 700, borderRadius: 20, padding: "2px 8px", background: "#F1F5F9", color: "#475569" };
+        return React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, border: "2px solid #F59E0B", background: "#FFFBEB" }) },
+          React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: "#92400E", marginBottom: 4 } }, "Por configurar ",
+            React.createElement("span", { style: { background: "#F59E0B", color: "#fff", borderRadius: 20, padding: "2px 10px", fontSize: 13, fontWeight: 800, marginLeft: 4 } }, lista.length)),
+          React.createElement("div", { style: { fontSize: 12.5, color: "#92400E", marginBottom: 10 } }, "Clientes regulares na ficha sem volta fixa. Enquanto aqui estiverem, os servi\xE7os deles n\xE3o s\xE3o gerados sozinhos."),
+          nomesG.map(function(g) {
+            return React.createElement("div", { key: g || "_" },
+              React.createElement("div", { style: { fontSize: 11, fontWeight: 800, color: "#92400E", textTransform: "uppercase", letterSpacing: 0.5, margin: "12px 0 6px" } }, (g || (nomesG.length > 1 ? "Outros" : "Clientes")) + " (" + grupos[g].length + ")"),
+              grupos[g].sort(function(a, b) { return a.name.localeCompare(b.name); }).map(function(c) {
+                var sg = sugestaoVolta(c);
+                var fF = freqDaFicha(c);
+                var ult = jobs.filter(function(j) { return j.client_id === c.id && j.status === "completed"; }).reduce(function(m, j) { return j.date > m ? j.date : m; }, "");
+                var nomeCurto = g && c.name.indexOf(g) === 0 ? c.name.slice(g.length).replace(/^\s*-\s*/, "") : c.name;
+                return React.createElement("div", { key: c.id, style: { display: "flex", alignItems: "center", gap: 10, background: "#fff", border: "1px solid #FDE68A", borderRadius: 9, padding: "10px 12px", marginBottom: 8 } },
+                  React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                    React.createElement("div", { style: { fontWeight: 800, fontSize: 13.5, color: "#1A3A5C" } }, nomeCurto || c.name),
+                    React.createElement("div", { style: { fontSize: 11.5, color: "#64748B", marginTop: 2 } }, React.createElement("span", { style: pillS }, c.freq), ult ? " \xB7 \xFAltimo feito " + fmtDataCurta(ult) : " \xB7 sem servi\xE7os feitos"),
+                    fF === "trimestral" ? React.createElement("div", { style: { fontSize: 11.5, color: "#B45309", marginTop: 2, fontWeight: 600 } }, "Trimestral ainda n\xE3o \xE9 suportado nas voltas") :
+                    sg ? React.createElement("div", { style: { fontSize: 11.5, color: "#15803D", marginTop: 2, fontWeight: 600 } }, "Sugest\xE3o: " + ["Segunda", "Ter\xE7a", "Quarta", "Quinta", "Sexta", "S\xE1bado", "Domingo"][sg.dia_semana] + " " + sg.t1 + "–" + sg.t2 + (sg.team.length ? " \xB7 " + nomeEquipa(sg.team) : "") + (fF === "quinzenal" ? " \xB7 pr\xF3xima " + fmtDataCurta(sg.comeca) : "")) :
+                    React.createElement("div", { style: { fontSize: 11.5, color: "#B45309", marginTop: 2, fontWeight: 600 } }, "Sem padr\xE3o claro nos \xFAltimos servi\xE7os — configurar \xE0 m\xE3o")
+                  ),
+                  React.createElement("button", { onClick: function() { marcarComoPontual(c); }, style: { background: "transparent", color: "#64748B", border: "1.5px solid #CBD5E1", borderRadius: 8, padding: "6px 10px", fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" } }, "\xC9 pontual"),
+                  fF !== "trimestral" && React.createElement("button", { onClick: function() { abrirConfigurar(c); }, style: Object.assign({}, btn, { fontSize: 13, padding: "8px 14px", whiteSpace: "nowrap" }) }, "Configurar")
+                );
+              })
             );
           })
         );
-      })
+      })(),
+      /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 16 }), placeholder: "Pesquisar cliente...", value: voltasSearch, onChange: function(e) { setVoltasSearch(e.target.value); } }),
+      (function() {
+        var cids = Object.keys(voltasPorCliente);
+        var info = cids.map(function(cid) {
+          var c = clients.find(function(x) { return x.id === cid; });
+          var vs = voltasPorCliente[cid];
+          return { cid: cid, c: c, vs: vs, av: avisosDoCliente(c, vs), pausadas: vs.some(function(v) { return v.ativo === false; }) };
+        }).sort(function(a, b) { return (a.c ? a.c.name : a.cid).localeCompare(b.c ? b.c.name : b.cid); });
+        var nAv = info.filter(function(x) { return x.av.length; }).length;
+        var nPa = info.filter(function(x) { return x.pausadas; }).length;
+        var vis = info.filter(function(x) { return voltasFiltro === "avisos" ? x.av.length : voltasFiltro === "pausadas" ? x.pausadas : true; });
+        var fS = function(on, warn) { return { padding: "6px 12px", borderRadius: 20, border: "1.5px solid " + (on ? "#1A3A5C" : warn ? "#F59E0B" : "#CBD5E1"), background: on ? "#1A3A5C" : warn ? "#FFFBEB" : "#fff", color: on ? "#fff" : warn ? "#92400E" : "#64748B", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }; };
+        var pill = function(bg, col) { return { fontSize: 11.5, fontWeight: 700, borderRadius: 20, padding: "3px 9px", background: bg, color: col }; };
+        var hoje = localDateStr();
+        return React.createElement("div", null,
+          React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" } },
+            React.createElement("button", { onClick: function() { setVoltasFiltro("todos"); }, style: fS(voltasFiltro === "todos") }, "Todos (" + info.length + ")"),
+            React.createElement("button", { onClick: function() { setVoltasFiltro("avisos"); }, style: fS(voltasFiltro === "avisos", nAv > 0) }, "⚠ Com avisos (" + nAv + ")"),
+            React.createElement("button", { onClick: function() { setVoltasFiltro("pausadas"); }, style: fS(voltasFiltro === "pausadas") }, "Pausadas (" + nPa + ")")),
+          info.length === 0 ? React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Ainda n\xE3o h\xE1 voltas fixas criadas.") :
+          vis.length === 0 ? React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 30, color: "#94A3B8" }) }, "Nenhum cliente neste filtro.") :
+          vis.map(function(x) {
+            var c = x.c, cid = x.cid;
+            var tf = c ? tipoFatCliente(c) : null;
+            var pillFat = !c ? null : tf === "hora" ? React.createElement("span", { style: pill("#FEF3C7", "#92400E") }, "⚠ \xC0 hora \xB7 " + euros(c.price_per_hour || PRICE_PER_HOUR) + "/h")
+              : tf === "orcamento" ? React.createElement("span", { style: pill("#F1F5F9", "#475569") }, "Or\xE7amento")
+              : React.createElement("span", { style: parseFloat(c.valor_visita) > 0 ? pill("#ECFDF5", "#047857") : pill("#FEF3C7", "#92400E") }, (tf === "mensal" ? "Mensal fixo \xB7 " : "Por visita \xB7 ") + euros(c.valor_visita));
+            var nAtivas = x.vs.filter(function(v) { return v.ativo !== false; }).length;
+            var corrAberta = corrFat && corrFat.cid === cid;
+            var podeCorrigir = c && x.av.some(function(a) { return a.k === "hora" || a.k === "valor"; });
+            return React.createElement("div", { key: cid, style: Object.assign({}, card, { marginBottom: 14, border: x.av.length ? "2px solid #F59E0B" : "none" }) },
+              React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 } },
+                React.createElement("div", null,
+                  React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C" } }, c ? c.name : cid),
+                  React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 } },
+                    c && React.createElement("span", { style: pill("#F1F5F9", "#475569") }, (c.freq || "Sem frequ\xEAncia") + " (ficha)"),
+                    pillFat,
+                    nAtivas > 1 && React.createElement("span", { style: pill("#F1F5F9", "#475569") }, nAtivas + " dias"))),
+                c && React.createElement("button", { onClick: function() { abrirAdicionarDia(c, x.vs); }, style: { background: "transparent", color: "#2E6DA4", border: "1.5px dashed #2E6DA4", borderRadius: 8, padding: "6px 10px", fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" } }, "+ Adicionar dia")),
+              x.vs.map(function(v) {
+                var prox = v.ativo === false ? [] : jobs.filter(function(j) { return j.status !== "completed" && j.date >= hoje && servicoDaVolta(j, v); })
+                  .sort(function(a, b) { return a.date < b.date ? -1 : 1; }).slice(0, 6);
+                return React.createElement("div", { key: v.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: "1px solid #F1F5F9", marginTop: 10, opacity: v.ativo === false ? 0.55 : 1 } },
+                  React.createElement("div", null,
+                    React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#334155" } }, labelVolta(v), " • ", v.hora_inicio, "–", v.hora_fim, v.ativo === false ? " (pausada)" : ""),
+                    React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 2 } }, "Equipa: ", (v.equipa || []).map(function(eid) { var e = emps.find(function(y) { return y.id === eid; }); return e ? (e.name.split(" ")[0] + (e.ativo === false ? " (inactivo)" : "")) : eid; }).join(", ") || "—", " • Desde ", v.data_inicio),
+                    v.ativo !== false && React.createElement("div", { style: { display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap" } },
+                      prox.length ? prox.map(function(j) { var pp = j.date.split("-"); return React.createElement("span", { key: j.id, title: j.date, style: { fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "2px 7px", background: "#EFF6FF", color: "#1E40AF" } }, parseInt(pp[2]) + "/" + parseInt(pp[1])); })
+                        : React.createElement("span", { style: { fontSize: 11, color: "#B45309", fontWeight: 600 } }, "Sem servi\xE7os na agenda"))),
+                  React.createElement("div", { style: { display: "flex", gap: 6 } },
+                    React.createElement("button", { onClick: function() { abrirEditarVolta(v); }, style: Object.assign({}, btnO, { fontSize: 11, padding: "5px 10px" }) }, "Editar"),
+                    React.createElement("button", { onClick: function() { if (v.ativo === false) toggleAtivaVolta(v); else { setShowNovaVolta(false); setFimVolta({ v: v, modo: "pausar", ultima: localDateStr() }); try { window.scrollTo(0, 0); } catch (e) {} } }, style: Object.assign({}, btnO, { fontSize: 11, padding: "5px 10px" }) }, v.ativo === false ? "Reactivar" : "Pausar"),
+                    React.createElement("button", { onClick: function() { setShowNovaVolta(false); setFimVolta({ v: v, modo: "remover", ultima: localDateStr() }); try { window.scrollTo(0, 0); } catch (e) {} }, style: Object.assign({}, btnR, { fontSize: 11, padding: "5px 10px" }) }, "Del")));
+              }),
+              x.av.length > 0 && React.createElement("div", { style: { borderRadius: 9, padding: "10px 12px", fontSize: 12.5, lineHeight: 1.45, marginTop: 12, background: "#FFFBEB", border: "1.5px solid #F59E0B", color: "#92400E" } },
+                x.av.map(function(a, i) { return React.createElement("div", { key: i }, "⚠ " + a.t); }),
+                podeCorrigir && !corrAberta && React.createElement("button", { onClick: function() { setCorrFat({ cid: cid, tipo: tf === "mensal" ? "mensal" : "visita", valor: valorSugeridoCliente(c).replace(".", ",") }); }, style: Object.assign({}, btn, { fontSize: 12, padding: "6px 12px", marginTop: 8 }) }, "Definir tipo e valor"),
+                corrAberta && (function() {
+                  var nPend = servicosPorFazerCliente(cid).length;
+                  var sug = valorSugeridoCliente(c);
+                  return React.createElement("div", { style: { marginTop: 10, background: "#fff", border: "1.5px solid #FCD34D", borderRadius: 9, padding: 12, color: "#334155" } },
+                    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
+                      React.createElement("div", null, React.createElement("label", { style: lbl }, "Tipo"),
+                        React.createElement("select", { style: inp, value: corrFat.tipo, onChange: function(e) { setCorrFat(Object.assign({}, corrFat, { tipo: e.target.value })); } },
+                          React.createElement("option", { value: "visita" }, "Por visita"), React.createElement("option", { value: "mensal" }, "Mensal fixo"))),
+                      React.createElement("div", null, React.createElement("label", { style: lbl }, corrFat.tipo === "mensal" ? "Valor mensal (sem IVA)" : "Valor por visita (sem IVA)"),
+                        React.createElement("input", { style: inp, inputMode: "decimal", value: corrFat.valor, placeholder: "0,00", onChange: function(e) { setCorrFat(Object.assign({}, corrFat, { valor: e.target.value })); } }))),
+                    React.createElement("div", { style: { fontSize: 11.5, color: "#64748B", marginTop: 8, lineHeight: 1.4 } },
+                      (sug ? "Sugerido: " + sug.replace(".", ",") + " €, o valor mais comum dos \xFAltimos servi\xE7os feitos. " : "") +
+                      "Grava na ficha do cliente e atualiza tamb\xE9m " + (nPend === 1 ? "o servi\xE7o por fazer" : "os " + nPend + " servi\xE7os por fazer") + " com esse valor. Servi\xE7os conclu\xEDdos e valores postos \xE0 m\xE3o n\xE3o mudam."),
+                    React.createElement("div", { style: { display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 10 } },
+                      React.createElement("button", { onClick: function() { setCorrFat(null); }, disabled: gravandoFat, style: Object.assign({}, btnO, { fontSize: 12, padding: "6px 12px" }) }, "Cancelar"),
+                      React.createElement("button", { onClick: gravarFaturacaoFicha, disabled: gravandoFat, style: Object.assign({}, btn, { fontSize: 12, padding: "7px 14px", opacity: gravandoFat ? 0.6 : 1 }) }, gravandoFat ? "A gravar..." : "Guardar na ficha")));
+                })())
+            );
+          }));
+      })()
     );
   }
   const empsWithJobs = emps.filter(function(e) {
@@ -4186,7 +4464,7 @@ function Routes() {
     setNj({ cn: "", addr: "", svc: "", date: localDateStr(), date_end: "", t1: "08:00", t2: "10:00", team: [], val: "", obra_ref: "" });
     setClientSearch("");
     setShowNew(true);
-  }, style: btn }, "+ Servi\xE7o"), /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowVoltasFixas(true); }, style: Object.assign({}, btnO, { fontSize: 13, background: "#F5F3FF", border: "1.5px solid #7C3AED", color: "#7C3AED" }) }, "\u2699 Voltas Fixas"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: alocarEquipaSemana, style: Object.assign({}, btnG, { fontSize: 13, whiteSpace: "nowrap" }) }, "\u26A1 Gerar Semana (equipa)"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: function() { abrirEquipasLivres(); }, style: Object.assign({}, btnO, { fontSize: 13, whiteSpace: "nowrap", background: "#FFF7ED", border: "1.5px solid #F59E0B", color: "#B45309" }) }, "\uD83D\uDCA1 Equipas a definir"), calView === "week" && wJobs.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: function() {
+  }, style: btn }, "+ Servi\xE7o"), /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowVoltasFixas(true); }, style: Object.assign({}, btnO, { fontSize: 13, background: "#F5F3FF", border: "1.5px solid #7C3AED", color: "#7C3AED" }) }, "\u2699 Voltas Fixas", (function() { var n = clientesPorConfigurar().length; return n ? React.createElement("span", { style: { background: "#F59E0B", color: "#fff", borderRadius: 20, padding: "1px 8px", fontSize: 11, fontWeight: 800, marginLeft: 6 } }, n + " por configurar") : null; })()), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: alocarEquipaSemana, style: Object.assign({}, btnG, { fontSize: 13, whiteSpace: "nowrap" }) }, "\u26A1 Gerar Semana (equipa)"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: function() { abrirEquipasLivres(); }, style: Object.assign({}, btnO, { fontSize: 13, whiteSpace: "nowrap", background: "#FFF7ED", border: "1.5px solid #F59E0B", color: "#B45309" }) }, "\uD83D\uDCA1 Equipas a definir"), calView === "week" && wJobs.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: function() {
     const win = window.open("", "_blank");
     const byEmp = {};
     emps.forEach(function(e) {
