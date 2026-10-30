@@ -63,6 +63,23 @@ const __DB_TTL_MS = 45000;
 const __dbCache = new Map();
 const __dbInflight = new Map();
 function __dbClearCache() { __dbCache.clear(); }
+// Rede de segurança: muitas gravações usam fetch() directo em vez do helper db.
+// Qualquer gravação (POST/PATCH/DELETE) à base de dados limpa a memória, antes e
+// depois de responder, para nenhum ecrã voltar a mostrar dados antigos.
+(function() {
+  const __fetchOrig = window.fetch.bind(window);
+  window.fetch = function(input, init) {
+    let escrita = false;
+    try {
+      const metodo = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
+      const url = typeof input === "string" ? input : (input && input.url) || "";
+      escrita = metodo !== "GET" && metodo !== "HEAD" && url.indexOf(SUPABASE_URL + "/rest/v1/") === 0;
+    } catch (e) {}
+    if (!escrita) return __fetchOrig(input, init);
+    __dbClearCache(); __dbInflight.clear();
+    return __fetchOrig(input, init).then(function(r) { __dbClearCache(); __dbInflight.clear(); return r; });
+  };
+})();
 const db = {
   async list(table, query) {
     const key = table + (query || "?select=*");
@@ -10865,7 +10882,33 @@ function QuadroEsquecimentos(props) {
   const [revMarc, setRevMarc] = useState([]);
   const [anularModal, setAnularModal] = useState(null);
   const [anuladosArm, setAnuladosArm] = useState({});
+  const [confirmados, setConfirmados] = useState({});
+  const [revFila, setRevFila] = useState([]);
+  const [revMotivo, setRevMotivo] = useState(false);
+  const revPend = React.useRef(Promise.resolve());
   function chaveAnul(fid, sid, tipo) { return fid + "|" + sid + "|" + tipo; }
+  // Confirmados = esquecimentos revistos que CONTAM (botão "Conta"). Não mexem no prémio:
+  // só tiram a linha da fila "por rever". Tabela própria, separada dos anulados.
+  function chaveConfItem(it) { return it.tipo === "armazem" ? (it.fid + "|" + it.dia + "|armazem") : chaveAnul(it.fid, it.f.sid, it.f.tipo); }
+  function confServ(fid, f) { return !!confirmados[chaveAnul(fid, f.sid, f.tipo)]; }
+  function confArm(fid, dia) { return !!confirmados[fid + "|" + dia + "|armazem"]; }
+  async function confirmar(lista, recarregar) {
+    if (!lista || !lista.length) return;
+    var linhas = lista.map(function(it) { return { chave: chaveConfItem(it), funcionario_id: it.fid, servico_id: it.tipo === "armazem" ? null : it.f.sid, dia_ref: it.tipo === "armazem" ? it.dia : null, tipo_picagem: it.tipo === "armazem" ? "armazem" : it.f.tipo }; });
+    setConfirmados(function(s) { var n = Object.assign({}, s); linhas.forEach(function(l) { n[l.chave] = true; }); return n; });
+    try {
+      var resp = await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_confirmados?on_conflict=chave", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "resolution=ignore-duplicates" }), body: JSON.stringify(linhas) });
+      if (!resp.ok) throw new Error("a base de dados recusou (" + resp.status + "): " + (await resp.text()).slice(0, 160));
+    } catch (e) { window.alert("Erro ao confirmar: " + e.message); recarregar = true; }
+    if (recarregar) carregar();
+  }
+  async function desconfirmar(it) {
+    try {
+      var resp = await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_confirmados?chave=eq." + encodeURIComponent(chaveConfItem(it)), { method: "DELETE", headers: dbHeaders() });
+      if (!resp.ok) throw new Error("a base de dados recusou (" + resp.status + ")");
+    } catch (e) { window.alert("Erro: " + e.message); }
+    carregar();
+  }
   function carregar() {
     setLoading(true);
     var partes = mesRef.split("-");
@@ -10878,8 +10921,11 @@ function QuadroEsquecimentos(props) {
       db.list("servicos", "?select=id,client_id,cn,date,t1,team,check_in,check_out,status&date=gte." + mStart + "&date=lte." + mEnd + "&status=eq.completed"),
       db.list("picagens_armazem", "?select=funcionario_id,tipo,created_at&created_at=gte." + mStart + "T00:00:00&created_at=lte." + mEnd + "T23:59:59"),
       db.list("esquecimentos_anulados", "?select=*"),
-      db.list("clientes", "?select=id,tolerancia_minutos")
+      db.list("clientes", "?select=id,tolerancia_minutos"),
+      db.list("esquecimentos_confirmados", "?select=chave")
     ]).then(function(res) {
+      var confMap = {}; (res[5] || []).forEach(function(c) { confMap[c.chave] = true; });
+      setConfirmados(confMap);
       var emps = (res[0] || []).filter(function(e) { return e.ativo !== false; });
       var servicos = res[1] || [];
       var picArm = res[2] || [];
@@ -10917,6 +10963,14 @@ function QuadroEsquecimentos(props) {
   function anular(fid, f) { setAnularModal({ fid: fid, f: f, tipo: "servico" }); }
   function anularArm(fid, dia) { setAnularModal({ fid: fid, dia: dia, tipo: "armazem" }); }
   function anularGrupo(lista) { if (lista && lista.length) setAnularModal({ lista: lista }); }
+  async function gravarAnulacoes(itens, motivo) {
+    for (var i = 0; i < itens.length; i++) {
+      var it = itens[i];
+      var body = (it.tipo === "armazem") ? { funcionario_id: it.fid, dia_ref: it.dia, tipo_picagem: "armazem", motivo: motivo } : { funcionario_id: it.fid, servico_id: it.f.sid, tipo_picagem: it.f.tipo, motivo: motivo };
+      var resp = await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "resolution=merge-duplicates" }), body: JSON.stringify(body) });
+      if (!resp.ok) throw new Error("a base de dados recusou (" + resp.status + "): " + (await resp.text()).slice(0, 160));
+    }
+  }
   async function confirmarAnular(motivo) {
     var m = anularModal;
     if (!m) return;
@@ -10925,7 +10979,8 @@ function QuadroEsquecimentos(props) {
       for (var i = 0; i < itens.length; i++) {
         var it = itens[i];
         var body = (it.tipo === "armazem") ? { funcionario_id: it.fid, dia_ref: it.dia, tipo_picagem: "armazem", motivo: motivo } : { funcionario_id: it.fid, servico_id: it.f.sid, tipo_picagem: it.f.tipo, motivo: motivo };
-        await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "resolution=merge-duplicates" }), body: JSON.stringify(body) });
+        var resp = await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados", { method: "POST", headers: Object.assign({}, dbHeaders(), { "Prefer": "resolution=merge-duplicates" }), body: JSON.stringify(body) });
+        if (!resp.ok) throw new Error("a base de dados recusou (" + resp.status + "): " + (await resp.text()).slice(0, 160));
       }
       setAnularModal(null);
       carregar();
@@ -10950,11 +11005,12 @@ function QuadroEsquecimentos(props) {
     setAberto(null);
   }
   var mesLabel = (function() { var p = mesRef.split("-"); return new Date(parseInt(p[0]), parseInt(p[1]) - 1, 1).toLocaleDateString("pt-PT", { month: "long", year: "numeric" }); })();
-  var totalRever = 0, nPerde = 0, porCliente = {}, fila = [];
+  var totalRever = 0, nPerde = 0, nConf = 0, porCliente = {}, fila = [];
   (dados || []).forEach(function(d) {
     if (d.esqServ >= 10 || d.esqArm >= 5) nPerde++;
     (d.detalheServ || []).forEach(function(f) {
       if (anulados[chaveAnul(d.id, f.sid, f.tipo)]) return;
+      if (confServ(d.id, f)) { nConf++; return; }
       totalRever++;
       var late = f.tipo === "entrada" && f.late;
       var min = late ? ((minsHHMM(f.ci) || 0) - (minsHHMM(f.t1) || 0)) : null;
@@ -10966,6 +11022,7 @@ function QuadroEsquecimentos(props) {
     });
     (d.detalheArm || []).forEach(function(dia) {
       if (anuladosArm[d.id + "|" + dia]) return;
+      if (confArm(d.id, dia)) { nConf++; return; }
       totalRever++;
       fila.push({ id: d.id, nome: d.nome, av: d.av, arm: dia, tipo: "armazem", min: null });
     });
@@ -10977,15 +11034,30 @@ function QuadroEsquecimentos(props) {
       /* @__PURE__ */ React.createElement("div", { style: { width: 40, height: 40, borderRadius: 11, background: "#EFF6FF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, flexShrink: 0 } }, "📋"),
       /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } },
         /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", textTransform: "capitalize" } }, "Esquecimentos · " + mesLabel),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, loading ? "a carregar…" : (totalRever + " por rever · " + nPerde + " perde" + (nPerde === 1 ? "" : "m") + " prémio"))
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, loading ? "a carregar…" : (totalRever + " por rever · " + nConf + " confirmado" + (nConf === 1 ? "" : "s") + " · " + nPerde + " perde" + (nPerde === 1 ? "" : "m") + " prémio"))
       ),
       /* @__PURE__ */ React.createElement("button", { style: { background: "#1A3A5C", color: "#fff", border: "none", borderRadius: 10, padding: "9px 15px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", flexShrink: 0 } }, "Abrir ›")
     );
   }
   function buildItem(it) { return it.tipo === "armazem" ? { fid: it.id, tipo: "armazem", dia: it.arm } : { fid: it.id, tipo: "servico", f: it.f }; }
-  function revConta() { setRevIdx(revIdx + 1); }
-  function revAnula() { var it = fila[revIdx]; if (it) setRevMarc(revMarc.concat([buildItem(it)])); setRevIdx(revIdx + 1); }
-  function revFim() { var m = revMarc; setRevAberto(false); setRevIdx(0); setRevMarc([]); if (m.length) anularGrupo(m); }
+  // O Rever trabalha sobre uma fotografia da fila (revFila), para os índices não saltarem quando se grava.
+  // Rever: cada decisão grava logo. As gravações vão em fila (revPend) e o fecho
+  // espera por todas antes de recarregar, para nada voltar a aparecer como "por rever".
+  function revEnfila(fn) { revPend.current = revPend.current.then(fn).catch(function(e) { window.alert("Erro ao gravar: " + e.message); }); }
+  function revConta() { var it = revFila[revIdx]; if (it) { var item = buildItem(it); revEnfila(function() { return confirmar([item], false); }); setRevMarc(revMarc.concat([{ acao: "conta" }])); } setRevMotivo(false); setRevIdx(revIdx + 1); }
+  function revAnula() { setRevMotivo(true); }
+  function revAnulaMotivo(motivo) {
+    var it = revFila[revIdx];
+    if (it) {
+      var item = buildItem(it);
+      if (item.tipo === "armazem") setAnuladosArm(function(s) { var n = Object.assign({}, s); n[item.fid + "|" + item.dia] = motivo; return n; });
+      else setAnulados(function(s) { var n = Object.assign({}, s); n[chaveAnul(item.fid, item.f.sid, item.f.tipo)] = motivo; return n; });
+      revEnfila(function() { return gravarAnulacoes([item], motivo); });
+      setRevMarc(revMarc.concat([{ acao: "anula" }]));
+    }
+    setRevMotivo(false); setRevIdx(revIdx + 1);
+  }
+  function revFim() { setRevAberto(false); setRevIdx(0); setRevMarc([]); setRevMotivo(false); revPend.current.then(function() { carregar(); }); }
   function renderCliente() {
     if (clienteList.length === 0) return /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#94A3B8", fontSize: 13, padding: 24 } }, "Sem esquecimentos este mês.");
     return /* @__PURE__ */ React.createElement("div", null, clienteList.map(function(c, i) {
@@ -10999,31 +11071,37 @@ function QuadroEsquecimentos(props) {
     }));
   }
   function renderRever() {
-    var it = fila[revIdx], inner;
+    var it = revFila[revIdx], inner;
     if (!it) {
       inner = /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: "10px 0" } },
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 34 } }, "✅"),
         /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, color: "#1A3A5C", marginTop: 8 } }, "Tudo revisto!"),
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, color: "#94A3B8", marginTop: 4 } }, revMarc.length ? (revMarc.length + " para anular — dás o motivo a seguir") : "Nada a anular."),
-        /* @__PURE__ */ React.createElement("button", { onClick: revFim, style: { marginTop: 18, width: "100%", background: "#1A3A5C", color: "#fff", border: "none", borderRadius: 12, padding: 14, fontSize: 14, fontWeight: 800, cursor: "pointer" } }, revMarc.length ? ("Anular os " + revMarc.length + " marcados") : "Fechar")
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, color: "#94A3B8", marginTop: 4 } }, (function() { var nc = revMarc.filter(function(x) { return x.acao === "conta"; }).length, na = revMarc.filter(function(x) { return x.acao === "anula"; }).length; return nc + " confirmado" + (nc === 1 ? "" : "s") + " · " + na + " anulado" + (na === 1 ? "" : "s") + " — já gravados"; })()),
+        /* @__PURE__ */ React.createElement("button", { onClick: revFim, style: { marginTop: 18, width: "100%", background: "#1A3A5C", color: "#fff", border: "none", borderRadius: 12, padding: 14, fontSize: 14, fontWeight: 800, cursor: "pointer" } }, "Fechar")
       );
     } else {
       var titulo = it.tipo === "armazem" ? "Sem picagem no armazém" : (it.tipo === "entrada" && it.late ? ("+" + it.min + " min de atraso") : (it.tipo === "saída" ? "Não picou a saída" : "Não picou a entrada"));
       var sub = it.tipo === "armazem" ? (it.arm ? new Date(it.arm + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) : "") : ((it.cn || "") + (it.date ? " · " + new Date(it.date + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) : ""));
       var det = (it.tipo === "entrada" && it.late && it.f) ? ("picou " + (it.f.ci || "") + " · previsto " + (it.f.t1 || "")) : "";
       inner = /* @__PURE__ */ React.createElement("div", null,
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#94A3B8", marginBottom: 14 } }, (revIdx + 1) + " de " + fila.length + " · as mais graves primeiro"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#94A3B8", marginBottom: 14 } }, (revIdx + 1) + " de " + revFila.length + " · as mais graves primeiro"),
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 19, fontWeight: 900, color: "#1A3A5C" } }, it.nome),
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", margin: "2px 0 14px" } }, sub),
         /* @__PURE__ */ React.createElement("div", { style: { display: "inline-block", fontSize: 15, fontWeight: 900, color: "#DC2626", background: "#FEF2F2", borderRadius: 10, padding: "8px 16px" } }, titulo),
         det ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, color: "#94A3B8", marginTop: 6 } }, det) : null,
-        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 20 } },
+        revMotivo ? /* @__PURE__ */ React.createElement("div", { style: { marginTop: 18 } },
+          /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#94A3B8", marginBottom: 8 } }, "Porque n\xE3o deve contar?"),
+          ["QR n\xE3o funcionava", "Sem rede", "Outro"].map(function(cat) {
+            return /* @__PURE__ */ React.createElement("button", { key: cat, onClick: function() { if (cat === "Outro") { var t = window.prompt("Descreve o motivo:", ""); if (t === null) return; revAnulaMotivo(t.trim() || "Outro"); } else { revAnulaMotivo(cat); } }, style: { width: "100%", background: "#F6FAFD", border: "1.5px solid #E2EBF4", borderRadius: 10, padding: 12, fontSize: 14, fontWeight: 700, color: "#1A3A5C", cursor: "pointer", marginBottom: 8, textAlign: "left" } }, cat);
+          }),
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { setRevMotivo(false); }, style: { width: "100%", background: "transparent", border: "none", color: "#94A3B8", fontSize: 13, cursor: "pointer" } }, "\u2039 Voltar")
+        ) : /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 20 } },
           /* @__PURE__ */ React.createElement("button", { onClick: revConta, style: { flex: 1, background: "#FEE2E2", color: "#991B1B", border: "none", borderRadius: 12, padding: 14, fontSize: 14, fontWeight: 800, cursor: "pointer" } }, "Conta"),
           /* @__PURE__ */ React.createElement("button", { onClick: revAnula, style: { flex: 1, background: "#DCFCE7", color: "#15803D", border: "none", borderRadius: 12, padding: 14, fontSize: 14, fontWeight: 800, cursor: "pointer" } }, "Anular ✓")
         )
       );
     }
-    return /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(21,50,78,0.55)", zIndex: 650, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }, onClick: function() { setRevAberto(false); } },
+    return /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(21,50,78,0.55)", zIndex: 650, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }, onClick: function() { revFim(); } },
       /* @__PURE__ */ React.createElement("div", { onClick: function(e) { e.stopPropagation(); }, style: { background: "#fff", borderRadius: 20, width: "100%", maxWidth: 380, padding: 22 } }, inner)
     );
   }
@@ -11042,7 +11120,7 @@ function QuadroEsquecimentos(props) {
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 4, background: "rgba(255,255,255,0.14)", borderRadius: 11, padding: 4, flex: 1, minWidth: 180 } }, ["pessoa", "cliente"].map(function(lx) {
         return /* @__PURE__ */ React.createElement("button", { key: lx, onClick: function() { setLente(lx); }, style: { flex: 1, border: "none", background: lente === lx ? "#fff" : "transparent", color: lente === lx ? "#1A3A5C" : "rgba(255,255,255,0.85)", fontSize: 12.5, fontWeight: 700, padding: "8px 6px", borderRadius: 8, cursor: "pointer" } }, lx === "pessoa" ? "Por pessoa" : "Por cliente");
       })),
-      /* @__PURE__ */ React.createElement("button", { onClick: function() { if (!fila.length) return; setRevIdx(0); setRevMarc([]); setRevAberto(true); }, style: { background: fila.length ? "#fff" : "rgba(255,255,255,0.3)", color: fila.length ? "#1A3A5C" : "rgba(255,255,255,0.8)", border: "none", borderRadius: 10, padding: "9px 15px", fontSize: 12.5, fontWeight: 800, cursor: fila.length ? "pointer" : "default", flexShrink: 0 } }, "⚡ Rever (" + fila.length + ")")
+      /* @__PURE__ */ React.createElement("button", { onClick: function() { if (!fila.length) return; setRevFila(fila.slice()); setRevIdx(0); setRevMarc([]); setRevAberto(true); }, style: { background: fila.length ? "#fff" : "rgba(255,255,255,0.3)", color: fila.length ? "#1A3A5C" : "rgba(255,255,255,0.8)", border: "none", borderRadius: 10, padding: "9px 15px", fontSize: 12.5, fontWeight: 800, cursor: fila.length ? "pointer" : "default", flexShrink: 0 } }, "⚡ Rever (" + fila.length + ")")
     )
   ),
     /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 12 } }, "Servi\xE7o: perde o pr\xE9mio com 10 ou mais \xB7 Armaz\xE9m: com 5 ou mais"),
@@ -11063,12 +11141,21 @@ function QuadroEsquecimentos(props) {
       var nSemSai = semSai.filter(function(f) { return !anuladoDe(f); }).length;
       var nArm = arm.filter(function(x) { return !x.anulado; }).length;
       function toggleGrupo(k) { setGrupoAberto(grupoAberto === k ? null : k); setVerMais(function(s) { var n = Object.assign({}, s); delete n[k]; return n; }); setVerAnul(function(s) { var n = Object.assign({}, s); delete n[k]; return n; }); }
-      function botaoAnular(f) { var an = anuladoDe(f); return an ? /* @__PURE__ */ React.createElement("button", { onClick: function() { reativar(d.id, f); }, style: { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline", flexShrink: 0 } }, "reativar") : /* @__PURE__ */ React.createElement("button", { onClick: function() { anular(d.id, f); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, color: "#2E6DA4", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "4px 10px", flexShrink: 0 } }, "anular"); }
+      var btnConta = { background: "#FEF2F2", border: "none", borderRadius: 6, color: "#991B1B", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "4px 10px", flexShrink: 0 };
+      var tagConf = { fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 7px", flexShrink: 0, background: "#FEE2E2", color: "#991B1B" };
+      var btnDesfazer = { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline", flexShrink: 0 };
+      function botaoAnular(f) {
+        var an = anuladoDe(f);
+        if (!an && confServ(d.id, f)) return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("span", { style: tagConf }, "confirmado"), /* @__PURE__ */ React.createElement("button", { onClick: function() { desconfirmar({ fid: d.id, tipo: "servico", f: f }); }, style: btnDesfazer }, "desfazer"));
+        if (!an) return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { onClick: function() { confirmar([{ fid: d.id, tipo: "servico", f: f }], true); }, style: btnConta }, "conta"), botaoAnularOrig(f));
+        return botaoAnularOrig(f);
+      }
+      function botaoAnularOrig(f) { var an = anuladoDe(f); return an ?/* @__PURE__ */ React.createElement("button", { onClick: function() { reativar(d.id, f); }, style: { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline", flexShrink: 0 } }, "reativar") : /* @__PURE__ */ React.createElement("button", { onClick: function() { anular(d.id, f); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, color: "#2E6DA4", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "4px 10px", flexShrink: 0 } }, "anular"); }
       function linhaTardia(x, i) { var f = x.f, an = anuladoDe(f); var b = x.min >= 45 ? { bg: "#FEF2F2", c: "#DC2626" } : x.min >= 15 ? { bg: "#FFF7ED", c: "#C2410C" } : { bg: "#F1F5F9", c: "#64748B" }; return /* @__PURE__ */ React.createElement("div", { key: "t" + i, style: { display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid #F4F7FA", opacity: an ? 0.5 : 1 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, fontWeight: 600, color: "#334155", textDecoration: an ? "line-through" : "none" } }, f.cn || ""), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 1 } }, dataCurta(f.date) + " · picou " + (f.ci || "") + ", previsto " + (f.t1 || "") + (an ? " — anulado: " + an : ""))), an ? null : /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 800, borderRadius: 6, padding: "2px 7px", flexShrink: 0, background: b.bg, color: b.c } }, "+" + x.min + " min"), botaoAnular(f)); }
       function linhaTag(f, i, label, corTag) { var an = anuladoDe(f); return /* @__PURE__ */ React.createElement("div", { key: "s" + i, style: { display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid #F4F7FA", opacity: an ? 0.5 : 1 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, fontWeight: 600, color: "#334155", textDecoration: an ? "line-through" : "none" } }, f.cn || ""), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 1 } }, dataCurta(f.date) + (an ? " — anulado: " + an : ""))), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 7px", flexShrink: 0, background: corTag.bg, color: corTag.c } }, label), botaoAnular(f)); }
-      function linhaArm(x, i) { var an = x.anulado; return /* @__PURE__ */ React.createElement("div", { key: "a" + i, style: { display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid #F4F7FA", opacity: an ? 0.5 : 1 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, fontWeight: 600, color: "#334155", textDecoration: an ? "line-through" : "none" } }, dataCurta(x.dia)), an ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#16A34A", fontStyle: "italic", marginTop: 1 } }, "anulado: " + an) : null), an ? /* @__PURE__ */ React.createElement("button", { onClick: function() { reativarArm(d.id, x.dia); }, style: { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline", flexShrink: 0 } }, "reativar") : /* @__PURE__ */ React.createElement("button", { onClick: function() { anularArm(d.id, x.dia); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, color: "#2E6DA4", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "4px 10px", flexShrink: 0 } }, "anular")); }
+      function linhaArm(x, i) { var an = x.anulado; return /* @__PURE__ */ React.createElement("div", { key: "a" + i, style: { display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid #F4F7FA", opacity: an ? 0.5 : 1 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, fontWeight: 600, color: "#334155", textDecoration: an ? "line-through" : "none" } }, dataCurta(x.dia)), an ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#16A34A", fontStyle: "italic", marginTop: 1 } }, "anulado: " + an) : null), an ? /* @__PURE__ */ React.createElement("button", { onClick: function() { reativarArm(d.id, x.dia); }, style: { background: "none", border: "none", color: "#94A3B8", fontSize: 10.5, cursor: "pointer", textDecoration: "underline", flexShrink: 0 } }, "reativar") : confArm(d.id, x.dia) ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("span", { style: tagConf }, "confirmado"), /* @__PURE__ */ React.createElement("button", { onClick: function() { desconfirmar({ fid: d.id, tipo: "armazem", dia: x.dia }); }, style: btnDesfazer }, "desfazer")) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { onClick: function() { confirmar([{ fid: d.id, tipo: "armazem", dia: x.dia }], true); }, style: btnConta }, "conta"), /* @__PURE__ */ React.createElement("button", { onClick: function() { anularArm(d.id, x.dia); }, style: { background: "#F1F5F9", border: "none", borderRadius: 6, color: "#2E6DA4", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: "4px 10px", flexShrink: 0 } }, "anular"))); }
       function chip(txt, bg, bd, c) { return /* @__PURE__ */ React.createElement("div", { style: { borderRadius: 10, padding: "7px 11px", fontSize: 11, fontWeight: 700, border: "1px solid " + bd, background: bg, color: c } }, txt); }
-      function grupo(k, titulo, ativas, anul, listaAnular) {
+      function grupo(k, titulo, ativas, anul, listaAnular, listaConfirmar) {
         if (ativas.length === 0 && anul.length === 0) return null;
         var open = grupoAberto === k;
         var mais = !!verMais[k], mAnul = !!verAnul[k], cap = 6;
@@ -11080,7 +11167,8 @@ function QuadroEsquecimentos(props) {
               /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12.5, fontWeight: 700, color: "#1A3A5C" } }, titulo),
               /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12.5, fontWeight: 700, color: "#94A3B8" } }, "(" + ativas.length + ")")
             ),
-            (open && listaAnular && listaAnular.length > 0) ? /* @__PURE__ */ React.createElement("button", { onClick: function() { anularGrupo(listaAnular); }, style: { fontSize: 11, fontWeight: 700, color: "#2E6DA4", background: "#EFF6FF", border: "none", borderRadius: 7, padding: "5px 11px", cursor: "pointer", flexShrink: 0 } }, "anular todas") : null
+            (open && listaConfirmar && listaConfirmar.length > 0) ? /* @__PURE__ */ React.createElement("button", { onClick: function() { confirmar(listaConfirmar, true); }, style: { fontSize: 11, fontWeight: 700, color: "#991B1B", background: "#FEF2F2", border: "none", borderRadius: 7, padding: "5px 11px", cursor: "pointer", flexShrink: 0 } }, "confirmar todas") : null,
+            (open && listaAnular && listaAnular.length > 0) ?/* @__PURE__ */ React.createElement("button", { onClick: function() { anularGrupo(listaAnular); }, style: { fontSize: 11, fontWeight: 700, color: "#2E6DA4", background: "#EFF6FF", border: "none", borderRadius: 7, padding: "5px 11px", cursor: "pointer", flexShrink: 0 } }, "anular todas") : null
           ),
           open ? /* @__PURE__ */ React.createElement("div", { style: { paddingBottom: 10 } },
             ativasVis,
@@ -11115,10 +11203,10 @@ function QuadroEsquecimentos(props) {
             chip(nSemSai + " sem saída", "#EFF6FF", "#BBD7F2", "#1E40AF"),
             nArm > 0 ? chip(nArm + " armazém", "#F8FAFC", "#E8EEF5", "#334155") : null
           ),
-          grupo(d.id + "|tardias", "Entradas tardias", tardiasA.map(linhaTardia), tardiasN.map(linhaTardia), tardiasA.map(function(x) { return { fid: d.id, tipo: "servico", f: x.f }; })),
-          grupo(d.id + "|sement", "Sem entrada", semEntA.map(function(f, i) { return linhaTag(f, i, "sem entrada", ceRosa); }), semEntN.map(function(f, i) { return linhaTag(f, i, "sem entrada", ceRosa); }), semEntA.map(function(f) { return { fid: d.id, tipo: "servico", f: f }; })),
-          grupo(d.id + "|semsai", "Sem saída", semSaiA.map(function(f, i) { return linhaTag(f, i, "sem saída", ceAzul); }), semSaiN.map(function(f, i) { return linhaTag(f, i, "sem saída", ceAzul); }), semSaiA.map(function(f) { return { fid: d.id, tipo: "servico", f: f }; })),
-          grupo(d.id + "|arm", "Sem picagem no armazém", armA.map(linhaArm), armN.map(linhaArm), armA.map(function(x) { return { fid: d.id, tipo: "armazem", dia: x.dia }; }))
+          grupo(d.id + "|tardias", "Entradas tardias", tardiasA.map(linhaTardia), tardiasN.map(linhaTardia), tardiasA.map(function(x) { return { fid: d.id, tipo: "servico", f: x.f }; }), tardiasA.filter(function(x) { return !confServ(d.id, x.f); }).map(function(x) { return { fid: d.id, tipo: "servico", f: x.f }; })),
+          grupo(d.id + "|sement", "Sem entrada", semEntA.map(function(f, i) { return linhaTag(f, i, "sem entrada", ceRosa); }), semEntN.map(function(f, i) { return linhaTag(f, i, "sem entrada", ceRosa); }), semEntA.map(function(f) { return { fid: d.id, tipo: "servico", f: f }; }), semEntA.filter(function(f) { return !confServ(d.id, f); }).map(function(f) { return { fid: d.id, tipo: "servico", f: f }; })),
+          grupo(d.id + "|semsai", "Sem saída", semSaiA.map(function(f, i) { return linhaTag(f, i, "sem saída", ceAzul); }), semSaiN.map(function(f, i) { return linhaTag(f, i, "sem saída", ceAzul); }), semSaiA.map(function(f) { return { fid: d.id, tipo: "servico", f: f }; }), semSaiA.filter(function(f) { return !confServ(d.id, f); }).map(function(f) { return { fid: d.id, tipo: "servico", f: f }; })),
+          grupo(d.id + "|arm", "Sem picagem no armazém", armA.map(linhaArm), armN.map(linhaArm), armA.map(function(x) { return { fid: d.id, tipo: "armazem", dia: x.dia }; }), armA.filter(function(x) { return !confArm(d.id, x.dia); }).map(function(x) { return { fid: d.id, tipo: "armazem", dia: x.dia }; }))
         ) : null
       );
     }),
