@@ -189,6 +189,46 @@ function portalRpc(fn, args) {
     body: JSON.stringify(args || {})
   }).then(function(r) { return r.ok ? r.json() : null; });
 }
+// Distribui o valor mensal de cada GRUPO (cliente principal + fichas filhas) pelas
+// visitas do grupo nesse mes. Devolve { servico_id: fatia }. A ultima visita de cada
+// grupo/mes absorve os centimos, para o mes somar exatamente o valor da avenca.
+function fatiasMensais(clients, jobs) {
+  var cById = {};
+  (clients || []).forEach(function(c) { cById[c.id] = c; });
+  function grupoDe(cid) { var c = cById[cid]; return c ? (c.cliente_principal_id || c.id) : null; }
+  var valorGrupo = {};
+  (clients || []).forEach(function(c) {
+    if (c.tipo_faturacao === "mensal") {
+      var g = c.cliente_principal_id || c.id;
+      valorGrupo[g] = (valorGrupo[g] || 0) + (parseFloat(c.valor_visita) || 0);
+    }
+  });
+  var baldes = {};
+  (jobs || []).forEach(function(j) {
+    var g = grupoDe(j.client_id);
+    if (!g || !(valorGrupo[g] > 0)) return;
+    var ym = (j.date || "").slice(0, 7);
+    if (!ym) return;
+    var bk = g + "|" + ym;
+    (baldes[bk] = baldes[bk] || []).push(j);
+  });
+  var out = {};
+  Object.keys(baldes).forEach(function(bk) {
+    var g = bk.split("|")[0];
+    var arr = baldes[bk];
+    var total = valorGrupo[g];
+    var n = arr.length;
+    if (n === 0) return;
+    var base = Math.floor(total / n * 100) / 100;
+    var acc = 0;
+    arr.forEach(function(j, i) {
+      var v = (i === n - 1) ? Math.round((total - acc) * 100) / 100 : base;
+      acc += base;
+      out[j.id] = v;
+    });
+  });
+  return out;
+}
 async function removerFuncionarioDeServicosFuturos(empId, dataInicio, dataFim) {
   const hoje = localDateStr();
   const inicio = dataInicio > hoje ? dataInicio : hoje;
@@ -1310,12 +1350,16 @@ function Finance() {
   //   PREVISÃO = serviços ainda por concluir (agendados) + resto da avença do mês.
   // monthJobs já vem filtrado a status=completed; monthJobsAll traz todos (p/ o agendado).
   const _servReal = monthJobs.reduce(function(acc, j) {
+    var cR = clientsMap[j.client_id];
+    if (cR && (cR.cliente_principal_id || cR.excluir_financeiro === true || cR.tipo_faturacao === "mensal")) return acc;
     var v = j.val || 0;
     acc.sIva += v; acc.cIva += withIva(v, j); acc.pg += valorPagoDoJob(j);
     return acc;
   }, { sIva: 0, cIva: 0, pg: 0 });
   const _servAg = monthJobsAll.reduce(function(acc, j) {
     if (j.status === "completed" || j.status === "cancelado") return acc;
+    var cR = clientsMap[j.client_id];
+    if (cR && (cR.cliente_principal_id || cR.excluir_financeiro === true || cR.tipo_faturacao === "mensal")) return acc;
     var v = j.val || 0;
     acc.sIva += v; acc.cIva += withIva(v, j);
     return acc;
@@ -2973,6 +3017,7 @@ function Routes() {
   const [clients, setClients] = useState([]);
   const [ausencias, setAusencias] = useState([]);
   const [horasDiaMap, setHorasDiaMap] = useState({});
+  const fatiasMap = fatiasMensais(clients, jobs);
   useEffect(function() {
     db.list("funcionarios_rh", "?select=funcionario_id,horas_dia").then(function(r) {
       var m = {};
@@ -4596,8 +4641,11 @@ function Routes() {
       return j.status === "completed";
     }).length, c: "#16A34A" },
     { l: "Fatura\xE7\xE3o prevista", v: fmt(wJobs.reduce(function(s, j) {
+      if (fatiasMap[j.id] != null) return s + fatiasMap[j.id];
+      var cfx = clients.find(function(x) { return x.id === j.client_id; });
+      if (cfx && (cfx.cliente_principal_id || cfx.excluir_financeiro === true || cfx.tipo_faturacao === "mensal")) return s;
       return s + (j.val || 0);
-    }, 0)) + "\u20AC", c: "#7C3AED" }
+    }, 0)), c: "#7C3AED" }
   ].map(function(k) {
     return /* @__PURE__ */ React.createElement("div", { key: k.l, style: Object.assign({}, card, { marginBottom: 0, padding: 12 }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", fontWeight: 700, textTransform: "uppercase", marginBottom: 3 } }, k.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: k.c } }, k.v));
   })), calView === "week" && (function() {
@@ -4696,7 +4744,7 @@ function Routes() {
       return x.id === eid;
     });
     return e ? /* @__PURE__ */ React.createElement("div", { key: eid, style: { display: "flex", alignItems: "center", gap: 5, background: empColor(eid) + "15", border: "1.5px solid " + empColor(eid), borderRadius: 8, padding: "4px 10px" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 18, height: 18, borderRadius: "50%", background: empColor(eid), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 8, fontWeight: 800 } }, e.av || e.name.slice(0, 2)), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: empColor(eid) } }, e.name.split(" ")[0])) : null;
-  }))), selJob.addr && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 8 } }, "\u{1F4CD} ", selJob.addr), (function() { var c = clients.find(function(x) { return x.id === selJob.client_id; }); var tol = c && c.tolerancia_minutos ? c.tolerancia_minutos : null; return tol ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#F59E0B", fontWeight: 700, marginBottom: 8 } }, "\u23F0 Toler\xE2ncia de chegada: ", tol, " min (at\xE9 ", (function() { var parts = (selJob.t1 || "08:00").split(":"); var h = parseInt(parts[0]); var m = parseInt(parts[1]) + tol; h += Math.floor(m/60); m = m % 60; return String(h).padStart(2,"0") + ":" + String(m).padStart(2,"0"); })(), ")") : null; })(), /* @__PURE__ */ React.createElement("div", { onClick: async function() {
+  }))), selJob.addr && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 8 } }, "\u{1F4CD} ", selJob.addr), (function() { var c = clients.find(function(x) { return x.id === selJob.client_id; }); var tol = c && c.tolerancia_minutos ? c.tolerancia_minutos : null; return tol ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#F59E0B", fontWeight: 700, marginBottom: 8 } }, "\u23F0 Toler\xE2ncia de chegada: ", tol, " min (at\xE9 ", (function() { var parts = (selJob.t1 || "08:00").split(":"); var h = parseInt(parts[0]); var m = parseInt(parts[1]) + tol; h += Math.floor(m/60); m = m % 60; return String(h).padStart(2,"0") + ":" + String(m).padStart(2,"0"); })(), ")") : null; })(), (fatiasMap[selJob.id] != null) && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#7C3AED", marginBottom: 12 } }, fmt(fatiasMap[selJob.id]), /* @__PURE__ */ React.createElement("span", { style: { color: "#94A3B8", fontWeight: 600, fontSize: 11, marginLeft: 6 } }, "parte da aven\xE7a mensal")), ((function() { var cx = clients.find(function(c) { return c.id === selJob.client_id; }) || {}; return cx.excluir_financeiro !== true && cx.tipo_faturacao !== "mensal"; })()) && /* @__PURE__ */ React.createElement("div", { onClick: async function() {
     if (selJob.paid) { alert("Servi\xE7o j\xE1 pago \u2014 o valor n\xE3o pode ser alterado.\n\nSe foi engano, desmarca primeiro o pagamento na Conta Corrente."); return; }
     var atual = selJob.val || 0;
     var r = window.prompt("Valor deste servi\xE7o (sem IVA).\n\nDeixa VAZIO para voltar ao pre\xE7o normal do cliente.", atual);
