@@ -4504,6 +4504,7 @@ function Routes() {
         "div",
         {
           key: job.id,
+          title: job.cn + (job.obra_ref ? " · " + job.obra_ref : "") + (job.t1 ? " · " + job.t1 + "–" + job.t2 : "") + (job.addr ? " · " + job.addr : ""),
           onClick: function() {
             openJob(job);
           },
@@ -4534,7 +4535,7 @@ function Routes() {
             e.currentTarget.style.zIndex = 20;
           }
         },
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 800, color: isCompleted ? "#15803D" : "#fff", lineHeight: 1.2, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" } }, job.cn),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, fontWeight: 800, color: isCompleted ? "#15803D" : "#fff", lineHeight: 1.2, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } }, job.cn),
         height > 36 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: isCompleted ? "#15803D" : "rgba(255,255,255,0.9)" } }, job.t1, "\u2013", job.t2),
         height > 52 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 2, marginTop: 2, flexWrap: "wrap" } }, (job.team || []).filter(function(eid) { var e = emps.find(function(x) { return x.id === eid; }); return e && e.ativo !== false; }).slice(0, 4).map(function(eid) {
           return /* @__PURE__ */ React.createElement("div", { key: eid, style: { width: 10, height: 10, borderRadius: "50%", background: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.8)" } });
