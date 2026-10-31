@@ -5760,24 +5760,22 @@ function FichaRH(props) {
   const [tab, setTab] = useState("dados");
   const [ratingMes, setRatingMes] = useState(null);
   useEffect(function() {
-    var agora = /* @__PURE__ */ new Date();
-    var mesYM = agora.getFullYear() + "-" + String(agora.getMonth() + 1).padStart(2, "0");
-    var monthStart = new Date(agora.getFullYear(), agora.getMonth(), 1).toISOString();
-    var svcDesde = new Date(agora.getFullYear(), agora.getMonth() - 2, 1).toISOString().slice(0, 10);
+    var mesA = localDateStr().slice(0, 7);
     Promise.all([
-      db.list("avaliacoes", "?select=stars,servico_id&funcionario_id=eq." + encodeURIComponent(sel.id) + "&created_at=gte." + monthStart),
-      db.list("servicos", "?select=id,date&date=gte." + svcDesde)
+      db.list("avaliacoes", "?select=stars,servico_id,created_at&funcionario_id=eq." + encodeURIComponent(sel.id)),
+      db.list("servicos", "?select=id,date&status=eq.completed")
     ]).then(function(res) {
       var linhas = res[0] || [];
       var svcMap = {};
       (res[1] || []).forEach(function(sv) { svcMap[sv.id] = sv.date; });
-      var validas = linhas.filter(function(r) {
-        var ds = svcMap[r.servico_id];
+      var validas = linhas.filter(function(a) {
+        if ((a.created_at || "").slice(0, 7) !== mesA) return false;
+        var ds = svcMap[a.servico_id];
         if (!ds) return true;
-        return (ds || "").slice(0, 7) === mesYM;
+        return (ds || "").slice(0, 7) === mesA;
       });
       if (validas.length > 0) {
-        var media = validas.reduce(function(s, r) { return s + (r.stars || 0); }, 0) / validas.length;
+        var media = validas.reduce(function(s, r) { return s + (parseFloat(r.stars) || 0); }, 0) / validas.length;
         setRatingMes({ media: Math.round(media * 10) / 10, count: validas.length });
       } else {
         setRatingMes(null);
@@ -12150,24 +12148,22 @@ function Employee(props) {
   const [ratingMesEmp, setRatingMesEmp] = useState(null);
   useEffect(function() {
     if (!emp) { setRatingMesEmp(null); return; }
-    var agora = /* @__PURE__ */ new Date();
-    var mesYM = agora.getFullYear() + "-" + String(agora.getMonth() + 1).padStart(2, "0");
-    var monthStart = new Date(agora.getFullYear(), agora.getMonth(), 1).toISOString();
-    var svcDesde = new Date(agora.getFullYear(), agora.getMonth() - 2, 1).toISOString().slice(0, 10);
+    var mesA = localDateStr().slice(0, 7);
     Promise.all([
-      db.list("avaliacoes", "?select=stars,servico_id&funcionario_id=eq." + encodeURIComponent(emp.id) + "&created_at=gte." + monthStart),
-      db.list("servicos", "?select=id,date&date=gte." + svcDesde)
+      db.list("avaliacoes", "?select=stars,servico_id,created_at&funcionario_id=eq." + encodeURIComponent(emp.id)),
+      db.list("servicos", "?select=id,date&status=eq.completed")
     ]).then(function(res) {
       var rows = res[0] || [];
       var svcMap = {};
       (res[1] || []).forEach(function(sv) { svcMap[sv.id] = sv.date; });
-      var validas = rows.filter(function(r) {
-        var ds = svcMap[r.servico_id];
+      var validas = rows.filter(function(a) {
+        if ((a.created_at || "").slice(0, 7) !== mesA) return false;
+        var ds = svcMap[a.servico_id];
         if (!ds) return true;
-        return (ds || "").slice(0, 7) === mesYM;
+        return (ds || "").slice(0, 7) === mesA;
       });
       if (validas.length > 0) {
-        var media = validas.reduce(function(s, r) { return s + (r.stars || 0); }, 0) / validas.length;
+        var media = validas.reduce(function(s, r) { return s + (parseFloat(r.stars) || 0); }, 0) / validas.length;
         setRatingMesEmp(Math.round(media * 10) / 10);
       } else {
         setRatingMesEmp(null);
