@@ -5761,25 +5761,10 @@ function FichaRH(props) {
   const [ratingMes, setRatingMes] = useState(null);
   useEffect(function() {
     var mesA = localDateStr().slice(0, 7);
-    Promise.all([
-      db.list("avaliacoes", "?select=stars,servico_id,created_at&funcionario_id=eq." + encodeURIComponent(sel.id)),
-      db.list("servicos", "?select=id,date&status=eq.completed")
-    ]).then(function(res) {
-      var linhas = res[0] || [];
-      var svcMap = {};
-      (res[1] || []).forEach(function(sv) { svcMap[sv.id] = sv.date; });
-      var validas = linhas.filter(function(a) {
-        if ((a.created_at || "").slice(0, 7) !== mesA) return false;
-        var ds = svcMap[a.servico_id];
-        if (!ds) return true;
-        return (ds || "").slice(0, 7) === mesA;
-      });
-      if (validas.length > 0) {
-        var media = validas.reduce(function(s, r) { return s + (parseFloat(r.stars) || 0); }, 0) / validas.length;
-        setRatingMes({ media: Math.round(media * 10) / 10, count: validas.length });
-      } else {
-        setRatingMes(null);
-      }
+    portalRpc("media_aval_mes", { p_funcionario_id: String(sel.id), p_mes: mesA }).then(function(rows) {
+      var r = (rows || [])[0];
+      if (r && r.n > 0) setRatingMes({ media: Math.round(parseFloat(r.media) * 10) / 10, count: r.n });
+      else setRatingMes(null);
     });
   }, [sel.id]);
   const [rh, setRh] = useState(null);
@@ -11358,24 +11343,13 @@ function Manager(props) {
       setPedidosPendentesLista(results[7] || []);
       setNotasClientesNovas(results[9] ? results[9].length : 0);
       setAvaliacoesNovas(results[10] ? results[10].length : 0);
-      var ratingsMesCalc = {};
       var mesAtualYM = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
-      var svcDatasHome = {};
-      (results[17] || []).forEach(function(sv) { svcDatasHome[sv.id] = sv.date; });
-      (results[11] || []).filter(function(a) {
-        if ((a.created_at || "").slice(0, 7) !== mesAtualYM) return false;
-        var ds = svcDatasHome[a.servico_id];
-        if (!ds) return true;
-        return (ds || "").slice(0, 7) === mesAtualYM;
-      }).forEach(function(a) {
-        if (!ratingsMesCalc[a.funcionario_id]) ratingsMesCalc[a.funcionario_id] = { soma: 0, count: 0 };
-        ratingsMesCalc[a.funcionario_id].soma += a.stars || 0;
-        ratingsMesCalc[a.funcionario_id].count++;
+      // Fonte unica das medias de avaliacao: funcao no servidor media_aval_mes_todos (mesma regra em todos os ecras).
+      portalRpc("media_aval_mes_todos", { p_mes: mesAtualYM }).then(function(mrows) {
+        var rm = {};
+        (mrows || []).forEach(function(r) { rm[r.funcionario_id] = { media: Math.round(parseFloat(r.media) * 10) / 10, count: r.n }; });
+        setRatingsMes(rm);
       });
-      Object.keys(ratingsMesCalc).forEach(function(eid) {
-        ratingsMesCalc[eid].media = Math.round(ratingsMesCalc[eid].soma / ratingsMesCalc[eid].count * 10) / 10;
-      });
-      setRatingsMes(ratingsMesCalc);
       const cm = {};
       (results[0] || []).forEach(function(c) {
         cm[c.id] = c;
@@ -12149,25 +12123,9 @@ function Employee(props) {
   useEffect(function() {
     if (!emp) { setRatingMesEmp(null); return; }
     var mesA = localDateStr().slice(0, 7);
-    Promise.all([
-      db.list("avaliacoes", "?select=stars,servico_id,created_at&funcionario_id=eq." + encodeURIComponent(emp.id)),
-      db.list("servicos", "?select=id,date&status=eq.completed")
-    ]).then(function(res) {
-      var rows = res[0] || [];
-      var svcMap = {};
-      (res[1] || []).forEach(function(sv) { svcMap[sv.id] = sv.date; });
-      var validas = rows.filter(function(a) {
-        if ((a.created_at || "").slice(0, 7) !== mesA) return false;
-        var ds = svcMap[a.servico_id];
-        if (!ds) return true;
-        return (ds || "").slice(0, 7) === mesA;
-      });
-      if (validas.length > 0) {
-        var media = validas.reduce(function(s, r) { return s + (parseFloat(r.stars) || 0); }, 0) / validas.length;
-        setRatingMesEmp(Math.round(media * 10) / 10);
-      } else {
-        setRatingMesEmp(null);
-      }
+    portalRpc("media_aval_mes", { p_funcionario_id: String(emp.id), p_mes: mesA }).then(function(rows) {
+      var r = (rows || [])[0];
+      setRatingMesEmp(r && r.n > 0 ? Math.round(parseFloat(r.media) * 10) / 10 : null);
     });
   }, [emp && emp.id]);
   const [sEmp, setSEmp] = useState(null);
