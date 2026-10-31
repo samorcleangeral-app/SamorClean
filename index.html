@@ -3330,6 +3330,7 @@ function Routes() {
   function avisosDoCliente(c, voltasC) {
     var av = [];
     if (!c) return ["Cliente n\xE3o encontrado na lista de clientes."];
+    if (c.excluir_financeiro === true) return [];
     var ativas = voltasC.filter(function(v) { return v.ativo !== false; });
     var tf = tipoFatCliente(c);
     if (tf === "hora") av.push({ k: "hora", t: "Fatura\xE7\xE3o “\xE0 hora” j\xE1 n\xE3o \xE9 usada. Os servi\xE7os deste cliente est\xE3o a ser valorizados como horas \xD7 pre\xE7o/hora." });
