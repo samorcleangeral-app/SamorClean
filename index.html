@@ -4581,10 +4581,10 @@ function Routes() {
         },
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: isToday ? 800 : 600, color: isToday ? "#fff" : "#1A3A5C", background: isToday ? "#2E6DA4" : "transparent", width: 22, height: 22, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 3 } }, dt.getDate()),
         dayJobs.slice(0, 3).map(function(job) {
-          return /* @__PURE__ */ React.createElement("div", { key: job.id, onClick: function(e) {
+          return /* @__PURE__ */ React.createElement("div", { key: job.id, title: job.cn + (job.obra_ref ? " \u00B7 " + job.obra_ref : "") + (job.t1 ? " \u00B7 " + job.t1 + "\u2013" + job.t2 : "") + (job.addr ? " \u00B7 " + job.addr : ""), onClick: function(e) {
             e.stopPropagation();
             openJob(job);
-          }, style: { background: jobColor(job, dayJobs), borderRadius: 3, padding: "2px 5px", fontSize: 9, fontWeight: 700, color: "#fff", marginBottom: 1, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", cursor: "pointer" } }, job.cn + (job.obra_ref ? " \u00B7 " + job.obra_ref : ""));
+          }, style: { background: jobColor(job, dayJobs), borderRadius: 4, padding: "3px 5px", fontSize: 10, fontWeight: 700, color: "#fff", marginBottom: 2, lineHeight: 1.15, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", cursor: "pointer" } }, job.cn + (job.obra_ref ? " \u00B7 " + job.obra_ref : ""));
         }),
         dayJobs.length > 3 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: "#94A3B8", cursor: "pointer" } }, "+", dayJobs.length - 3, " mais")
       );
