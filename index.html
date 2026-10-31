@@ -5760,11 +5760,25 @@ function FichaRH(props) {
   const [tab, setTab] = useState("dados");
   const [ratingMes, setRatingMes] = useState(null);
   useEffect(function() {
-    var monthStart = new Date((/* @__PURE__ */ new Date()).getFullYear(), (/* @__PURE__ */ new Date()).getMonth(), 1).toISOString();
-    db.list("avaliacoes", "?select=stars&funcionario_id=eq." + encodeURIComponent(sel.id) + "&created_at=gte." + monthStart).then(function(rows) {
-      if (rows && rows.length > 0) {
-        var media = rows.reduce(function(s, r) { return s + (r.stars || 0); }, 0) / rows.length;
-        setRatingMes({ media: Math.round(media * 10) / 10, count: rows.length });
+    var agora = /* @__PURE__ */ new Date();
+    var mesYM = agora.getFullYear() + "-" + String(agora.getMonth() + 1).padStart(2, "0");
+    var monthStart = new Date(agora.getFullYear(), agora.getMonth(), 1).toISOString();
+    var svcDesde = new Date(agora.getFullYear(), agora.getMonth() - 2, 1).toISOString().slice(0, 10);
+    Promise.all([
+      db.list("avaliacoes", "?select=stars,servico_id&funcionario_id=eq." + encodeURIComponent(sel.id) + "&created_at=gte." + monthStart),
+      db.list("servicos", "?select=id,date&date=gte." + svcDesde)
+    ]).then(function(res) {
+      var linhas = res[0] || [];
+      var svcMap = {};
+      (res[1] || []).forEach(function(sv) { svcMap[sv.id] = sv.date; });
+      var validas = linhas.filter(function(r) {
+        var ds = svcMap[r.servico_id];
+        if (!ds) return true;
+        return (ds || "").slice(0, 7) === mesYM;
+      });
+      if (validas.length > 0) {
+        var media = validas.reduce(function(s, r) { return s + (r.stars || 0); }, 0) / validas.length;
+        setRatingMes({ media: Math.round(media * 10) / 10, count: validas.length });
       } else {
         setRatingMes(null);
       }
