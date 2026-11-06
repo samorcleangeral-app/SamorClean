@@ -415,6 +415,14 @@ function faltouEntrada(job, tol) {
   var t = (tol == null ? 15 : tol);
   return ci > t1 + t;
 }
+function dentroJanelaAvaliacao(dateStr) {
+  // Uma avaliação só é válida no mês corrente e no mês anterior; mais antigo expira (o serviço mantém-se como histórico, só a avaliação caduca).
+  if (!dateStr) return false;
+  var d = new Date(dateStr + "T12:00:00");
+  var hoje = new Date();
+  var inicioMesAnterior = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+  return d >= inicioMesAnterior && d <= hoje;
+}
 function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajustesRecibo, premiosOpcionais, dadosProdutividade, anuladosServ, tolById) {
   var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
   if (!rh) return { total: 0, detalhe: [], tipo: null };
@@ -10388,7 +10396,7 @@ function Avaliacoes() {
       setServicoDatas(svcDatas);
       setServicoClientes(svcClientes);
       var byCliente = {};
-      (results[3] || []).filter(function(s) { return !s.rated; }).forEach(function(s) {
+      (results[3] || []).filter(function(s) { return !s.rated && dentroJanelaAvaliacao(s.date); }).forEach(function(s) {
         if (!byCliente[s.client_id]) byCliente[s.client_id] = { count: 0, ultima: s.date };
         byCliente[s.client_id].count++;
         if (s.date > byCliente[s.client_id].ultima) byCliente[s.client_id].ultima = s.date;
@@ -13515,8 +13523,7 @@ function ClientPortal(props) {
     var alvo = history.find(function(j) { return j.id === props.avaliarId; });
     if (!alvo) { return; }
     if (alvo.rated) { alert("Este servi\xE7o j\xE1 foi avaliado. Obrigado!"); return; }
-    var dias = Math.floor((new Date() - new Date(alvo.date + "T12:00:00")) / (24 * 3600 * 1e3));
-    if (dias > 30) { alert("O prazo para avaliar este servi\xE7o (30 dias) j\xE1 terminou."); return; }
+    if (!dentroJanelaAvaliacao(alvo.date)) { alert("O prazo para avaliar este servi\xE7o j\xE1 terminou (s\xF3 o m\xEas corrente e o anterior)."); return; }
     setShowRate(alvo);
   }, [props.avaliarId, history]);
   function loadPortalData() {
@@ -13962,8 +13969,7 @@ function ClientPortal(props) {
   }
   var avaliacoesPendentes = (history || []).filter(function(h) {
     if (h.rated) return false;
-    var dias = Math.floor((new Date() - new Date(h.date + "T12:00:00")) / (24 * 3600 * 1e3));
-    return dias >= 0 && dias <= 30;
+    return dentroJanelaAvaliacao(h.date);
   }).sort(function(a, b) { return b.date < a.date ? -1 : 1; });
   var temAvaliacoesPendentes = avaliacoesPendentes.length > 0;
   function blocoAvaliarPrimeiro() {
@@ -13988,7 +13994,7 @@ function ClientPortal(props) {
       setShowRate(s);
     }, style: { background: "#F59E0B", border: "none", borderRadius: 8, padding: "7px 12px", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "Avaliar"));
   }))), tab === "history" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 14 } }, "Historico de Servicos"), history.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { color: "#94A3B8", textAlign: "center", padding: 24 } }, "Sem historico ainda.") : history.slice().sort(function(a, b) { return b.date < a.date ? -1 : 1; }).map(function(s) {
-    return /* @__PURE__ */ React.createElement("div", { key: s.id, style: { borderBottom: "1px solid #F1F5F9", paddingBottom: 12, marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C" } }, s.svc), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, (/* @__PURE__ */ new Date(s.date + "T12:00:00")).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" }))), /* @__PURE__ */ React.createElement(Bdg, { label: s.rated ? "Avaliado" : "Por avaliar", bg: s.rated ? "#DCFCE7" : "#FEF3C7", tx: s.rated ? "#15803D" : "#92400E" })), !s.rated && /* @__PURE__ */ React.createElement("button", { onClick: function() {
+    return /* @__PURE__ */ React.createElement("div", { key: s.id, style: { borderBottom: "1px solid #F1F5F9", paddingBottom: 12, marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C" } }, s.svc), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B" } }, (/* @__PURE__ */ new Date(s.date + "T12:00:00")).toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" }))), /* @__PURE__ */ React.createElement(Bdg, { label: s.rated ? "Avaliado" : (dentroJanelaAvaliacao(s.date) ? "Por avaliar" : "Expirada"), bg: s.rated ? "#DCFCE7" : (dentroJanelaAvaliacao(s.date) ? "#FEF3C7" : "#F1F5F9"), tx: s.rated ? "#15803D" : (dentroJanelaAvaliacao(s.date) ? "#92400E" : "#94A3B8") })), (!s.rated && dentroJanelaAvaliacao(s.date)) && /* @__PURE__ */ React.createElement("button", { onClick: function() {
       setShowRate(s);
     }, style: { background: "#2E6DA4", border: "none", borderRadius: 8, padding: "7px 14px", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", width: "100%", marginTop: 6 } }, "Avaliar equipa"));
   })), tab === "upcoming" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 14 } }, "Agendamentos"), upcoming.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { color: "#94A3B8", textAlign: "center", padding: 24 } }, "Sem agendamentos.") : upcoming.map(function(s) {
