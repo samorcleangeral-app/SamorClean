@@ -351,7 +351,7 @@ function diasComSubsidioAlim(emp, absData, refDate) {
     while (d <= fim) {
       var dow = d.getDay();
       var ds = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-      if (dow !== 0 && dow !== 6 && FERIADOS_NACIONAIS.indexOf(ds) === -1) ausencias++;
+      if (dow !== 0 && dow !== 6 && FERIADOS_NACIONAIS.indexOf(ds) === -1) ausencias += (a.parcial ? 0.5 : 1);
       d.setDate(d.getDate() + 1);
     }
   });
@@ -14280,7 +14280,7 @@ function App() {
   }, style: { background: "rgba(255,255,255,0.07)", border: "1.5px solid rgba(255,255,255,0.1)", borderRadius: 16, padding: "28px 16px", textAlign: "center", cursor: "pointer" } }, /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 15, marginBottom: 6 } }, "Colaboradores"), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.4)", fontSize: 11, lineHeight: 1.6 } }, "Servi\xE7os do dia, checklist e produtos"))), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 40, fontSize: 11, color: "rgba(255,255,255,0.18)" } }, "SamorClean by Fragancelines, Lda"));
 }
 
-                                const root = ReactDOM.createRoot(document.getElementById('root'));
+                                    const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(React.createElement(App));
   </script>
 </body>
