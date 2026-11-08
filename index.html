@@ -588,10 +588,12 @@ function calcDadosProdColab(emp, ctx) {
   var svcDatas = ctx.svcDatas || {};
   var avsCli = (ctx.avaliacoes || []).filter(function(a) {
     if (a.funcionario_id !== emp.id) return false;
-    if ((a.created_at || "").slice(0, 7) !== mesYM) return false;
+    // A avalia\xE7\xE3o conta para o m\xEAs do SERVI\xC7O (quando o trabalho foi feito), n\xE3o do dia em que se carregou nas estrelas.
+    // Avaliar em Novembro um servi\xE7o de Outubro conta para Outubro.
     var ds = svcDatas[a.servico_id];
-    if (!ds) return true;
-    return (ds || "").slice(0, 7) === mesYM;
+    if (ds) return ds.slice(0, 7) === mesYM;
+    // Sem data de servi\xE7o conhecida, recorre-se \xE0 data de lan\xE7amento.
+    return (a.created_at || "").slice(0, 7) === mesYM;
   }).map(function(a) { return a.stars || 0; });
   var avMensal = (ctx.avaliacoesMensais || []).find(function(a) { return a.funcionario_id === emp.id && a.mes === mesYM; });
   var diasComServico = {};
@@ -2532,10 +2534,10 @@ function Finance() {
         function rowContrato(c) {
           var r = c.recibo;
           var prodKind = r.precisaAvaliar ? "cmid" : (r.premioProd >= 50 ? "cok" : (r.premioProd > 0 ? "cmid" : "cno"));
-          var prodTxt = r.precisaAvaliar ? "Produt. s/ aval." : ("Produt. " + fmt(r.premioProd) + "\u20AC");
+          var prodTxt = r.precisaAvaliar ? "Produt. s/ aval." : ("Produt. " + fmt(r.premioProd));
           var starTxt = r.precisaAvaliar ? "\u2605 s/ aval." : (r.star != null ? ("\u2605 " + r.star.toFixed(1)) : "\u2605 \u2014");
           var assidKind = r.premioAssid > 0 ? "cok" : "cno";
-          var assidTxt = r.premioAssid > 0 ? ("\u2713 Assid. " + fmt(r.premioAssid) + "\u20AC") : ("\u2717 Assid." + (r.premioMotivo ? " \u2014 " + r.premioMotivo : ""));
+          var assidTxt = r.premioAssid > 0 ? ("\u2713 Assid. " + fmt(r.premioAssid)) : ("\u2717 Assid." + (r.premioMotivo ? " \u2014 " + r.premioMotivo : ""));
           return /* @__PURE__ */ React.createElement("div", { key: c.emp.id, style: { background: "#fff", border: "1px solid #E6ECF2", borderRadius: 13, padding: "11px 12px", marginBottom: 8, display: "flex", alignItems: "center", gap: 11 } },
             /* @__PURE__ */ React.createElement(Av, { init: c.emp.av, size: 34, color: EC[c.emp.id] || "#2E6DA4" }),
             /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } },
@@ -2554,7 +2556,7 @@ function Finance() {
             /* @__PURE__ */ React.createElement(Av, { init: c.emp.av, size: 34, color: EC[c.emp.id] || "#B45309" }),
             /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } },
               /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13.5, fontWeight: 700, color: "#1A3A5C" } }, c.emp.name, c.inactivo ? /* @__PURE__ */ React.createElement("span", { style: { background: "#F1F5F9", color: "#94A3B8", borderRadius: 5, padding: "1px 6px", fontSize: 9, fontWeight: 700, marginLeft: 6 } }, "inactivo") : null),
-              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginTop: 6 } }, chip(r.numDias + " dias \xD7 " + fmt(r.valorDia) + "\u20AC", "cstar"))
+              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginTop: 6 } }, chip(r.numDias + " dias \xD7 " + fmt(r.valorDia), "cstar"))
             ),
             /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right", flexShrink: 0 } },
               /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: 900, color: "#2E6DA4" } }, fmt(r.aPagar)),
