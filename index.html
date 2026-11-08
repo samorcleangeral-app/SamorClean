@@ -555,7 +555,30 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
     detalhe.push({ l: labelProd, v: prod.premio });
     total += prod.premio;
   }
-  return { total: total, detalhe: detalhe, tipo: tipo, premioAuto: premioAuto, premioOverride: premioOverride, premioBase: valorFichaPremio, premioMotivo: premioMotivo };
+  // ── Projecção do RECIBO (caixa) — o que SAI da conta, não o custo-empresa. ──
+  // Líquido = salário efectivo (já com faltas) + alimentação + Natal (duodécimo, pago todos os meses) + prémios (assid. + produt.) − SS 11% (trabalhador) − IRS.
+  // Fora: subsídio de férias (recibo à parte), SS patronal (23,75%) e seguro (custos da empresa, não saem no ordenado).
+  var recibo;
+  if (tipo === "Recibo Verde") {
+    recibo = { tipo: "RV", aPagar: numDias * valorDia, numDias: numDias, valorDia: valorDia };
+  } else {
+    var premioProdV = prodResult ? prodResult.premio : 0;
+    var baseSS11 = salarioEfectivo + subNatal + premio + premioProdV; // alimentação é isenta de SS
+    var ssTrab = baseSS11 * 0.11;
+    var irsProj = 0; // abaixo do mínimo de retenção
+    var iliquidoProj = salarioEfectivo + subAlim + subNatal + premio + premioProdV;
+    var liquidoProj = iliquidoProj - ssTrab - irsProj;
+    recibo = {
+      tipo: "Contrato", liquido: liquidoProj, iliquido: iliquidoProj,
+      salarioEfectivo: salarioEfectivo, subAlim: subAlim, subNatal: subNatal,
+      premioAssid: premio, premioProd: premioProdV, ssTrab: ssTrab, irs: irsProj,
+      star: (prodResult && !prodResult.precisaAvaliar && prodResult.nota != null) ? prodResult.nota : null,
+      starOrigem: prodResult ? prodResult.origem : null,
+      precisaAvaliar: prodResult ? !!prodResult.precisaAvaliar : false,
+      premioMotivo: premioMotivo, horasFalta: horasFalta, diasFalta: diasFalta
+    };
+  }
+  return { total: total, detalhe: detalhe, tipo: tipo, premioAuto: premioAuto, premioOverride: premioOverride, premioBase: valorFichaPremio, premioMotivo: premioMotivo, recibo: recibo };
 }
 // Monta os dados de produtividade de um colaborador (avaliações de clientes, nota mensal, esquecimentos de armazém).
 // Fonte ÚNICA, partilhada pelo Financeiro e pelo Relatório Mensal, para os dois baterem ao cêntimo.
@@ -1855,7 +1878,7 @@ function Finance() {
       if (capacidadeHoras > 0) { custoHora = custoAteHoje / capacidadeHoras; }
       else { custoHora = null; custoHoraIndef = true; }                 // sem horas de presença ainda → não há custo/hora (não mostrar 0 falso)
     }
-    return { emp: e, inactivo: inactivoNoMes, custo: c.total, custoAteHoje: custoAteHoje, horas: horasEmp, dias: diasTrabalhadosEmp, detalhe: c.detalhe, tipo: c.tipo, custoHora: custoHora, custoHoraIndef: custoHoraIndef, capacidadeHoras: capacidadeHoras, diasUteisDisponiveis: diasUteisDisponiveis, diasAusenciaEmp: diasAusenciaEmp, utilizacaoPct: utilizacaoPct };
+    return { emp: e, inactivo: inactivoNoMes, custo: c.total, custoAteHoje: custoAteHoje, horas: horasEmp, dias: diasTrabalhadosEmp, detalhe: c.detalhe, tipo: c.tipo, custoHora: custoHora, custoHoraIndef: custoHoraIndef, capacidadeHoras: capacidadeHoras, diasUteisDisponiveis: diasUteisDisponiveis, diasAusenciaEmp: diasAusenciaEmp, utilizacaoPct: utilizacaoPct, recibo: c.recibo };
   }).filter(function(x) { return x.custo > 0 || x.horas > 0 || x.custoAteHoje > 0; });
   // Mapa colaborador -> custo/hora sobre horas alocadas (usado na margem por cliente; soma bate com o custo total de MO)
   var custoHoraAlocadaMap = {};
@@ -2497,6 +2520,80 @@ function Finance() {
           )
         )
       ),
+      custosColab.length > 0 && (function() {
+        var contratos = custosColab.filter(function(c) { return c.recibo && c.recibo.tipo === "Contrato"; });
+        var rvs = custosColab.filter(function(c) { return c.recibo && c.recibo.tipo === "RV"; });
+        var totalPagar = contratos.reduce(function(s, c) { return s + (c.recibo.liquido || 0); }, 0) + rvs.reduce(function(s, c) { return s + (c.recibo.aPagar || 0); }, 0);
+        var mesNome = now.toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
+        mesNome = mesNome.charAt(0).toUpperCase() + mesNome.slice(1);
+        var chipBase = { fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 7, display: "inline-flex", alignItems: "center", gap: 4 };
+        var CH = { cok: { background: "#F0FDF4", color: "#15803D" }, cmid: { background: "#FFFBEB", color: "#92400E" }, cno: { background: "#FEF2F2", color: "#B91C1C" }, cstar: { background: "#EAF2FA", color: "#2E6DA4" } };
+        function chip(txt, kind) { return /* @__PURE__ */ React.createElement("span", { style: Object.assign({}, chipBase, CH[kind]) }, txt); }
+        function rowContrato(c) {
+          var r = c.recibo;
+          var prodKind = r.precisaAvaliar ? "cmid" : (r.premioProd >= 50 ? "cok" : (r.premioProd > 0 ? "cmid" : "cno"));
+          var prodTxt = r.precisaAvaliar ? "Produt. s/ aval." : ("Produt. " + fmt(r.premioProd) + "\u20AC");
+          var starTxt = r.precisaAvaliar ? "\u2605 s/ aval." : (r.star != null ? ("\u2605 " + r.star.toFixed(1)) : "\u2605 \u2014");
+          var assidKind = r.premioAssid > 0 ? "cok" : "cno";
+          var assidTxt = r.premioAssid > 0 ? ("\u2713 Assid. " + fmt(r.premioAssid) + "\u20AC") : ("\u2717 Assid." + (r.premioMotivo ? " \u2014 " + r.premioMotivo : ""));
+          return /* @__PURE__ */ React.createElement("div", { key: c.emp.id, style: { background: "#fff", border: "1px solid #E6ECF2", borderRadius: 13, padding: "11px 12px", marginBottom: 8, display: "flex", alignItems: "center", gap: 11 } },
+            /* @__PURE__ */ React.createElement(Av, { init: c.emp.av, size: 34, color: EC[c.emp.id] || "#2E6DA4" }),
+            /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13.5, fontWeight: 700, color: "#1A3A5C" } }, c.emp.name, c.inactivo ? /* @__PURE__ */ React.createElement("span", { style: { background: "#F1F5F9", color: "#94A3B8", borderRadius: 5, padding: "1px 6px", fontSize: 9, fontWeight: 700, marginLeft: 6 } }, "inactivo") : null),
+              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" } }, chip(starTxt, "cstar"), chip(prodTxt, prodKind), chip(assidTxt, assidKind))
+            ),
+            /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right", flexShrink: 0 } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: 900, color: "#1A3A5C" } }, fmt(r.liquido)),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9.5, color: "#64748B", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 } }, "l\xEDquido")
+            )
+          );
+        }
+        function rowRV(c) {
+          var r = c.recibo;
+          return /* @__PURE__ */ React.createElement("div", { key: c.emp.id, style: { background: "#fff", border: "1px solid #E6ECF2", borderRadius: 13, padding: "11px 12px", marginBottom: 8, display: "flex", alignItems: "center", gap: 11 } },
+            /* @__PURE__ */ React.createElement(Av, { init: c.emp.av, size: 34, color: EC[c.emp.id] || "#B45309" }),
+            /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13.5, fontWeight: 700, color: "#1A3A5C" } }, c.emp.name, c.inactivo ? /* @__PURE__ */ React.createElement("span", { style: { background: "#F1F5F9", color: "#94A3B8", borderRadius: 5, padding: "1px 6px", fontSize: 9, fontWeight: 700, marginLeft: 6 } }, "inactivo") : null),
+              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginTop: 6 } }, chip(r.numDias + " dias \xD7 " + fmt(r.valorDia) + "\u20AC", "cstar"))
+            ),
+            /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right", flexShrink: 0 } },
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: 900, color: "#2E6DA4" } }, fmt(r.aPagar)),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9.5, color: "#64748B", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 } }, "a pagar")
+            )
+          );
+        }
+        var grpStyle = { fontSize: 10.5, fontWeight: 800, letterSpacing: 0.7, textTransform: "uppercase", color: "#64748B", margin: "4px 2px 9px" };
+        return /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, padding: 0, overflow: "hidden" }) },
+          /* @__PURE__ */ React.createElement("div", { style: { background: "linear-gradient(135deg,#1A3A5C,#2E6DA4)", padding: "16px 18px", color: "#fff" } },
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: 800 } }, "Ordenados a pagar \u2014 Projec\xE7\xE3o"),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11.5, color: "rgba(255,255,255,0.72)", marginTop: 2 } }, mesNome + (isMesActual ? " \xB7 se o m\xEAs fechasse hoje (dia " + now.getDate() + ")" : " \xB7 m\xEAs fechado")),
+            isMesActual ? /* @__PURE__ */ React.createElement("div", { style: { display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.14)", padding: "3px 9px", borderRadius: 20, fontSize: 10.5, fontWeight: 700, marginTop: 8 } },
+              /* @__PURE__ */ React.createElement("span", { style: { width: 7, height: 7, borderRadius: "50%", background: "#4ADE80", boxShadow: "0 0 0 3px rgba(74,222,128,0.25)" } }),
+              "ao vivo \xB7 assume o resto do m\xEAs trabalhado"
+            ) : null
+          ),
+          /* @__PURE__ */ React.createElement("div", { style: { padding: 14 } },
+            contratos.length > 0 ? /* @__PURE__ */ React.createElement("div", { style: grpStyle }, "Contrato \u2014 l\xEDquido do recibo") : null,
+            contratos.map(rowContrato),
+            rvs.length > 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, grpStyle, { marginTop: 14 }) }, "Recibo verde \u2014 dias \xD7 valor/dia") : null,
+            rvs.map(rowRV),
+            /* @__PURE__ */ React.createElement("div", { style: { background: "#1A3A5C", color: "#fff", borderRadius: 14, padding: "15px 16px", marginTop: 6, display: "flex", alignItems: "center", justifyContent: "space-between" } },
+              /* @__PURE__ */ React.createElement("div", null,
+                /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.8)" } }, "Total a pagar este m\xEAs"),
+                /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "rgba(255,255,255,0.5)", fontWeight: 500, marginTop: 2 } }, "o teu n\xFAmero de tesouraria")
+              ),
+              /* @__PURE__ */ React.createElement("div", { style: { fontSize: 24, fontWeight: 900 } }, fmt(totalPagar))
+            ),
+            /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 10, padding: "11px 13px", fontSize: 11, color: "#334155", lineHeight: 1.65, marginTop: 12 } },
+              /* @__PURE__ */ React.createElement("b", { style: { color: "#1A3A5C" } }, "Como se l\xEA:"), /* @__PURE__ */ React.createElement("br"),
+              "\u2022 ", /* @__PURE__ */ React.createElement("b", null, "Produtividade"), " segue as estrelas: \u2265 4,5 \u2192 50\u20AC \xB7 4,0\u20134,4 \u2192 25\u20AC \xB7 < 4,0 \u2192 0\u20AC.", /* @__PURE__ */ React.createElement("br"),
+              "\u2022 ", /* @__PURE__ */ React.createElement("b", null, "Assiduidade"), " cai com 1 falta, 10 atrasos/esquecimentos ou 5 faltas de picagem no armaz\xE9m.", /* @__PURE__ */ React.createElement("br"),
+              "\u2022 Sub. Natal entra todos os meses (duod\xE9cimo); sub. f\xE9rias sai num recibo \xE0 parte, s\xF3 no m\xEAs em que o pagas.", /* @__PURE__ */ React.createElement("br"),
+              "\u2022 IRS a 0 enquanto estiverem abaixo do m\xEDnimo de reten\xE7\xE3o."
+            )
+          )
+        );
+      })(),
       /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, background: "#EFF6FF", border: "1.5px solid #2E6DA4" }) },
         /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 4 } }, "\uD83D\uDC54 Ordenado de Ger\xEAncia \u2014 este m\xEAs"),
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 10 } }, "Como o teu ordenado varia mês a mês, define aqui o valor deste mês. A app calcula sozinha a Seguran\xE7a Social patronal (23,75%) sobre este valor \u2014 n\xE3o precisas de o lan\xE7ar tamb\xE9m em Despesas."),
