@@ -423,11 +423,13 @@ function dentroJanelaAvaliacao(dateStr) {
   var inicioMesAnterior = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
   return d >= inicioMesAnterior && d <= hoje;
 }
-function BotaoComoChegar(addr) {
-  // Abre o Google Maps com a rota da posi\xE7\xE3o actual do colaborador at\xE9 \xE0 morada do cliente.
-  if (!addr) return null;
+function BotaoComoChegar(addr, lat, lng) {
+  // Abre o Google Maps com a rota da posi\xE7\xE3o actual do colaborador at\xE9 ao cliente.
+  // Prefere o PINO (coordenadas) — exacto; s\xF3 cai na morada em texto quando n\xE3o h\xE1 coordenadas.
+  var dest = (lat != null && lng != null) ? (lat + "," + lng) : addr;
+  if (!dest) return null;
   return React.createElement("a", {
-    href: "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(addr),
+    href: "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(dest),
     target: "_blank", rel: "noopener noreferrer",
     onClick: function(e) { e.stopPropagation(); },
     style: { marginTop: 8, marginBottom: 2, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", background: "#2E6DA4", color: "#fff", borderRadius: 11, padding: "10px 11px", fontSize: 13, fontWeight: 800, textDecoration: "none", boxSizing: "border-box" }
@@ -12555,6 +12557,7 @@ function Employee(props) {
   const [fotosPartilhadas, setFotosPartilhadas] = useState([]);
   const [partilhasVistas, setPartilhasVistas] = useState([]);
   const [clientesNomes, setClientesNomes] = useState({});
+  const [cliCoords, setCliCoords] = useState({});
   const [clienteAbertoNotas, setClienteAbertoNotas] = useState(null);
   useEffect(function() {
     if (!emp) return;
@@ -12563,14 +12566,15 @@ function Employee(props) {
       db.list("client_notes", "?select=*&partilhada_equipa=is.true&partilhada_em=gte." + ha30dias + "&order=partilhada_em.desc"),
       db.list("fotos_cliente", "?select=*&partilhada_equipa=is.true&partilhada_em=gte." + ha30dias + "&order=partilhada_em.desc"),
       db.list("partilhas_vistas", "?select=*&funcionario_id=eq." + encodeURIComponent(emp.id)),
-      db.list("clientes", "?select=id,name")
+      db.list("clientes", "?select=id,name,lat,lng")
     ]).then(function(r) {
       setNotasPartilhadas(r[0] || []);
       setFotosPartilhadas(r[1] || []);
       setPartilhasVistas(r[2] || []);
-      var nomes = {};
-      (r[3] || []).forEach(function(c) { nomes[c.id] = c.name; });
+      var nomes = {}, coords = {};
+      (r[3] || []).forEach(function(c) { nomes[c.id] = c.name; if (c.lat != null && c.lng != null) coords[c.id] = { lat: c.lat, lng: c.lng }; });
       setClientesNomes(nomes);
+      setCliCoords(coords);
     }).catch(function(e) { console.warn("Falha ao carregar partilhas:", e); });
   }, [emp && emp.id]);
   function jaViu(tipo, itemId) {
@@ -13173,7 +13177,7 @@ function Employee(props) {
             /* @__PURE__ */ React.createElement(Bdg, { label: job.status === "completed" ? "Conclu\xEDdo" : job.check_in ? "Em curso" : "Agendado", bg: job.status === "completed" ? "#DCFCE7" : job.check_in ? "#FEF3C7" : "#EFF6FF", tx: job.status === "completed" ? "#15803D" : job.check_in ? "#92400E" : "#2E6DA4" })
           ),
           job.addr && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 8 } }, "\uD83D\uDCCD ", job.addr),
-          BotaoComoChegar(job.addr),
+          BotaoComoChegar(job.addr, (cliCoords[job.client_id] || {}).lat, (cliCoords[job.client_id] || {}).lng),
           colegas.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" } },
             /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "Com:"),
             colegas.map(function(e) {
@@ -13212,7 +13216,7 @@ function Employee(props) {
                 /* @__PURE__ */ React.createElement(Bdg, { label: job.status === "completed" ? "Conclu\xEDdo" : job.check_in ? "Em curso" : "Agendado", bg: job.status === "completed" ? "#DCFCE7" : job.check_in ? "#FEF3C7" : "#EFF6FF", tx: job.status === "completed" ? "#15803D" : job.check_in ? "#92400E" : "#2E6DA4" })
               ),
               job.addr && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 4 } }, "\uD83D\uDCCD ", job.addr),
-              BotaoComoChegar(job.addr),
+              BotaoComoChegar(job.addr, (cliCoords[job.client_id] || {}).lat, (cliCoords[job.client_id] || {}).lng),
               colegas.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" } },
                 /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "Com:"),
                 colegas.map(function(e) {
@@ -13280,7 +13284,7 @@ function Employee(props) {
                   /* @__PURE__ */ React.createElement(Bdg, { label: job.status === "completed" ? "Conclu\xEDdo" : job.check_in ? "Em curso" : "Agendado", bg: job.status === "completed" ? "#DCFCE7" : job.check_in ? "#FEF3C7" : "#EFF6FF", tx: job.status === "completed" ? "#15803D" : job.check_in ? "#92400E" : "#2E6DA4" })
                 ),
                 job.addr && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 4 } }, "\uD83D\uDCCD ", job.addr),
-              BotaoComoChegar(job.addr),
+              BotaoComoChegar(job.addr, (cliCoords[job.client_id] || {}).lat, (cliCoords[job.client_id] || {}).lng),
                 colegas.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" } },
                   /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "Com:"),
                   colegas.map(function(e) {
