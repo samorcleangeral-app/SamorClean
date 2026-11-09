@@ -3244,6 +3244,31 @@ function Routes() {
     Promise.all(tarefas).then(function(rotas) { if (!cancelled) { setViagemRotas(rotas); setViagemCalc(false); } });
     return function() { cancelled = true; };
   }, [showViagens, viagemJobs, clients]);
+  function imprimirViagens() {
+    if (!viagemRotas.length) return;
+    function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+    var dataFmt = new Date(viagemDia + "T12:00:00").toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    var css = "*{margin:0;box-sizing:border-box;font-family:-apple-system,'Segoe UI',Arial,sans-serif;}body{color:#1A3A5C;}.doc{max-width:720px;margin:0 auto;padding:24px;}.head{border-bottom:2px solid #1A3A5C;padding-bottom:10px;margin-bottom:18px;}.brand{font-size:20px;font-weight:800;}.date{font-size:14px;color:#555;text-transform:capitalize;margin-top:3px;}.team{border:1px solid #ccc;border-radius:8px;padding:16px;margin-bottom:18px;}.th{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eee;padding-bottom:8px;margin-bottom:10px;}.tn{font-size:16px;font-weight:800;}.tt{font-size:13px;font-weight:700;color:#2E6DA4;}.stop{padding:5px 0;font-size:14px;}.hora{color:#2E6DA4;font-weight:700;font-size:12px;}.addr{font-size:12px;color:#666;margin-top:2px;}.leg{font-size:12px;color:#888;padding:3px 0 3px 6px;}@media print{.team{page-break-after:always;}.team:last-child{page-break-after:auto;}}";
+    var blocos = viagemRotas.map(function(r) {
+      var rotaMin = r.legs.reduce(function(a, l) { return a + (l ? l.min : 0); }, 0);
+      var linhas = r.pontos.map(function(p, pi) {
+        var leg = pi > 0 ? r.legs[pi - 1] : null;
+        var legHtml = pi > 0 ? ('<div class="leg">&#8595; ' + (leg ? (leg.min + ' min &middot; ' + leg.km.toFixed(1) + ' km') : 'sem coordenadas') + '</div>') : '';
+        if (p.armazem) return legHtml + '<div class="stop"><b>&#127968; Armaz&eacute;m</b></div>';
+        var hora = p.job ? (' <span class="hora">' + p.job.t1 + '&ndash;' + p.job.t2 + '</span>') : '';
+        var addr = (p.cliente && p.cliente.address) ? ('<div class="addr">' + esc(p.cliente.address) + '</div>') : '';
+        return legHtml + '<div class="stop"><b>' + esc(p.nome) + '</b>' + hora + addr + '</div>';
+      }).join('');
+      return '<div class="team"><div class="th"><div class="tn">Equipa: ' + esc(r.nomes) + '</div><div class="tt">Viagem total: ' + rotaMin + ' min</div></div>' + linhas + '</div>';
+    }).join('');
+    var html = '<!doctype html><html lang="pt"><head><meta charset="utf-8"><title>Rotas ' + viagemDia + '</title><style>' + css + '</style></head><body><div class="doc"><div class="head"><div class="brand">SamorClean &mdash; Rotas do dia</div><div class="date">' + dataFmt + '</div></div>' + blocos + '</div></body></html>';
+    var w = window.open("", "_blank");
+    if (!w) { alert("O browser bloqueou a janela. Permite pop-ups para este site e tenta de novo."); return; }
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(function() { try { w.print(); } catch (e) {} }, 350);
+  }
   async function salvarVoltaFixa() {
     var cSel = clients.find(function(x) { return x.id === novaVolta.client_id; });
     if (cSel && !freqDaFicha(cSel)) { alert("Este cliente est\xE1 como Pontual (ou sem frequ\xEAncia) na ficha. Muda a frequ\xEAncia na ficha primeiro."); return; }
@@ -4374,7 +4399,8 @@ function Routes() {
       /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 } },
         /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "🚗 Tempos de viagem"),
         /* @__PURE__ */ React.createElement("input", { type: "date", value: viagemDia, onChange: function(e) { setViagemDia(e.target.value); }, style: { padding: "8px 10px", borderRadius: 8, border: "1.5px solid #E2EBF4", fontSize: 13, color: "#1A3A5C" } }),
-        viagemRotas.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#1A3A5C", color: "#fff", borderRadius: 10, padding: "8px 14px", fontWeight: 800, fontSize: 14 } }, "Total do dia: ", totalDiaMin, " min")
+        viagemRotas.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#1A3A5C", color: "#fff", borderRadius: 10, padding: "8px 14px", fontWeight: 800, fontSize: 14 } }, "Total do dia: ", totalDiaMin, " min"),
+        viagemRotas.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: imprimirViagens, style: Object.assign({}, btnO, { fontSize: 13, whiteSpace: "nowrap" }) }, "🖨️ Imprimir / PDF")
       ),
       /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 8, padding: "9px 12px", fontSize: 11.5, color: "#334155", marginBottom: 14, lineHeight: 1.5 } }, "Dist\xE2ncias e tempos de ", /* @__PURE__ */ React.createElement("b", null, "estrada reais"), " (OSRM). O aviso s\xF3 aparece quando o atraso previsto \xE0 chegada ultrapassa a toler\xE2ncia do cliente."),
       (viagemLoading || viagemCalc) ? /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A calcular rotas reais…") :
