@@ -5615,6 +5615,7 @@ function Clients(props) {
       iva_type: sel.iva_type || "normal",
       tolerancia_minutos: sel.tolerancia_minutos || 15,
       km_armazem: sel.km_armazem || 0,
+      coords: (sel.lat != null && sel.lng != null) ? (sel.lat + ", " + sel.lng) : "",
       nota_interna: sel.nota_interna || "",
       checklist: sel.checklist && sel.checklist.length ? sel.checklist.slice() : [""],
       schedule: sel.schedule ? sel.schedule.map(function(s) { return Object.assign({}, s); }) : [],
@@ -5631,6 +5632,10 @@ function Clients(props) {
       equipa_habitual: editForm.equipa_habitual || [],
       tipo_faturacao: (editForm.service === "Limpeza P\xF3s-Obra" || editForm.service === "Limpeza Profunda") ? "orcamento" : (editForm.tipo_faturacao || "hora")
     });
+    var _cp = (editForm.coords || "").split(",").map(function(s) { return parseFloat(s.trim()); });
+    patch.lat = (_cp.length === 2 && !isNaN(_cp[0])) ? _cp[0] : null;
+    patch.lng = (_cp.length === 2 && !isNaN(_cp[1])) ? _cp[1] : null;
+    delete patch.coords;
     const updated = await db.update("clientes", sel.id, patch);
     if (updated) {
       setClients(function(p) {
@@ -5879,22 +5884,22 @@ function Clients(props) {
   }
   if (view === "coords") {
     var comCoord = clients.filter(function(c) { return c.lat != null && c.lng != null; }).length;
-    var relevantes = clients.filter(function(c) { return c.ativo !== false && c.excluir_financeiro !== true; });
+    var relevantes = clients.slice();
     var semMorada = relevantes.filter(function(c) { return !c.address || !c.address.trim(); }).length;
     return /* @__PURE__ */ React.createElement("div", null,
       /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("button", { style: btnX, onClick: function() { setView("list"); } }, "\u2190 Voltar")),
       /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: "0 0 4px" } }, "\uD83D\uDCCD Coordenadas dos clientes"),
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 16 } }, "Necess\xE1rias para os tempos de viagem. ", comCoord, " de ", relevantes.length, " clientes activos com coordenadas."),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 16 } }, "Necess\xE1rias para os tempos de viagem. ", comCoord, " de ", relevantes.length, " clientes com coordenadas. Inclui todos — at\xE9 os a dinheiro e os inactivos."),
       /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 16, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }) },
         /* @__PURE__ */ React.createElement("button", { style: Object.assign({}, btn, { opacity: geoState.busy ? 0.6 : 1 }), disabled: geoState.busy, onClick: geocodificarEmFalta }, geoState.busy ? ("A geocodificar\u2026 " + geoState.done + "/" + geoState.total) : "\uD83E\uDDED Geocodificar em falta"),
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", flex: 1, minWidth: 180 } }, "Preenche pela morada (~1s cada). Depois verifica com \"Ver pino\" e corrige \xE0 m\xE3o os que ficarem ao lado.")
       ),
-      semMorada > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 10, padding: "10px 13px", fontSize: 12, color: "#B91C1C", marginBottom: 14, fontWeight: 600 } }, "\u26A0 ", semMorada, " cliente(s) activos sem morada \u2014 preenche a morada na ficha ou mete as coordenadas \xE0 m\xE3o."),
-      /* @__PURE__ */ React.createElement("div", null, relevantes.slice().sort(function(a, b) { return (a.name || "").localeCompare(b.name || ""); }).map(function(c) {
+      semMorada > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 10, padding: "10px 13px", fontSize: 12, color: "#B91C1C", marginBottom: 14, fontWeight: 600 } }, "\u26A0 ", semMorada, " cliente(s) sem morada \u2014 preenche a morada na ficha ou mete as coordenadas \xE0 m\xE3o."),
+      /* @__PURE__ */ React.createElement("div", null, relevantes.slice().sort(function(a, b) { var am = (a.lat == null || a.lng == null) ? 0 : 1, bm = (b.lat == null || b.lng == null) ? 0 : 1; if (am !== bm) return am - bm; return (a.name || "").localeCompare(b.name || ""); }).map(function(c) {
         var tem = c.lat != null && c.lng != null;
         return /* @__PURE__ */ React.createElement("div", { key: c.id, style: Object.assign({}, card, { padding: "12px 16px", marginBottom: 8, display: "flex", alignItems: "center", gap: 14, borderLeft: "4px solid " + (tem ? "#16A34A" : "#F59E0B") }) },
           /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } },
-            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, c.name),
+            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C" } }, c.name, c.ativo === false ? /* @__PURE__ */ React.createElement("span", { style: { background: "#F1F5F9", color: "#94A3B8", borderRadius: 5, padding: "1px 6px", fontSize: 9, fontWeight: 700, marginLeft: 6 } }, "inactivo") : null, c.excluir_financeiro ? /* @__PURE__ */ React.createElement("span", { style: { background: "#FEF3C7", color: "#92400E", borderRadius: 5, padding: "1px 6px", fontSize: 9, fontWeight: 700, marginLeft: 6 } }, "a dinheiro") : null),
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 2 } }, c.address ? ("\uD83D\uDCCD " + c.address) : "sem morada"),
             tem && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#16A34A", fontWeight: 700, marginTop: 3 } }, Number(c.lat).toFixed(5) + ", " + Number(c.lng).toFixed(5))
           ),
@@ -5940,7 +5945,7 @@ function Clients(props) {
       setEditForm(Object.assign({}, editForm, { valor_visita: parseFloat(e.target.value) || 0 }));
     } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Km desde o armaz\xE9m"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", min: "0", step: "0.1", value: editForm.km_armazem || 0, onChange: function(e) {
       setEditForm(Object.assign({}, editForm, { km_armazem: parseFloat(e.target.value) || 0 }));
-    }, placeholder: "Ex: 15" })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Toler\xE2ncia de chegada (min)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", min: "0", step: "5", value: editForm.tolerancia_minutos || 15, onFocus: function(e) { e.target.select(); }, onChange: function(e) {
+    }, placeholder: "Ex: 15" })), /* @__PURE__ */ React.createElement("div", { style: { gridColumn: "1 / -1" } }, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Coordenadas GPS (lat, lng)"), /* @__PURE__ */ React.createElement("input", { style: inp, value: editForm.coords || "", onChange: function(e) { setEditForm(Object.assign({}, editForm, { coords: e.target.value })); }, placeholder: "Ex: 38.917283, -8.883717" }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#64748B", marginTop: 3 } }, "Para os tempos de viagem. No Google Maps: carrega e mant\xE9m premido no local, copia os n\xFAmeros. Deixa vazio se n\xE3o precisares.")), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Toler\xE2ncia de chegada (min)"), /* @__PURE__ */ React.createElement("input", { style: inp, type: "number", min: "0", step: "5", value: editForm.tolerancia_minutos || 15, onFocus: function(e) { e.target.select(); }, onChange: function(e) {
       setEditForm(Object.assign({}, editForm, { tolerancia_minutos: parseInt(e.target.value) || 15 }));
     }, placeholder: "Ex: 15" })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: lbl }, "Tipo de IVA"), /* @__PURE__ */ React.createElement("select", { style: inp, value: editForm.iva_type, onChange: function(e) {
       setEditForm(Object.assign({}, editForm, { iva_type: e.target.value }));
