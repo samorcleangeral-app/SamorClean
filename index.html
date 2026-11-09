@@ -433,6 +433,20 @@ function BotaoComoChegar(addr) {
     style: { marginTop: 8, marginBottom: 2, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", background: "#2E6DA4", color: "#fff", borderRadius: 11, padding: "10px 11px", fontSize: 13, fontWeight: 800, textDecoration: "none", boxSizing: "border-box" }
   }, "🧭 Como chegar \xB7 Google Maps");
 }
+var ARMAZEM = { lat: 38.917283, lng: -8.883717 }; // ponto de partida/chegada das rotas
+function haversineKm(la1, ln1, la2, ln2) {
+  var R = 6371, toRad = Math.PI / 180;
+  var dLa = (la2 - la1) * toRad, dLn = (ln2 - ln1) * toRad;
+  var a = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(la1 * toRad) * Math.cos(la2 * toRad) * Math.sin(dLn / 2) * Math.sin(dLn / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+function estimaViagem(la1, ln1, la2, ln2) {
+  // Estimativa (Via 1): dist\xE2ncia em linha recta \xD7 1,3 (factor de estrada) \xF7 50 km/h m\xE9dio. Sem tr\xE2nsito ao segundo.
+  if (la1 == null || ln1 == null || la2 == null || ln2 == null) return null;
+  var km = haversineKm(Number(la1), Number(ln1), Number(la2), Number(ln2)) * 1.3;
+  if (isNaN(km)) return null;
+  return { km: km, min: Math.round(km / 50 * 60) };
+}
 function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajustesRecibo, premiosOpcionais, dadosProdutividade, anuladosServ, tolById) {
   var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
   if (!rh) return { total: 0, detalhe: [], tipo: null };
@@ -3178,11 +3192,23 @@ function Routes() {
   const [novaVolta, setNovaVolta] = useState({ client_id: "", frequencia: "semanal", dia_semana: 0, dia_mes: 1, semana_do_mes: 1, hora_inicio: "08:00", hora_fim: "10:00", equipa: [], data_inicio: localDateStr() });
   const [savingVolta, setSavingVolta] = useState(false);
   const [editVoltaId, setEditVoltaId] = useState(null);
+  const [showViagens, setShowViagens] = useState(false);
+  const [viagemDia, setViagemDia] = useState(localDateStr());
+  const [viagemJobs, setViagemJobs] = useState([]);
+  const [viagemLoading, setViagemLoading] = useState(false);
   useEffect(function() {
     db.list("voltas_fixas", "?select=*&order=created_at.desc").then(function(rows) {
       setVoltasFixas(rows || []);
     });
   }, [showVoltasFixas]);
+  useEffect(function() {
+    if (!showViagens) return;
+    setViagemLoading(true);
+    db.list("servicos", "?select=id,client_id,date,t1,t2,team,status&date=eq." + viagemDia).then(function(r) {
+      setViagemJobs(r || []);
+      setViagemLoading(false);
+    });
+  }, [showViagens, viagemDia]);
   async function salvarVoltaFixa() {
     var cSel = clients.find(function(x) { return x.id === novaVolta.client_id; });
     if (cSel && !freqDaFicha(cSel)) { alert("Este cliente est\xE1 como Pontual (ou sem frequ\xEAncia) na ficha. Muda a frequ\xEAncia na ficha primeiro."); return; }
@@ -4306,6 +4332,71 @@ function Routes() {
     win.document.close();
   }
   if (loading) return /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...");
+  if (showViagens) {
+    var clientById = {};
+    clients.forEach(function(c) { clientById[c.id] = c; });
+    var comEquipa = viagemJobs.filter(function(j) { return j.team && j.team.length && j.status !== "cancelado"; });
+    var grupos = {};
+    comEquipa.forEach(function(j) {
+      var key = j.team.slice().sort().join("+");
+      if (!grupos[key]) grupos[key] = [];
+      grupos[key].push(j);
+    });
+    var totalDiaMin = 0;
+    var rotas = Object.keys(grupos).map(function(key) {
+      var js = grupos[key].slice().sort(function(a, b) { return (a.t1 || "").localeCompare(b.t1 || ""); });
+      var nomes = key.split("+").map(function(eid) { var e = emps.find(function(x) { return x.id === eid; }); return e ? e.name.split(" ")[0] : "?"; }).join(" + ");
+      var pontos = [{ nome: "Armaz\xE9m", lat: ARMAZEM.lat, lng: ARMAZEM.lng, armazem: true }];
+      js.forEach(function(j) { var c = clientById[j.client_id] || {}; pontos.push({ nome: c.name || "Cliente", lat: c.lat, lng: c.lng, job: j, cliente: c }); });
+      pontos.push({ nome: "Armaz\xE9m", lat: ARMAZEM.lat, lng: ARMAZEM.lng, armazem: true });
+      var legs = [], rotaMin = 0;
+      for (var i = 1; i < pontos.length; i++) {
+        var v = estimaViagem(pontos[i - 1].lat, pontos[i - 1].lng, pontos[i].lat, pontos[i].lng);
+        if (v) rotaMin += v.min;
+        legs.push(v);
+      }
+      totalDiaMin += rotaMin;
+      return { nomes: nomes, pontos: pontos, legs: legs, rotaMin: rotaMin };
+    });
+    return /* @__PURE__ */ React.createElement("div", null,
+      /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("button", { style: btnX, onClick: function() { setShowViagens(false); } }, "← Voltar \xE0s rotas")),
+      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 } },
+        /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "🚗 Tempos de viagem"),
+        /* @__PURE__ */ React.createElement("input", { type: "date", value: viagemDia, onChange: function(e) { setViagemDia(e.target.value); }, style: { padding: "8px 10px", borderRadius: 8, border: "1.5px solid #E2EBF4", fontSize: 13, color: "#1A3A5C" } }),
+        rotas.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { background: "#1A3A5C", color: "#fff", borderRadius: 10, padding: "8px 14px", fontWeight: 800, fontSize: 14 } }, "Total do dia: ", totalDiaMin, " min")
+      ),
+      /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", borderRadius: 8, padding: "9px 12px", fontSize: 11.5, color: "#334155", marginBottom: 14, lineHeight: 1.5 } }, "Tempos estimados (linha recta \xD7 1,3 \xF7 50 km/h), sem tr\xE2nsito ao segundo — servem para planear a toler\xE2ncia de atraso. ", /* @__PURE__ */ React.createElement("b", null, "Folga no hor\xE1rio"), " = tempo entre o fim de um servi\xE7o e o in\xEDcio do seguinte, menos a viagem."),
+      viagemLoading ? /* @__PURE__ */ React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar...") :
+      rotas.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Sem servi\xE7os com equipa neste dia.") :
+      /* @__PURE__ */ React.createElement("div", null, rotas.map(function(r, ri) {
+        return /* @__PURE__ */ React.createElement("div", { key: ri, style: Object.assign({}, card, { marginBottom: 16, padding: 0, overflow: "hidden" }) },
+          /* @__PURE__ */ React.createElement("div", { style: { background: "linear-gradient(135deg,#1A3A5C,#2E6DA4)", color: "#fff", padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" } },
+            /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15 } }, "Equipa: ", r.nomes),
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, background: "rgba(255,255,255,0.15)", borderRadius: 20, padding: "3px 10px" } }, "🚗 ", r.rotaMin, " min")
+          ),
+          /* @__PURE__ */ React.createElement("div", { style: { padding: 14 } }, r.pontos.map(function(p, pi) {
+            var leg = pi > 0 ? r.legs[pi - 1] : null;
+            var legEl = pi > 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11.5, color: leg ? "#64748B" : "#B91C1C", padding: "4px 0 4px 20px", fontWeight: 600 } }, leg ? ("🚗 " + leg.min + " min \xB7 " + leg.km.toFixed(1) + " km") : "⚠ sem coordenadas — n\xE3o d\xE1 para calcular este tro\xE7o") : null;
+            var folgaEl = null;
+            if (pi > 0 && !p.armazem && !r.pontos[pi - 1].armazem && leg) {
+              var fim = minsHHMM(r.pontos[pi - 1].job.t2), ini = minsHHMM(p.job.t1);
+              if (fim != null && ini != null) {
+                var folga = ini - fim - leg.min;
+                var tol = (p.cliente && p.cliente.tolerancia_minutos != null) ? p.cliente.tolerancia_minutos : 15;
+                if (folga < 0) folgaEl = /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#B91C1C", background: "#FEF2F2", borderRadius: 7, padding: "6px 9px", marginTop: 4, lineHeight: 1.5 } }, "⚠ A viagem n\xE3o cabe no hor\xE1rio: faltam ", Math.abs(folga), " min. Atraso quase estrutural — toler\xE2ncia actual ", tol, " min; considera ≥ ", Math.ceil(Math.abs(folga) / 5) * 5 + 5, " min ou antecipar a sa\xEDda.");
+                else if (folga < 10) folgaEl = /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#92400E", background: "#FFFBEB", borderRadius: 7, padding: "6px 9px", marginTop: 4 } }, "⚠ Folga apertada: s\xF3 ", folga, " min entre a viagem e o in\xEDcio marcado (toler\xE2ncia ", tol, " min).");
+              }
+            }
+            return /* @__PURE__ */ React.createElement("div", { key: pi }, legEl,
+              /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "3px 0" } },
+                /* @__PURE__ */ React.createElement("div", { style: { width: 10, height: 10, borderRadius: "50%", background: p.armazem ? "#64748B" : "#2E6DA4", flexShrink: 0 } }),
+                /* @__PURE__ */ React.createElement("div", { style: { fontWeight: p.armazem ? 600 : 800, fontSize: p.armazem ? 12 : 14, color: p.armazem ? "#64748B" : "#1A3A5C" } }, p.nome, p.job ? /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, fontSize: 11.5, color: "#2E6DA4", marginLeft: 8 } }, p.job.t1, "–", p.job.t2) : null)
+              ), folgaEl);
+          }))
+        );
+      }))
+    );
+  }
   if (showVoltasFixas) {
     const voltasPorCliente = {};
     voltasFixas.forEach(function(v) {
@@ -4628,7 +4719,7 @@ function Routes() {
     setNj({ cn: "", addr: "", svc: "", date: localDateStr(), date_end: "", t1: "08:00", t2: "10:00", team: [], val: "", obra_ref: "" });
     setClientSearch("");
     setShowNew(true);
-  }, style: btn }, "+ Servi\xE7o"), /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowVoltasFixas(true); }, style: Object.assign({}, btnO, { fontSize: 13, background: "#F5F3FF", border: "1.5px solid #7C3AED", color: "#7C3AED" }) }, "\u2699 Voltas Fixas", (function() { var n = clientesPorConfigurar().length; return n ? React.createElement("span", { style: { background: "#F59E0B", color: "#fff", borderRadius: 20, padding: "1px 8px", fontSize: 11, fontWeight: 800, marginLeft: 6 } }, n + " por configurar") : null; })()), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: alocarEquipaSemana, style: Object.assign({}, btnG, { fontSize: 13, whiteSpace: "nowrap" }) }, "\u26A1 Gerar Semana (equipa)"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: function() { abrirEquipasLivres(); }, style: Object.assign({}, btnO, { fontSize: 13, whiteSpace: "nowrap", background: "#FFF7ED", border: "1.5px solid #F59E0B", color: "#B45309" }) }, "\uD83D\uDCA1 Equipas a definir"), calView === "week" && wJobs.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: function() {
+  }, style: btn }, "+ Servi\xE7o"), /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowVoltasFixas(true); }, style: Object.assign({}, btnO, { fontSize: 13, background: "#F5F3FF", border: "1.5px solid #7C3AED", color: "#7C3AED" }) }, "\u2699 Voltas Fixas", (function() { var n = clientesPorConfigurar().length; return n ? React.createElement("span", { style: { background: "#F59E0B", color: "#fff", borderRadius: 20, padding: "1px 8px", fontSize: 11, fontWeight: 800, marginLeft: 6 } }, n + " por configurar") : null; })()), /* @__PURE__ */ React.createElement("button", { onClick: function() { setShowViagens(true); }, style: Object.assign({}, btnO, { fontSize: 13, background: "#EFF6FF", border: "1.5px solid #2E6DA4", color: "#2E6DA4", whiteSpace: "nowrap" }) }, "🚗 Tempos de viagem"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: alocarEquipaSemana, style: Object.assign({}, btnG, { fontSize: 13, whiteSpace: "nowrap" }) }, "\u26A1 Gerar Semana (equipa)"), calView === "week" && /* @__PURE__ */ React.createElement("button", { onClick: function() { abrirEquipasLivres(); }, style: Object.assign({}, btnO, { fontSize: 13, whiteSpace: "nowrap", background: "#FFF7ED", border: "1.5px solid #F59E0B", color: "#B45309" }) }, "\uD83D\uDCA1 Equipas a definir"), calView === "week" && wJobs.length > 0 && /* @__PURE__ */ React.createElement("button", { onClick: function() {
     const win = window.open("", "_blank");
     const byEmp = {};
     emps.forEach(function(e) {
