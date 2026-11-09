@@ -423,6 +423,16 @@ function dentroJanelaAvaliacao(dateStr) {
   var inicioMesAnterior = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
   return d >= inicioMesAnterior && d <= hoje;
 }
+function BotaoComoChegar(addr) {
+  // Abre o Google Maps com a rota da posi\xE7\xE3o actual do colaborador at\xE9 \xE0 morada do cliente.
+  if (!addr) return null;
+  return React.createElement("a", {
+    href: "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(addr),
+    target: "_blank", rel: "noopener noreferrer",
+    onClick: function(e) { e.stopPropagation(); },
+    style: { marginTop: 8, marginBottom: 2, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", background: "#2E6DA4", color: "#fff", borderRadius: 11, padding: "10px 11px", fontSize: 13, fontWeight: 800, textDecoration: "none", boxSizing: "border-box" }
+  }, "🧭 Como chegar \xB7 Google Maps");
+}
 function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajustesRecibo, premiosOpcionais, dadosProdutividade, anuladosServ, tolById) {
   var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
   if (!rh) return { total: 0, detalhe: [], tipo: null };
@@ -12958,6 +12968,7 @@ function Employee(props) {
             /* @__PURE__ */ React.createElement(Bdg, { label: job.status === "completed" ? "Conclu\xEDdo" : job.check_in ? "Em curso" : "Agendado", bg: job.status === "completed" ? "#DCFCE7" : job.check_in ? "#FEF3C7" : "#EFF6FF", tx: job.status === "completed" ? "#15803D" : job.check_in ? "#92400E" : "#2E6DA4" })
           ),
           job.addr && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 8 } }, "\uD83D\uDCCD ", job.addr),
+          BotaoComoChegar(job.addr),
           colegas.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" } },
             /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "Com:"),
             colegas.map(function(e) {
@@ -12996,6 +13007,7 @@ function Employee(props) {
                 /* @__PURE__ */ React.createElement(Bdg, { label: job.status === "completed" ? "Conclu\xEDdo" : job.check_in ? "Em curso" : "Agendado", bg: job.status === "completed" ? "#DCFCE7" : job.check_in ? "#FEF3C7" : "#EFF6FF", tx: job.status === "completed" ? "#15803D" : job.check_in ? "#92400E" : "#2E6DA4" })
               ),
               job.addr && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 4 } }, "\uD83D\uDCCD ", job.addr),
+              BotaoComoChegar(job.addr),
               colegas.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" } },
                 /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "Com:"),
                 colegas.map(function(e) {
@@ -13063,6 +13075,7 @@ function Employee(props) {
                   /* @__PURE__ */ React.createElement(Bdg, { label: job.status === "completed" ? "Conclu\xEDdo" : job.check_in ? "Em curso" : "Agendado", bg: job.status === "completed" ? "#DCFCE7" : job.check_in ? "#FEF3C7" : "#EFF6FF", tx: job.status === "completed" ? "#15803D" : job.check_in ? "#92400E" : "#2E6DA4" })
                 ),
                 job.addr && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginBottom: 4 } }, "\uD83D\uDCCD ", job.addr),
+              BotaoComoChegar(job.addr),
                 colegas.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" } },
                   /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, "Com:"),
                   colegas.map(function(e) {
