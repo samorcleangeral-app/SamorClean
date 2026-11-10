@@ -80,6 +80,43 @@ function __dbClearCache() { __dbCache.clear(); }
     return __fetchOrig(input, init).then(function(r) { __dbClearCache(); __dbInflight.clear(); return r; });
   };
 })();
+// --- Paginacao automatica ---
+// O servidor (Supabase) devolve no maximo 1000 linhas por pedido, mesmo que se peca mais.
+// Quando uma leitura vem "cheia" (exactamente 1000), vai-se buscar o resto em lotes ate acabar,
+// para nenhum ecra ficar a ver so as primeiras 1000 linhas sem avisar.
+// Regra de seguranca: se algo falhar a meio, devolve-se o que ja se tinha (nunca menos do que antes).
+const __DB_PAGE = 1000;
+async function __dbGetPage(table, q) {
+  try {
+    const res = await fetch(SUPABASE_URL + "/rest/v1/" + table + q, { headers: dbHeaders() });
+    if (!res.ok) return null;
+    const d = await res.json();
+    return Array.isArray(d) ? d : null;
+  } catch (e) { return null; }
+}
+async function __dbPaginar(table, q, primeira) {
+  try {
+    if (!Array.isArray(primeira) || primeira.length !== __DB_PAGE) return primeira;
+    if (/[?&]offset=/.test(q)) return primeira;
+    var m = q.match(/[?&]limit=(\d+)/);
+    var teto = m ? parseInt(m[1]) : Infinity;
+    if (teto <= __DB_PAGE) return primeira;
+    // Ordem estavel entre lotes: desempata pelo id (senao linhas com a mesma data podiam repetir-se ou saltar).
+    var base = /[?&]order=/.test(q) ? q.replace(/([?&]order=[^&]*)/, "$1,id") : q + "&order=id";
+    var todas = await __dbGetPage(table, base);
+    if (!todas || todas.length < primeira.length) { base = q; todas = primeira.slice(); }
+    while (todas.length < teto) {
+      var antes = todas.length;
+      if (antes % __DB_PAGE !== 0) break;
+      var pg = await __dbGetPage(table, base + "&offset=" + antes);
+      if (!pg) { console.warn("db.list: falhou um lote de", table, "- devolvidas", antes, "linhas"); break; }
+      if (pg.length === 0) break;
+      todas = todas.concat(pg);
+      if (pg.length < __DB_PAGE) break;
+    }
+    return todas.length > teto ? todas.slice(0, teto) : todas;
+  } catch (e) { return primeira; }
+}
 const db = {
   async list(table, query) {
     const key = table + (query || "?select=*");
@@ -94,7 +131,7 @@ const db = {
           console.error("db.list error", table, await res.text());
           return [];
         }
-        const data = await res.json();
+        const data = await __dbPaginar(table, query || "?select=*", await res.json());
         __dbCache.set(key, { t: Date.now(), data: data });
         return data.slice();
       } catch (err) {
