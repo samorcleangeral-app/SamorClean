@@ -973,7 +973,7 @@ function Finance() {
       db.list("stock_movimentos", "?select=created_at,quantidade,valor_unitario&tipo=eq.saida&created_at=gte." + monthStart + "&created_at=lt." + nextMonthStart),
       db.list("avaliacoes", "?select=stars,funcionario_id,servico_id,created_at&created_at=gte." + new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString()),
       db.list("avaliacoes_mensais", "?select=funcionario_id,mes,nota_final"),
-      db.list("picagens_armazem", "?select=funcionario_id,tipo,created_at&created_at=gte." + monthStart)
+      db.list("picagens_armazem", "?select=funcionario_id,tipo,created_at&created_at=gte." + monthStart + "&created_at=lt." + nextMonthStart)
     ]).then(function(results) {
       const cm = {};
       (results[2] || []).forEach(function(c) { cm[c.id] = c; });
@@ -1631,9 +1631,14 @@ function Finance() {
   // (a anulação é a gestão a confirmar "trabalhou, foi direto ao cliente"). Paga-se por dia que veio, nunca por proporção do mês.
   function rvDiasTrabalhados(empId, ateData) {
     var dias = {};
-    (monthJobs || []).forEach(function(j) { if ((j.team || []).indexOf(empId) === -1) return; var d = j.date; if (d && (!ateData || d <= ateData)) dias[d] = true; });
-    (picagensArmFin || []).forEach(function(p) { if (p.funcionario_id !== empId) return; var d = (p.created_at || "").slice(0, 10); if (d && (!ateData || d <= ateData)) dias[d] = true; });
-    Object.keys(anulArm || {}).forEach(function(k) { var i = k.indexOf("|"); if (i < 0 || k.slice(0, i) !== empId) return; var d = k.slice(i + 1); if (d && (!ateData || d <= ateData)) dias[d] = true; });
+    // S\xF3 contam dias DENTRO do m\xEAs que se est\xE1 a ver. Sem este limite, ao ver um m\xEAs passado
+    // entravam as picagens e anula\xE7\xF5es de todos os meses seguintes e o custo dos recibos verdes disparava.
+    var mIni = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
+    var mFim = localDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+    function conta(d) { return d && d >= mIni && d <= mFim && (!ateData || d <= ateData); }
+    (monthJobs || []).forEach(function(j) { if ((j.team || []).indexOf(empId) === -1) return; var d = j.date; if (conta(d)) dias[d] = true; });
+    (picagensArmFin || []).forEach(function(p) { if (p.funcionario_id !== empId) return; var d = (p.created_at || "").slice(0, 10); if (conta(d)) dias[d] = true; });
+    Object.keys(anulArm || {}).forEach(function(k) { var i = k.indexOf("|"); if (i < 0 || k.slice(0, i) !== empId) return; var d = k.slice(i + 1); if (conta(d)) dias[d] = true; });
     return Object.keys(dias).length;
   }
   const totalCustoMaoObraGeral = emps.filter(function(e) { return contaNoPeriodo(e, monthJobs); }).reduce(function(s, e) {
