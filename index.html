@@ -3424,7 +3424,7 @@ function Routes() {
   }
   async function recarregarAgendaEVoltas() {
     __dbClearCache();
-    var fj = await db.list("servicos", "?select=*&order=date");
+    var fj = await db.list("servicos", "?select=*&order=date&limit=100000");
     setJobs(fj || []);
     var fv = await db.list("voltas_fixas", "?select=*&order=created_at.desc");
     setVoltasFixas(fv || []);
@@ -3578,7 +3578,7 @@ function Routes() {
         await fetch(SUPABASE_URL + "/rest/v1/servicos?id=eq." + manuais[i].id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ volta_id: v.id }) });
       }
       __dbClearCache();
-      var freshJobs = await db.list("servicos", "?select=*&order=date");
+      var freshJobs = await db.list("servicos", "?select=*&order=date&limit=100000");
       await garantirServicosGerados(null, freshJobs || jobs, clients);
       await recarregarAgendaEVoltas();
     } catch (e) {
@@ -3726,7 +3726,7 @@ function Routes() {
     if (window.__geracaoEmAndamento) return 0;
     window.__geracaoEmAndamento = true;
     try {
-    const jobsFrescos = await db.list("servicos", "?select=client_id,date,t1,t2");
+    const jobsFrescos = await db.list("servicos", "?select=client_id,date,t1,t2&limit=100000");
     // Rede de seguranca: se a leitura fresca vier vazia mas o estado ja tinha servicos,
     // a leitura falhou (ou cache vazia) -> NAO gerar, senao recria a agenda toda (bug dos duplicados).
     if ((jobsExistentes && jobsExistentes.length > 0) && (!jobsFrescos || jobsFrescos.length === 0)) {
@@ -3791,7 +3791,7 @@ function Routes() {
     setGerandoServicos(true);
     var n = await garantirServicosGerados(voltasFixas, jobs, clients);
     if (n > 0) {
-      var freshJobs = await db.list("servicos", "?select=*&order=date");
+      var freshJobs = await db.list("servicos", "?select=*&order=date&limit=100000");
       setJobs(freshJobs || []);
       var freshVoltas = await db.list("voltas_fixas", "?select=*&order=created_at.desc");
       setVoltasFixas(freshVoltas || []);
@@ -3805,7 +3805,7 @@ function Routes() {
     setAutoGerado(true);
     garantirServicosGerados(voltasFixas, jobs, clients).then(function(n) {
       if (n > 0) {
-        db.list("servicos", "?select=*&order=date").then(function(fresh) { setJobs(fresh || []); });
+        db.list("servicos", "?select=*&order=date&limit=100000").then(function(fresh) { setJobs(fresh || []); });
         db.list("voltas_fixas", "?select=*&order=created_at.desc").then(function(fresh) { setVoltasFixas(fresh || []); });
       }
     });
@@ -3860,7 +3860,7 @@ function Routes() {
         await updateJob(cf.jobId, { team: cf.equipaFinal || [] });
       }
     }
-    var fresh = await db.list("servicos", "?select=*&order=date");
+    var fresh = await db.list("servicos", "?select=*&order=date&limit=100000");
     setJobs(fresh || []);
     setConflitosAlocacao(null);
     setAlocandoEquipa(false);
@@ -3987,7 +3987,7 @@ function Routes() {
       }
       registarAlertaRota(criado[0], "novo", "Novo turno em " + servicoAlvo.cn + " (" + horaInicio + "\u2013" + horaFim + ")", membros);
       // Recarregar da base de dados para garantir que ficou mesmo gravado
-      var fresh = await db.list("servicos", "?select=*&order=date");
+      var fresh = await db.list("servicos", "?select=*&order=date&limit=100000");
       setJobs(fresh || []);
       alert("\u2713 Turno criado em " + servicoAlvo.cn + ": " + nomesEq + " (" + horaInicio + "\u2013" + horaFim + ").");
     } catch (e) {
@@ -4060,7 +4060,7 @@ function Routes() {
   }
   useEffect(function() {
     Promise.all([
-      db.list("servicos", "?select=*&order=date"),
+      db.list("servicos", "?select=*&order=date&limit=100000"),
       db.list("funcionarios", "?select=*&order=id"),
       db.list("clientes", "?select=*&order=id"),
       db.list("ausencias", "?select=*")
