@@ -495,6 +495,19 @@ function legOSRM(a, b) {
     return { km: d.routes[0].distance / 1000, min: Math.round(d.routes[0].duration / 60) };
   }).catch(function() { return null; });
 }
+// Janela de trabalho das Rotas: carrega-se o ano corrente (ou, no in\xEDcio do ano, os \xFAltimos 3 meses) + todo o futuro.
+// O que for mais antigo fica na base e s\xF3 se vai buscar quando se navega at\xE9 l\xE1 (hist\xF3rico sob consulta).
+// Para testar o hist\xF3rico antes de haver um ano fechado: abrir a app com ?janelaDesde=AAAA-MM-DD no endere\xE7o.
+function scInicioJanelaTrabalho() {
+  try {
+    var t = new URLSearchParams(window.location.search).get("janelaDesde");
+    if (t && /^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  } catch (e) {}
+  var h = new Date();
+  var jan1 = h.getFullYear() + "-01-01";
+  var tresMeses = localDateStr(new Date(h.getFullYear(), h.getMonth() - 3, 1));
+  return tresMeses < jan1 ? tresMeses : jan1;
+}
 function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajustesRecibo, premiosOpcionais, dadosProdutividade, anuladosServ, tolById) {
   var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
   if (!rh) return { total: 0, detalhe: [], tipo: null };
@@ -3226,6 +3239,9 @@ function Routes() {
   const [conflitosAlocacao, setConflitosAlocacao] = useState(null);
   const [alocandoEquipa, setAlocandoEquipa] = useState(false);
   const [wk, setWk] = useState(0);
+  const [histPorAno, setHistPorAno] = useState({});
+  const [primeiroAno, setPrimeiroAno] = useState(null);
+  const empsTodosRef = React.useRef([]);
   const [calView, setCalView] = useState("week");
   const [selJob, setSelJob] = useState(null);
   const [popupAction, setPopupAction] = useState(null);
@@ -3461,7 +3477,7 @@ function Routes() {
   }
   async function recarregarAgendaEVoltas() {
     __dbClearCache();
-    var fj = await db.list("servicos", "?select=*&order=date&limit=100000");
+    var fj = await db.list("servicos", "?select=*&order=date&date=gte." + scInicioJanelaTrabalho());
     setJobs(fj || []);
     var fv = await db.list("voltas_fixas", "?select=*&order=created_at.desc");
     setVoltasFixas(fv || []);
@@ -3615,7 +3631,7 @@ function Routes() {
         await fetch(SUPABASE_URL + "/rest/v1/servicos?id=eq." + manuais[i].id, { method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ volta_id: v.id }) });
       }
       __dbClearCache();
-      var freshJobs = await db.list("servicos", "?select=*&order=date&limit=100000");
+      var freshJobs = await db.list("servicos", "?select=*&order=date&date=gte." + scInicioJanelaTrabalho());
       await garantirServicosGerados(null, freshJobs || jobs, clients);
       await recarregarAgendaEVoltas();
     } catch (e) {
@@ -3828,7 +3844,7 @@ function Routes() {
     setGerandoServicos(true);
     var n = await garantirServicosGerados(voltasFixas, jobs, clients);
     if (n > 0) {
-      var freshJobs = await db.list("servicos", "?select=*&order=date&limit=100000");
+      var freshJobs = await db.list("servicos", "?select=*&order=date&date=gte." + scInicioJanelaTrabalho());
       setJobs(freshJobs || []);
       var freshVoltas = await db.list("voltas_fixas", "?select=*&order=created_at.desc");
       setVoltasFixas(freshVoltas || []);
@@ -3842,7 +3858,7 @@ function Routes() {
     setAutoGerado(true);
     garantirServicosGerados(voltasFixas, jobs, clients).then(function(n) {
       if (n > 0) {
-        db.list("servicos", "?select=*&order=date&limit=100000").then(function(fresh) { setJobs(fresh || []); });
+        db.list("servicos", "?select=*&order=date&date=gte." + scInicioJanelaTrabalho()).then(function(fresh) { setJobs(fresh || []); });
         db.list("voltas_fixas", "?select=*&order=created_at.desc").then(function(fresh) { setVoltasFixas(fresh || []); });
       }
     });
@@ -3897,7 +3913,7 @@ function Routes() {
         await updateJob(cf.jobId, { team: cf.equipaFinal || [] });
       }
     }
-    var fresh = await db.list("servicos", "?select=*&order=date&limit=100000");
+    var fresh = await db.list("servicos", "?select=*&order=date&date=gte." + scInicioJanelaTrabalho());
     setJobs(fresh || []);
     setConflitosAlocacao(null);
     setAlocandoEquipa(false);
@@ -4024,7 +4040,7 @@ function Routes() {
       }
       registarAlertaRota(criado[0], "novo", "Novo turno em " + servicoAlvo.cn + " (" + horaInicio + "\u2013" + horaFim + ")", membros);
       // Recarregar da base de dados para garantir que ficou mesmo gravado
-      var fresh = await db.list("servicos", "?select=*&order=date&limit=100000");
+      var fresh = await db.list("servicos", "?select=*&order=date&date=gte." + scInicioJanelaTrabalho());
       setJobs(fresh || []);
       alert("\u2713 Turno criado em " + servicoAlvo.cn + ": " + nomesEq + " (" + horaInicio + "\u2013" + horaFim + ").");
     } catch (e) {
@@ -4097,7 +4113,7 @@ function Routes() {
   }
   useEffect(function() {
     Promise.all([
-      db.list("servicos", "?select=*&order=date&limit=100000"),
+      db.list("servicos", "?select=*&order=date&date=gte." + scInicioJanelaTrabalho()),
       db.list("funcionarios", "?select=*&order=id"),
       db.list("clientes", "?select=*&order=id"),
       db.list("ausencias", "?select=*")
@@ -4107,6 +4123,7 @@ function Routes() {
       var jobsDia = r[0] || [];
       var idsNoDia = {};
       jobsDia.forEach(function(j) { (j.team || []).forEach(function(eid) { idsNoDia[eid] = true; }); });
+      empsTodosRef.current = r[1] || [];
       setEmps((r[1] || []).filter(function(e) { return e.ativo !== false || idsNoDia[e.id]; }));
       setClients(r[2] || []);
       setAusencias(r[3] || []);
@@ -4126,7 +4143,81 @@ function Routes() {
   }
   const dates = getWeekDates(wk);
   const todayStr = localDateStr();
-  const wJobs = jobs.filter(function(j) {
+  // --- Hist\xF3rico sob consulta ---
+  const inicioWS = scInicioJanelaTrabalho();
+  var vistaIni = dates[0], vistaFim = dates[6];
+  if (calView === "month") {
+    var dmV = new Date();
+    dmV.setMonth(dmV.getMonth() + wk);
+    vistaIni = localDateStr(new Date(dmV.getFullYear(), dmV.getMonth(), 1));
+    vistaFim = localDateStr(new Date(dmV.getFullYear(), dmV.getMonth() + 1, 0));
+  }
+  const anosHistVista = [];
+  if (vistaIni < inicioWS) {
+    var fimHist = vistaFim < inicioWS ? vistaFim : inicioWS;
+    for (var anoH = parseInt(vistaIni.slice(0, 4)); anoH <= parseInt(fimHist.slice(0, 4)); anoH++) anosHistVista.push(anoH);
+  }
+  const chaveHist = anosHistVista.join(",");
+  useEffect(function() {
+    anosHistVista.forEach(function(ano) {
+      if (histPorAno[ano]) return;
+      db.list("servicos", "?select=*&order=date&date=gte." + ano + "-01-01&date=lte." + ano + "-12-31").then(function(rows) {
+        if (!rows || rows.length === 0) return;
+        setHistPorAno(function(p) { var n = Object.assign({}, p); n[ano] = rows; return n; });
+        var idsEq = {};
+        rows.forEach(function(j) { (j.team || []).forEach(function(eid) { idsEq[eid] = true; }); });
+        setEmps(function(p) {
+          var tem = {};
+          p.forEach(function(e) { tem[e.id] = true; });
+          var extra = empsTodosRef.current.filter(function(e) { return idsEq[e.id] && !tem[e.id]; });
+          return extra.length ? p.concat(extra) : p;
+        });
+      });
+    });
+  }, [chaveHist]);
+  useEffect(function() {
+    db.list("servicos", "?select=date&order=date.asc&limit=1").then(function(r) {
+      if (r && r[0] && r[0].date) setPrimeiroAno(parseInt(r[0].date.slice(0, 4)));
+    });
+  }, []);
+  const histCarregando = anosHistVista.some(function(a) { return !histPorAno[a]; });
+  var jobsVista = jobs;
+  if (anosHistVista.length) {
+    var idsWS = {};
+    jobs.forEach(function(j) { idsWS[j.id] = true; });
+    var histExtra = [];
+    anosHistVista.forEach(function(a) {
+      (histPorAno[a] || []).forEach(function(j) { if (j.date < inicioWS && !idsWS[j.id]) histExtra.push(j); });
+    });
+    if (histExtra.length) jobsVista = jobs.concat(histExtra);
+  }
+  const anoHoje = new Date().getFullYear();
+  const anoVista = parseInt((calView === "month" ? vistaIni : dates[3]).slice(0, 4));
+  function irParaAno(ano) {
+    var hj = new Date();
+    if (ano === hj.getFullYear()) { setWk(0); return; }
+    if (calView === "month") { setWk((ano - hj.getFullYear()) * 12 + (11 - hj.getMonth())); return; }
+    var alvo = new Date(ano, 11, 15, 12);
+    var dSem = hj.getDay() || 7;
+    var segHoje = new Date(hj.getFullYear(), hj.getMonth(), hj.getDate() - dSem + 1, 12);
+    setWk(Math.floor((alvo - segHoje) / (7 * 864e5)));
+  }
+  var seletorAno = null;
+  if (primeiroAno && primeiroAno < anoHoje) {
+    var anosLista = [];
+    for (var aL = primeiroAno; aL <= anoHoje; aL++) anosLista.push(aL);
+    seletorAno = /* @__PURE__ */ React.createElement("div", { style: { display: "inline-flex", border: "1.5px solid #E2EBF4", borderRadius: 9, overflow: "hidden", background: "#fff" } },
+      /* @__PURE__ */ React.createElement("span", { style: { padding: "7px 10px", fontSize: 12, fontWeight: 700, color: "#64748B", background: "#F1F5F9" } }, "Ano"),
+      anosLista.map(function(a) {
+        return /* @__PURE__ */ React.createElement("button", { key: a, onClick: function() { irParaAno(a); }, style: { padding: "7px 12px", fontSize: 12, fontWeight: 800, border: "none", cursor: "pointer", background: a === anoVista ? "#1A3A5C" : "#fff", color: a === anoVista ? "#fff" : "#64748B" } }, a);
+      })
+    );
+  }
+  var bannerHist = anosHistVista.length ? /* @__PURE__ */ React.createElement("div", { style: { background: "#FFFBEB", border: "1px solid #FCD34D", color: "#92400E", borderRadius: 10, padding: "9px 12px", fontSize: 12.5, fontWeight: 600, marginBottom: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" } },
+    histCarregando ? "\uD83D\uDCC1 A carregar o hist\xF3rico\u2026" : "\uD83D\uDCC1 Est\xE1s a consultar o hist\xF3rico (servi\xE7os anteriores a " + new Date(inicioWS + "T12:00:00").toLocaleDateString("pt-PT", { day: "numeric", month: "long", year: "numeric" }) + ").",
+    /* @__PURE__ */ React.createElement("button", { onClick: function() { setWk(0); }, style: { marginLeft: "auto", background: "#92400E", color: "#fff", border: "none", borderRadius: 8, padding: "5px 11px", fontSize: 12, fontWeight: 800, cursor: "pointer" } }, "Voltar a hoje")
+  ) : null;
+  const wJobs = jobsVista.filter(function(j) {
     return dates.indexOf(j.date) !== -1;
   });
   function getLabel() {
@@ -4219,6 +4310,11 @@ function Routes() {
         return j.id === id ? Object.assign({}, j, patch) : j;
       });
     });
+    setHistPorAno(function(p) {
+      var mudou = false, n = {};
+      for (var k in p) { n[k] = p[k].map(function(j) { if (j.id !== id) return j; mudou = true; return Object.assign({}, j, patch); }); }
+      return mudou ? n : p;
+    });
     if (selJob && selJob.id === id) setSelJob(Object.assign({}, selJob, patch));
   }
   async function deleteJob(job) {
@@ -4227,6 +4323,11 @@ function Routes() {
       await registarAlertaRota(job, "cancelado", "Servi\xE7o cancelado", job.team || []);
     }
     await db.remove("servicos", job.id);
+    setHistPorAno(function(p) {
+      var n = {};
+      for (var k in p) n[k] = p[k].filter(function(j) { return j.id !== job.id; });
+      return n;
+    });
     setJobs(function(p) {
       return p.filter(function(j) {
         return j.id !== job.id;
@@ -4798,12 +4899,12 @@ function Routes() {
     });
   });
   const totalPx = (END_H - START_H) * HOUR_PX;
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Rotas"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 2 } }, getLabel())), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", border: "1.5px solid #E2EBF4", borderRadius: 8, overflow: "hidden" } }, [["week", "Semana"], ["month", "M\xEAs"]].map(function(v) {
+  return /* @__PURE__ */ React.createElement("div", null, bannerHist, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, color: "#1A3A5C", margin: 0 } }, "Rotas"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginTop: 2 } }, getLabel())), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", border: "1.5px solid #E2EBF4", borderRadius: 8, overflow: "hidden" } }, [["week", "Semana"], ["month", "M\xEAs"]].map(function(v) {
     return /* @__PURE__ */ React.createElement("button", { key: v[0], onClick: function() {
       setCalView(v[0]);
       setWk(0);
     }, style: { padding: "6px 14px", background: calView === v[0] ? "#1A3A5C" : "#fff", color: calView === v[0] ? "#fff" : "#64748B", fontSize: 12, fontWeight: 700, border: "none", cursor: "pointer" } }, v[1]);
-  })), /* @__PURE__ */ React.createElement("button", { onClick: function() {
+  })), seletorAno, /* @__PURE__ */ React.createElement("button", { onClick: function() {
     setWk(function(w) {
       return w - 1;
     });
@@ -4928,7 +5029,7 @@ function Routes() {
     for (let i = 0; i < firstDay; i++) cells.push(null);
     for (let i = 1; i <= daysInMonth; i++) cells.push(localDateStr(new Date(year, month, i)));
     while (cells.length % 7 !== 0) cells.push(null);
-    const mJobs = jobs.filter(function(j) {
+    const mJobs = jobsVista.filter(function(j) {
       if (!j.date) return false;
       const jd = /* @__PURE__ */ new Date(j.date + "T12:00:00");
       return jd.getFullYear() === year && jd.getMonth() === month;
