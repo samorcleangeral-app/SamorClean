@@ -2090,6 +2090,18 @@ function Finance() {
     var idsGrupo = [c.id].concat(clientes.filter(function(cc) { return cc.cliente_principal_id === c.id; }).map(function(cc) { return cc.id; }));
     return jobsAll.filter(function(j) { return idsGrupo.indexOf(j.client_id) !== -1; });
   }
+  // Avença do GRUPO (cliente principal + fichas filhas mensais).
+  function avencaGrupo(c) {
+    return clientes.reduce(function(s, cc) {
+      if (cc.tipo_faturacao !== "mensal") return s;
+      if (cc.id !== c.id && cc.cliente_principal_id !== c.id) return s;
+      return s + (parseFloat(cc.valor_visita) || 0);
+    }, 0);
+  }
+  // Nº de visitas do mês de um grupo (não canceladas) — denominador da distribuição da avença.
+  function nVisitasMesGrupo(c, jobsAllMes) {
+    return jobsDoGrupo(c, jobsAllMes).filter(function(j) { return j.status !== "cancelado"; }).length;
+  }
   async function carregarDadosAno(ano) {
     setLoadingAnual(true);
     var inicioAtual = ano + "-01-01";
@@ -2238,7 +2250,9 @@ function Finance() {
       // MESMA regra da conta corrente/faturação: valor manual se existir, senão o valor por visita da ficha (nunca j.val a 0 "fantasma").
       receita = jobs.reduce(function(s, j) { return s + (j.val_manual ? (parseFloat(j.val) || 0) : (parseFloat(c.valor_visita) || 0)); }, 0);
     } else if (c.tipo_faturacao === "mensal") {
-      receita = parseFloat(c.valor_visita) || 0;
+      // Avença distribuída pelas visitas do mês: conta só as visitas feitas, para bater com o custo.
+      var totMesM = nVisitasMesGrupo(c, monthJobsAll);
+      receita = totMesM > 0 ? (avencaGrupo(c) * jobs.length / totMesM) : 0;
     } else {
       // Sem tipo definido: igual à faturação — valor manual, senão valor por visita da ficha, e só em último caso o j.val gravado.
       receita = jobs.reduce(function(s, j) { var vv = parseFloat(c.valor_visita) || 0; return s + (j.val_manual ? (parseFloat(j.val) || 0) : (vv > 0 ? vv : (parseFloat(j.val) || 0))); }, 0);
@@ -2282,7 +2296,14 @@ function Finance() {
     } else if (c.tipo_faturacao === "visita") {
       receita = jobs.reduce(function(s, j) { return s + (j.val_manual ? (parseFloat(j.val) || 0) : (parseFloat(c.valor_visita) || 0)); }, 0);
     } else if (c.tipo_faturacao === "mensal") {
-      receita = (parseFloat(c.valor_visita) || 0) * nMeses;
+      // Meses fechados = avença inteira; mês em curso = avença × visitas feitas ÷ visitas do mês.
+      var avG = avencaGrupo(c);
+      var totCurP = nVisitasMesGrupo(c, monthJobsAll);
+      var compCurP = jobsDoGrupo(c, monthJobs).length;
+      var mesesSetP = jobs.reduce(function(acc, j) { acc[j.date.slice(0, 7)] = 1; return acc; }, {});
+      receita = Object.keys(mesesSetP).reduce(function(s, ym) {
+        return s + ((ym === mesActualStr && totCurP > 0) ? (avG * compCurP / totCurP) : avG);
+      }, 0);
     } else {
       receita = jobs.reduce(function(s, j) { var vv = parseFloat(c.valor_visita) || 0; return s + (j.val_manual ? (parseFloat(j.val) || 0) : (vv > 0 ? vv : (parseFloat(j.val) || 0))); }, 0);
     }
