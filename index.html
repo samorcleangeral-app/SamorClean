@@ -570,15 +570,35 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
     prodResult = calcPremioProdutividade(dadosProdutividade.avsClientes || [], dadosProdutividade.notaMensal != null ? dadosProdutividade.notaMensal : null);
   }
   if (tipo === "Recibo Verde") {
+    // Faltas do mês deste RV: data -> "parcial" (meio dia, 0,5× valor/dia) | "inteiro" (0).
+    var faltasRV = {};
+    ausenciasEmp.forEach(function(a) {
+      if ((a.tipo || "").toLowerCase().indexOf("falta") === -1) return;
+      var fs = new Date((a.data_inicio || "") + "T12:00:00");
+      var fe = new Date((a.data_fim || a.data_inicio || "") + "T12:00:00");
+      var fd = new Date(Math.max(fs, monthStart2));
+      var fdEnd = new Date(Math.min(fe, monthEnd2));
+      while (fd <= fdEnd) {
+        if (fd.getDay() !== 0 && fd.getDay() !== 6) faltasRV[localDateStr(fd)] = a.parcial ? "parcial" : "inteiro";
+        fd.setDate(fd.getDate() + 1);
+      }
+    });
     var diasTrabalhados = new Set();
     monthJobs.forEach(function(j) {
       if ((j.team || []).indexOf(emp.id) !== -1) diasTrabalhados.add(j.date);
     });
+    var diasEquiv = 0, diasMeio = 0, diasZero = 0;
+    diasTrabalhados.forEach(function(ds) {
+      var f = faltasRV[ds];
+      if (f === "inteiro") { diasZero++; return; }                 // falta de dia inteiro = 0
+      if (f === "parcial") { diasEquiv += 0.5; diasMeio++; return; } // falta parcial = meio dia
+      diasEquiv += 1;
+    });
     var ajusteEmp = (ajustesRecibo && ajustesRecibo[emp.id]) || 0;
-    var numDias = diasTrabalhados.size + ajusteEmp;
+    var numDias = diasEquiv + ajusteEmp;
     var valorDia = parseFloat(rh.valor_dia) || 0;
     var custo = numDias * valorDia;
-    detalhe.push({ l: "Recibo Verde (" + diasTrabalhados.size + " dias registados" + (ajusteEmp > 0 ? " + " + ajusteEmp + " dias ajuste manual" : "") + " × " + fmt(valorDia) + ")", v: custo });
+    detalhe.push({ l: "Recibo Verde (" + diasTrabalhados.size + " dias" + (diasMeio > 0 ? ", " + diasMeio + " a meio (falta parcial)" : "") + (diasZero > 0 ? ", " + diasZero + " anulado(s) por falta" : "") + (ajusteEmp > 0 ? " + " + ajusteEmp + " ajuste manual" : "") + " × " + fmt(valorDia) + ")", v: custo });
     total = custo;
   } else {
     var salario = parseFloat(rh.salario_base) || 0;
@@ -1640,7 +1660,26 @@ function Finance() {
     (monthJobs || []).forEach(function(j) { if ((j.team || []).indexOf(empId) === -1) return; var d = j.date; if (conta(d)) dias[d] = true; });
     (picagensArmFin || []).forEach(function(p) { if (p.funcionario_id !== empId) return; var d = (p.created_at || "").slice(0, 10); if (conta(d)) dias[d] = true; });
     Object.keys(anulArm || {}).forEach(function(k) { var i = k.indexOf("|"); if (i < 0 || k.slice(0, i) !== empId) return; var d = k.slice(i + 1); if (conta(d)) dias[d] = true; });
-    return Object.keys(dias).length;
+    // Faltas do mês deste RV: parcial = meio dia (0,5× valor/dia); dia inteiro = 0.
+    var faltasRV = {};
+    (absData || []).forEach(function(a) {
+      if (a.funcionario_id !== empId) return;
+      if ((a.tipo || "").toLowerCase().indexOf("falta") === -1) return;
+      var fd = new Date((a.data_inicio || "") + "T12:00:00");
+      var fe = new Date((a.data_fim || a.data_inicio || "") + "T12:00:00");
+      while (fd <= fe) {
+        var fds = localDateStr(fd);
+        if (fds >= mIni && fds <= mFim && fd.getDay() !== 0 && fd.getDay() !== 6) faltasRV[fds] = a.parcial ? "parcial" : "inteiro";
+        fd.setDate(fd.getDate() + 1);
+      }
+    });
+    var totDias = 0;
+    Object.keys(dias).forEach(function(d) {
+      var f = faltasRV[d];
+      if (f === "inteiro") return;
+      totDias += (f === "parcial") ? 0.5 : 1;
+    });
+    return totDias;
   }
   const totalCustoMaoObraGeral = emps.filter(function(e) { return contaNoPeriodo(e, monthJobs); }).reduce(function(s, e) {
     var rhE = rhData.find(function(r) { return r.funcionario_id === e.id; });
