@@ -5979,7 +5979,8 @@ function Clients(props) {
   const [geoState, setGeoState] = useState({ busy: false, done: 0, total: 0 });
   const [fotosPorVer, setFotosPorVer] = useState({});
   useEffect(function() {
-    db.list("servicos", "?select=client_id,fotos,fotos_vistas").then(function(r) {
+    // Só os serviços com fotos por ver vêm do servidor (filtro empurrado para a BD): escala com o histórico.
+    db.list("servicos", "?select=client_id,fotos,fotos_vistas&or=(fotos_vistas.is.false,fotos_vistas.is.null)").then(function(r) {
       var m = {};
       (r || []).forEach(function(j) {
         if ((j.fotos || []).length > 0 && !j.fotos_vistas) m[j.client_id] = (m[j.client_id] || 0) + (j.fotos || []).length;
