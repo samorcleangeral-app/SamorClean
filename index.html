@@ -3993,17 +3993,19 @@ function Routes() {
     if (window.__geracaoEmAndamento) return 0;
     window.__geracaoEmAndamento = true;
     try {
-    const jobsFrescos = await db.list("servicos", "?select=client_id,date,t1,t2&limit=100000");
-    // Rede de seguranca: se a leitura fresca vier vazia mas o estado ja tinha servicos,
-    // a leitura falhou (ou cache vazia) -> NAO gerar, senao recria a agenda toda (bug dos duplicados).
-    if ((jobsExistentes && jobsExistentes.length > 0) && (!jobsFrescos || jobsFrescos.length === 0)) {
+    const hoje = /* @__PURE__ */ new Date();
+    const inicioJanela = localDateStr(hoje);
+    const fimJanela = localDateStr(new Date(hoje.getFullYear(), hoje.getMonth() + 2, 0));
+    // Lê só a janela da geração (hoje -> horizonte): fica pequena (< 1000) e o teste de duplicados fica exacto.
+    const jobsFrescos = await db.list("servicos", "?select=client_id,date,t1,t2&date=gte." + inicioJanela + "&date=lte." + fimJanela + "&order=date");
+    // Rede de seguranca: se a app ja conhece servicos DENTRO da janela mas a leitura fresca vem vazia,
+    // a leitura falhou (ou cache) -> NAO gerar, senao recria a agenda toda (bug dos duplicados).
+    var _existentesJanela = (jobsExistentes || []).filter(function(j) { return j.date >= inicioJanela && j.date <= fimJanela && j.status !== "cancelado"; });
+    if (_existentesJanela.length > 0 && (!jobsFrescos || jobsFrescos.length === 0)) {
       return 0;
     }
     const voltasFrescas = await db.list("voltas_fixas", "?select=*");
     voltasParaUsar = voltasFrescas || voltasParaUsar;
-    const hoje = /* @__PURE__ */ new Date();
-    const inicioJanela = localDateStr(hoje);
-    const fimJanela = localDateStr(new Date(hoje.getFullYear(), hoje.getMonth() + 2, 0));
     const novosServicos = [];
     const atualizarUltimaGerada = {};
     voltasParaUsar.filter(function(v) { return v.ativo !== false; }).forEach(function(v) {
