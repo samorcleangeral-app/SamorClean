@@ -508,7 +508,7 @@ function scInicioJanelaTrabalho() {
   var tresMeses = localDateStr(new Date(h.getFullYear(), h.getMonth() - 3, 1));
   return tresMeses < jan1 ? tresMeses : jan1;
 }
-function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajustesRecibo, premiosOpcionais, dadosProdutividade, anuladosServ, tolById) {
+function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajustesRecibo, premiosOpcionais, dadosProdutividade, anuladosServ, tolById, picagensArmMes, anulArmMes) {
   var rh = rhData.find(function(r) { return r.funcionario_id === emp.id; });
   if (!rh) return { total: 0, detalhe: [], tipo: null };
   var tipo = rh.tipo_contrato || "Contrato";
@@ -586,6 +586,18 @@ function calcCustoColaboradorMes(emp, rhData, absData, monthJobs, refDate, ajust
     var diasTrabalhados = new Set();
     monthJobs.forEach(function(j) {
       if ((j.team || []).indexOf(emp.id) !== -1) diasTrabalhados.add(j.date);
+    });
+    // Base completa, igual ao Geral: serviços ∪ picagens de armazém ∪ anulações de esquecimento.
+    var mIniRV = localDateStr(monthStart2), mFimRV = localDateStr(monthEnd2);
+    (picagensArmMes || []).forEach(function(p) {
+      if (p.funcionario_id !== emp.id) return;
+      var pd = (p.created_at || "").slice(0, 10);
+      if (pd && pd >= mIniRV && pd <= mFimRV) diasTrabalhados.add(pd);
+    });
+    Object.keys(anulArmMes || {}).forEach(function(k) {
+      var iK = k.indexOf("|"); if (iK < 0 || k.slice(0, iK) !== emp.id) return;
+      var ad = k.slice(iK + 1);
+      if (ad >= mIniRV && ad <= mFimRV) diasTrabalhados.add(ad);
     });
     var diasEquiv = 0, diasMeio = 0, diasZero = 0;
     diasTrabalhados.forEach(function(ds) {
@@ -1914,7 +1926,7 @@ function Finance() {
   function custoColaborador(emp) {
     var mesYM = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
     var dadosProd = calcDadosProdColab(emp, { avaliacoes: avsClientesFin, avaliacoesMensais: avsMensaisFin, svcDatas: svcDatasFin, picagensArm: picagensArmFin, monthJobs: monthJobs, mesYM: mesYM, anuladosArm: anulArm });
-    return calcCustoColaboradorMes(emp, rhData, absData, monthJobs, now, ajustesRecibo, premiosOpcionais, dadosProd, anulServ, tolCli);
+    return calcCustoColaboradorMes(emp, rhData, absData, monthJobs, now, ajustesRecibo, premiosOpcionais, dadosProd, anulServ, tolCli, picagensArmFin, anulArm);
   }
 
   async function setupCash() {
