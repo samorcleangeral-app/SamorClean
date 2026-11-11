@@ -5395,7 +5395,7 @@ function Routes() {
   ), conflitosAlocacao && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 500, padding: 16 } },
   /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", borderRadius: 16, padding: 24, maxWidth: 560, width: "100%", maxHeight: "85vh", overflowY: "auto" } },
     /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 900, fontSize: 17, color: "#DC2626", marginBottom: 4 } }, "\u26A0 Conflitos a resolver"),
-    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 16 } }, "Tens de resolver todos antes de continuar \u2014 n\xE3o \xE9 poss\xEDvel ignorar ou fechar sem decidir."),
+    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 16 } }, "Resolve cada um (move ou elimina), ou carrega em Cancelar para tratar disto mais tarde \u2014 nada \xE9 aplicado at\xE9 confirmares."),
     conflitosAlocacao.map(function(cf, i) {
       return /* @__PURE__ */ React.createElement("div", { key: cf.jobId, style: { border: "1.5px solid " + (cf.resolvido ? "#16A34A" : "#F59E0B"), background: cf.resolvido ? "#F0FDF4" : "#FFFBEB", borderRadius: 10, padding: 14, marginBottom: 12 } },
         /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#1A3A5C", marginBottom: 4 } }, cf.cn, " \u2014 ", cf.date, " \u2022 ", cf.t1, "-", cf.t2),
@@ -5433,6 +5433,7 @@ function Routes() {
       );
     }),
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 8 } },
+      /* @__PURE__ */ React.createElement("button", { onClick: function() { setConflitosAlocacao(null); }, disabled: alocandoEquipa, style: Object.assign({}, btnX, { padding: "0 18px", opacity: alocandoEquipa ? 0.5 : 1 }) }, "Cancelar"),
       /* @__PURE__ */ React.createElement("button", { onClick: confirmarResolucaoConflitos, disabled: alocandoEquipa || conflitosAlocacao.some(function(c) { return !c.resolvido; }), style: Object.assign({}, btnG, { flex: 1, textAlign: "center", opacity: (alocandoEquipa || conflitosAlocacao.some(function(c) { return !c.resolvido; })) ? 0.5 : 1 }) }, alocandoEquipa ? "A aplicar..." : "Confirmar e aplicar")
     )
   )
