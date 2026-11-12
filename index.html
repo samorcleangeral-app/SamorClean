@@ -8672,6 +8672,190 @@ function StockAnalise(props) {
   );
 }
 
+// ===== Copia de seguranca da base de dados =====
+// Le TODAS as tabelas, confere o numero de linhas contra o que a base diz ter, e so
+// depois diz que esta feita. Uma copia que falhe em silencio e pior do que nenhuma.
+const COPIA_LISTA_FIXA = ["ajuste_dias_recibo_verde","alertas_dispensados","alertas_rota","ausencias","ausencias_confirmacao","avaliacoes","avaliacoes_internas","avaliacoes_mensais","cash_config","cash_movimentos","categorias_colaborador","checklist_lalf_marcacoes","client_contacts","client_notes","clientes","config","despesas","entradas_dashboard","esquecimentos_anulados","esquecimentos_confirmados","fardamento","financeiro","formacao_docs","fornecedores","fotos_cliente","funcionarios","funcionarios_docs","funcionarios_rh","gestores","historico_financeiro","leads","leads_recrutamento","metas_financeiras","notas_colaborador","notas_operacionais","notas_servico","obras","ordenado_gerencia","pagamentos_movimentos","partilhas_vistas","pedidos_colaboradores","pedidos_extra","picagens_armazem","premio_assiduidade_opcional","price_list","produtos","qr_aberturas","servicos","servicos_ocasionais","stock_movimentos","stock_produtos","voltas_fixas"];
+function CopiaSeguranca(props) {
+  var nomeGestor = (props.gestor && (props.gestor.nome || props.gestor.email)) || "gest\xE3o";
+  const [estado, setEstado] = useState("pronto");
+  const [prog, setProg] = useState({ feitas: 0, total: 0, atual: "" });
+  const [res, setRes] = useState(null);
+  const [linhas, setLinhas] = useState([]);
+  const [verTudo, setVerTudo] = useState(false);
+  const [verRestauro, setVerRestauro] = useState(false);
+  const [ultima, setUltima] = useState(function() {
+    try { return JSON.parse(window.localStorage.getItem("sc_ultima_copia") || "null"); } catch (e) { return null; }
+  });
+
+  async function listarTabelas() {
+    try {
+      var r = await fetch(SUPABASE_URL + "/rest/v1/", { headers: dbHeaders() });
+      if (!r.ok) return { nomes: COPIA_LISTA_FIXA, fonte: "lista fixa" };
+      var spec = await r.json();
+      var nomes = [];
+      if (spec && spec.definitions) nomes = Object.keys(spec.definitions);
+      else if (spec && spec.paths) nomes = Object.keys(spec.paths).filter(function(x) { return x.indexOf("/") === 0 && x.indexOf("/rpc/") !== 0 && x.length > 1; }).map(function(x) { return x.slice(1); });
+      nomes = nomes.filter(function(n) { return n && n.indexOf("(") < 0 && n.indexOf("/") < 0; });
+      if (nomes.length < 10) return { nomes: COPIA_LISTA_FIXA, fonte: "lista fixa" };
+      return { nomes: nomes.sort(), fonte: "base de dados" };
+    } catch (e) { return { nomes: COPIA_LISTA_FIXA, fonte: "lista fixa" }; }
+  }
+  async function contar(t) {
+    var h = dbHeaders({ "Prefer": "count=exact", "Range-Unit": "items", "Range": "0-0" });
+    var tenta = async function(metodo) {
+      try {
+        var r = await fetch(SUPABASE_URL + "/rest/v1/" + t + "?select=*", { method: metodo, headers: h });
+        if (!r.ok) return -2;
+        var cr = r.headers.get("content-range") || "";
+        var n = parseInt(String(cr).split("/")[1]);
+        return isNaN(n) ? -1 : n;
+      } catch (e) { return -2; }
+    };
+    var a = await tenta("HEAD");
+    if (a >= 0 || a === -2) { if (a >= 0) return a; }
+    var b = await tenta("GET");
+    if (b >= 0) return b;
+    return (a === -2 && b === -2) ? -2 : -1;
+  }
+  async function pagina(t, ordem, off) {
+    try {
+      var r = await fetch(SUPABASE_URL + "/rest/v1/" + t + "?select=*" + ordem + "&limit=1000&offset=" + off, { headers: dbHeaders() });
+      if (!r.ok) return null;
+      var d = await r.json();
+      return Array.isArray(d) ? d : null;
+    } catch (e) { return null; }
+  }
+  async function puxar(t, total) {
+    var ordem = "&order=id";
+    var pri = await pagina(t, ordem, 0);
+    if (pri === null) { ordem = ""; pri = await pagina(t, ordem, 0); }
+    if (pri === null) return null;
+    var todas = pri;
+    while (todas.length < total) {
+      if (todas.length === 0 || todas.length % 1000 !== 0) break;
+      var pg = await pagina(t, ordem, todas.length);
+      if (pg === null || pg.length === 0) break;
+      todas = todas.concat(pg);
+      if (pg.length < 1000) break;
+    }
+    return todas;
+  }
+  async function correr() {
+    setEstado("correr"); setRes(null); setLinhas([]); setVerTudo(false);
+    var info = await listarTabelas();
+    var nomes = info.nomes;
+    setProg({ feitas: 0, total: nomes.length, atual: "" });
+    var dados = {}, det = [], totLinhas = 0;
+    for (var i = 0; i < nomes.length; i++) {
+      var t = nomes[i];
+      setProg({ feitas: i, total: nomes.length, atual: t });
+      var esperado = await contar(t);
+      if (esperado === -2) { det.push({ t: t, esperado: null, obtido: null, estado: "sem acesso" }); continue; }
+      var rows = await puxar(t, esperado < 0 ? Infinity : esperado);
+      if (rows === null) { det.push({ t: t, esperado: esperado < 0 ? null : esperado, obtido: null, estado: "sem acesso" }); continue; }
+      dados[t] = rows;
+      totLinhas += rows.length;
+      var est = esperado < 0 ? "sem contagem" : (rows.length === esperado ? "conferido" : (rows.length < esperado ? "incompleta" : "duvidosa"));
+      det.push({ t: t, esperado: esperado < 0 ? null : esperado, obtido: rows.length, estado: est });
+    }
+    var falhas = det.filter(function(l) { return l.estado !== "conferido"; });
+    var q = new Date();
+    function dd(n) { return String(n).padStart(2, "0"); }
+    var nome = "samorclean-copia-" + q.getFullYear() + "-" + dd(q.getMonth() + 1) + "-" + dd(q.getDate()) + "-" + dd(q.getHours()) + dd(q.getMinutes()) + ".json";
+    var pacote = {
+      app: "SamorClean", criado_em: q.toISOString(), criado_por: nomeGestor, origem: SUPABASE_URL,
+      fonte_da_lista: info.fonte, completo: falhas.length === 0,
+      tabelas: nomes.length, linhas_guardadas: totLinhas,
+      nota_fotos: "As imagens guardadas fora da base de dados (fotos, documentos) NAO estao neste ficheiro; so os enderecos delas.",
+      resumo: det, dados: dados
+    };
+    if (falhas.length > 0) pacote.aviso = "COPIA INCOMPLETA: " + falhas.length + " tabela(s) nao ficaram conferidas. Ver resumo.";
+    var texto = JSON.stringify(pacote);
+    var mb = Math.round(texto.length / 1048576 * 10) / 10;
+    try {
+      var blob = new Blob([texto], { type: "application/json;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url; a.download = nome; a.click();
+      setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
+    } catch (e) { window.alert("N\xE3o foi poss\xEDvel descarregar o ficheiro: " + e.message); }
+    var r2 = { tabelas: nomes.length, linhas: totLinhas, completo: falhas.length === 0, falhas: falhas.length, mb: mb, ficheiro: nome, quando: q.toISOString(), fonte: info.fonte };
+    setRes(r2); setLinhas(det); setEstado("feito"); setUltima(r2);
+    try { window.localStorage.setItem("sc_ultima_copia", JSON.stringify(r2)); } catch (e) {}
+  }
+
+  try { if (typeof globalThis !== "undefined" && globalThis.__SC_TESTE) globalThis.__correr = correr; } catch (e) {}
+  var th = { textAlign: "left", padding: "8px 10px", fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", borderBottom: "2px solid #E2EBF4" };
+  var td = { padding: "9px 10px", fontSize: 13, borderBottom: "1px solid #F1F5F9", color: "#1A3A5C" };
+  function tag(e) {
+    var c = e === "conferido" ? ["#E5F4E4", "#1E6B2A"] : e === "sem contagem" ? ["#F9EEDA", "#8A6410"] : ["#FBEBEB", "#9C2A2A"];
+    return React.createElement("span", { style: { fontSize: 11, fontWeight: 800, padding: "3px 9px", borderRadius: 999, background: c[0], color: c[1] } }, e);
+  }
+  function fmt(n) { return n === null || n === undefined ? "—" : Number(n).toLocaleString("pt-PT"); }
+  function quandoTxt(iso) {
+    try { var d = new Date(iso); return d.toLocaleDateString("pt-PT", { day: "numeric", month: "long" }) + ", " + d.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }); } catch (e) { return "—"; }
+  }
+  var ordenadas = linhas.slice().sort(function(a, b) {
+    var pa = a.estado === "conferido" ? 1 : 0, pb = b.estado === "conferido" ? 1 : 0;
+    if (pa !== pb) return pa - pb;
+    return (b.obtido || 0) - (a.obtido || 0);
+  });
+  var mostrar = verTudo ? ordenadas : ordenadas.slice(0, 8);
+
+  return React.createElement("div", null,
+    React.createElement("div", { style: card },
+      React.createElement("div", { style: { fontWeight: 900, fontSize: 20, color: "#1A3A5C", marginBottom: 6 } }, "💾 C\xF3pia de seguran\xE7a"),
+      React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 18, maxWidth: 760 } }, "Descarrega um ficheiro com todas as tabelas da base de dados para este computador. Confere sempre o que trouxe antes de dizer que est\xE1 feita."),
+      React.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" } },
+        React.createElement("button", { onClick: correr, disabled: estado === "correr", style: { background: estado === "correr" ? "#94A3B8" : "#1A3A5C", color: "#fff", border: 0, borderRadius: 10, padding: "13px 22px", fontSize: 14, fontWeight: 800, cursor: estado === "correr" ? "default" : "pointer" } }, estado === "correr" ? "A copiar…" : "Descarregar c\xF3pia agora"),
+        React.createElement("button", { onClick: function() { setVerRestauro(!verRestauro); }, style: Object.assign({}, btnO, { borderRadius: 10, padding: "12px 18px", fontSize: 13 }) }, verRestauro ? "Fechar instru\xE7\xF5es" : "Como se restaura")
+      ),
+      estado === "correr" ? React.createElement("div", { style: { marginTop: 14 } },
+        React.createElement("div", { style: { fontSize: 13, color: "#1A3A5C", fontWeight: 700 } }, "Tabela " + (prog.feitas + 1) + " de " + prog.total + (prog.atual ? " · " + prog.atual : "")),
+        React.createElement("div", { style: { height: 8, background: "#E2EBF4", borderRadius: 999, marginTop: 8, overflow: "hidden" } },
+          React.createElement("div", { style: { height: 8, width: (prog.total ? Math.round(prog.feitas / prog.total * 100) : 0) + "%", background: "#1A3A5C", borderRadius: 999 } }))
+      ) : null,
+      (estado !== "correr" && ultima) ? React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 14 } },
+        "\xDAltima c\xF3pia neste dispositivo: ", React.createElement("b", null, quandoTxt(ultima.quando)),
+        " · " + ultima.tabelas + " tabelas · " + fmt(ultima.linhas) + " linhas · " + ultima.mb + " MB",
+        ultima.completo ? null : React.createElement("span", { style: { color: "#9C2A2A", fontWeight: 700 } }, " · estava incompleta")
+      ) : null,
+      (estado !== "correr" && !ultima) ? React.createElement("div", { style: { fontSize: 12, color: "#9C2A2A", fontWeight: 700, marginTop: 14 } }, "Ainda n\xE3o foi feita nenhuma c\xF3pia neste dispositivo.") : null,
+      verRestauro ? React.createElement("div", { style: { fontSize: 13, color: "#334155", background: "#F8FAFC", borderRadius: 8, padding: "13px 15px", marginTop: 14, lineHeight: 1.6 } },
+        "O ficheiro leva todas as linhas de todas as tabelas, em JSON. Para repor, o ficheiro tem de ser convertido em comandos de base de dados e corrido na Supabase \u2014 n\xE3o h\xE1 bot\xE3o de restauro de prop\xF3sito: um clique errado escrevia por cima de dados bons. Guarda o ficheiro fora deste computador (uma pasta na nuvem serve) e, se precisares de repor, traz o ficheiro para a conversa."
+      ) : null
+    ),
+    res ? React.createElement("div", { style: card },
+      React.createElement("div", { style: { borderRadius: 10, padding: "14px 16px", fontSize: 14, fontWeight: 800, background: res.completo ? "#E5F4E4" : "#FBEBEB", border: "1px solid " + (res.completo ? "#BBE3B8" : "#F3C9C9"), color: res.completo ? "#1E6B2A" : "#9C2A2A" } },
+        res.completo ? "\u2713 C\xF3pia completa \u2014 " + res.tabelas + " tabelas conferidas, " + fmt(res.linhas) + " linhas" : "\u2715 C\xF3pia incompleta \u2014 " + res.falhas + " tabela(s) falharam. N\xE3o contes com este ficheiro."),
+      React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 18, marginBottom: 14 } },
+        [["Tabelas", res.tabelas], ["Linhas guardadas", fmt(res.linhas)], ["Tamanho", res.mb + " MB"]].map(function(k) {
+          return React.createElement("div", { key: k[0], style: { background: "#F8FAFC", borderRadius: 10, padding: 14 } },
+            React.createElement("div", { style: { fontSize: 12, color: "#64748B", fontWeight: 600 } }, k[0]),
+            React.createElement("div", { style: { fontSize: 24, fontWeight: 900, color: "#1A3A5C", marginTop: 2 } }, k[1]));
+        })),
+      React.createElement("div", { style: { overflowX: "auto" } }, React.createElement("table", { style: { width: "100%", minWidth: 520, borderCollapse: "collapse" } },
+        React.createElement("thead", null, React.createElement("tr", null,
+          React.createElement("th", { style: th }, "Tabela"),
+          React.createElement("th", { style: Object.assign({}, th, { textAlign: "right" }) }, "Esperado"),
+          React.createElement("th", { style: Object.assign({}, th, { textAlign: "right" }) }, "Obtido"),
+          React.createElement("th", { style: th }, "Estado"))),
+        React.createElement("tbody", null, mostrar.map(function(l) {
+          return React.createElement("tr", { key: l.t, style: { background: l.estado === "conferido" ? "transparent" : "#FEF7F7" } },
+            React.createElement("td", { style: Object.assign({}, td, { fontWeight: l.estado === "conferido" ? 400 : 800 }) }, l.t),
+            React.createElement("td", { style: Object.assign({}, td, { textAlign: "right" }) }, fmt(l.esperado)),
+            React.createElement("td", { style: Object.assign({}, td, { textAlign: "right" }) }, fmt(l.obtido)),
+            React.createElement("td", { style: td }, tag(l.estado)));
+        }))
+      )),
+      ordenadas.length > 8 ? React.createElement("button", { onClick: function() { setVerTudo(!verTudo); }, style: Object.assign({}, btnX, { marginTop: 8, fontSize: 13 }) }, verTudo ? "Mostrar s\xF3 as primeiras" : "Ver as " + ordenadas.length + " tabelas") : null,
+      React.createElement("div", { style: { fontSize: 12, color: "#64748B", background: "#F8FAFC", borderRadius: 8, padding: "11px 13px", marginTop: 14, lineHeight: 1.5 } },
+        React.createElement("b", null, "As fotos e os documentos n\xE3o v\xE3o neste ficheiro."), " S\xE3o imagens guardadas fora da base de dados; o ficheiro leva os endere\xE7os delas, mas n\xE3o as imagens. Copiar as fotos \xE9 outro trabalho, e est\xE1 em lista.",
+        res.fonte === "lista fixa" ? React.createElement("div", { style: { marginTop: 8, color: "#8A6410", fontWeight: 700 } }, "Aten\xE7\xE3o: a lista de tabelas n\xE3o veio da base de dados, veio da lista gravada na app. Se houver tabelas criadas depois, podem n\xE3o estar nesta c\xF3pia.") : null)
+    ) : null
+  );
+}
 function AuditoriaQR() {
   const [aberturas, setAberturas] = useState([]);
   const [servicosDia, setServicosDia] = useState([]);
@@ -12361,10 +12545,11 @@ function Manager(props) {
     { k: "formacao", l: "Documentos RH" },
     { k: "gestores", l: "\u2699 Utilizadores" },
     { k: "armazem_qr", l: "\u{1F4E6} QR Armaz\xE9m" },
-    { k: "auditoria_qr", l: "\uD83D\uDD0D Auditoria QR" }
+    { k: "auditoria_qr", l: "\uD83D\uDD0D Auditoria QR" },
+    { k: "copia", l: "\uD83D\uDCBE C\xF3pia de seguran\xE7a" }
   ];
   const navItems = allNavItems.filter(function(i) {
-    if (i.k === "gestores" || i.k === "armazem_qr" || i.k === "auditoria_qr") return isDirector;
+    if (i.k === "gestores" || i.k === "armazem_qr" || i.k === "auditoria_qr" || i.k === "copia") return isDirector;
     return canSee(i.k);
   });
   return /* @__PURE__ */ React.createElement("div", { style: { background: "#F4F8FB", minHeight: "100vh", color: "#334155" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 220, background: "#1A3A5C", minHeight: "100vh", display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "14px 16px", borderBottom: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", gap: 10 } },
@@ -12452,7 +12637,7 @@ function Manager(props) {
         { key: "rating", label: "Avalia\xE7\xE3o" }
       ]));
     }, 1e3);
-  }, style: Object.assign({}, btnO, { fontSize: 12, padding: "8px 14px" }) }, "\u2B07 Backup CSV")), (function() {
+  }, style: Object.assign({}, btnO, { fontSize: 12, padding: "8px 14px" }) }, "\u2B07 Exportar CSV")), (function() {
     // LEMBRETES — tarefas de gestão que precisam de ti (estados, não dispensáveis)
     var ausenciasPorAprovar = pedidosPendentesLista.filter(function(p) { return p.tipo === "ausencia"; });
     var outrosPedidos = pedidosPendentesLista.filter(function(p) { return p.tipo !== "ausencia"; });
@@ -12773,7 +12958,7 @@ function Manager(props) {
     return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: i === 0 ? "#F59E0B" : i === 1 ? "#94A3B8" : "#CD7C54", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 11, flexShrink: 0 } }, i + 1), /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 30, color: ["#2E6DA4", "#0F766E", "#7C3AED", "#C2410C"][i] || "#64748B" }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, e.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, e.role)), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right" } }, rankingModo === "mes" ? (rMes ? /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end" } }, /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 900, fontSize: 15, color: "#2E6DA4" } }, rMes.media), /* @__PURE__ */ React.createElement("span", { style: { color: "#F59E0B" } }, "\u2605"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: "#94A3B8" } }, "(", rMes.count, ")")) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#CBD5E1", fontWeight: 700 } }, "Sem avalia\xE7\xF5es este m\xEAs")) : (rHist != null ? /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end" } }, /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 900, fontSize: 15, color: "#2E6DA4" } }, rHist), /* @__PURE__ */ React.createElement("span", { style: { color: "#F59E0B" } }, "\u2605")), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 2 } }, /* @__PURE__ */ React.createElement(Stars, { r: rHist }))) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#CBD5E1", fontWeight: 700 } }, "Sem avalia\xE7\xF5es"))));
   })))) : null, view === "quadro_op" ? /* @__PURE__ */ React.createElement(QuadroOperacional, null) : null, view === "notas_op" ? /* @__PURE__ */ React.createElement(NotasOperacionais, null) : null, view === "esquecimentos" ? /* @__PURE__ */ React.createElement(QuadroEsquecimentos, { gestor: gestor, mode: "full", onVoltar: function() { setView("home"); } }) : null, view === "finance" ? /* @__PURE__ */ React.createElement(Finance, null) : null, view === "routes" ? /* @__PURE__ */ React.createElement(Routes, null) : null, view === "clients" ? /* @__PURE__ */ React.createElement(Clients, { onIrParaFinance: function() { setView("finance"); } }) : null, view === "fornecedores" ? /* @__PURE__ */ React.createElement(Fornecedores, null) : null, view === "pedidos_colab" ? /* @__PURE__ */ React.createElement(PedidosColab, { onUpdate: function(n) {
     setPedidosColabPendentes(n);
-  } }) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "leads" ? /* @__PURE__ */ React.createElement(Leads, null) : null, view === "recrutamento" ? /* @__PURE__ */ React.createElement(Recrutamento, null) : null, view === "avaliacoes" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "formacao" ? /* @__PURE__ */ React.createElement(Formacao, null) : null, view === "relatorio" ? /* @__PURE__ */ React.createElement(RelatorioMensal, null) : null, view === "gestores" ? /* @__PURE__ */ React.createElement(GestoresAdmin, null) : null, view === "armazem_qr" ? /* @__PURE__ */ React.createElement(QRArmazem, null) : null, view === "auditoria_qr" ? /* @__PURE__ */ React.createElement(AuditoriaQR, null) : null, view === "stock" ? /* @__PURE__ */ React.createElement(Stock, { onIrParaFornecedores: function() { setView("fornecedores"); } }) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, { onIrCategorias: function() { setView("categorias"); } }) : null, view === "categorias" ? /* @__PURE__ */ React.createElement(GestaoCategorias, { onBack: function() { setView("employees"); } }) : null));
+  } }) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "leads" ? /* @__PURE__ */ React.createElement(Leads, null) : null, view === "recrutamento" ? /* @__PURE__ */ React.createElement(Recrutamento, null) : null, view === "avaliacoes" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "formacao" ? /* @__PURE__ */ React.createElement(Formacao, null) : null, view === "relatorio" ? /* @__PURE__ */ React.createElement(RelatorioMensal, null) : null, view === "gestores" ? /* @__PURE__ */ React.createElement(GestoresAdmin, null) : null, view === "armazem_qr" ? /* @__PURE__ */ React.createElement(QRArmazem, null) : null, view === "auditoria_qr" ? /* @__PURE__ */ React.createElement(AuditoriaQR, null) : null, view === "copia" ? /* @__PURE__ */ React.createElement(CopiaSeguranca, { gestor: gestor }) : null, view === "stock" ? /* @__PURE__ */ React.createElement(Stock, { onIrParaFornecedores: function() { setView("fornecedores"); } }) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, { onIrCategorias: function() { setView("categorias"); } }) : null, view === "categorias" ? /* @__PURE__ */ React.createElement(GestaoCategorias, { onBack: function() { setView("employees"); } }) : null));
 }
 function EmpPedidos(props) {
   const empId = props.empId;
