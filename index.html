@@ -8681,6 +8681,11 @@ function AuditoriaQR() {
   const [filtroCliente, setFiltroCliente] = useState("");
   const [periodoPlacas, setPeriodoPlacas] = useState("7");
   const [secaoAud, setSecaoAud] = useState("clientes");
+  const [portalEv, setPortalEv] = useState([]);
+  const [contactosAud, setContactosAud] = useState([]);
+  const [clientesAud, setClientesAud] = useState([]);
+  const [periodoPortal, setPeriodoPortal] = useState("mes");
+  const [clientePortalSel, setClientePortalSel] = useState(null);
   const [entradasDash, setEntradasDash] = useState([]);
   const [colabDetalhe, setColabDetalhe] = useState(null);
   useEffect(function() {
@@ -8688,10 +8693,16 @@ function AuditoriaQR() {
   }, []);
   useEffect(function() {
     Promise.all([
-      db.list("qr_aberturas", "?select=*&order=aberto_em.desc&limit=1000"),
+      db.list("qr_aberturas", "?select=*&or=(tipo.is.null,tipo.not.like.portal_*)&order=aberto_em.desc&limit=1000"),
       db.list("servicos", "?select=id,client_id,cn,date,check_in,check_out&order=date.desc&limit=1000"),
-      db.list("leads", "?select=id,origem_cliente_id,origem_cliente_nome,created_at&order=created_at.desc&limit=1000")
+      db.list("leads", "?select=id,origem_cliente_id,origem_cliente_nome,created_at&order=created_at.desc&limit=1000"),
+      db.list("qr_aberturas", "?select=*&tipo=like.portal_*&order=aberto_em.desc"),
+      db.list("client_contacts", "?select=client_id,name"),
+      db.list("clientes", "?select=id,name,ativo")
     ]).then(function(res) {
+      setPortalEv(res[3] || []);
+      setContactosAud(res[4] || []);
+      setClientesAud(res[5] || []);
       setAberturas(res[0] || []);
       setServicosDia(res[1] || []);
       setLeads(res[2] || []);
@@ -8766,10 +8777,115 @@ function AuditoriaQR() {
     garantir(l.origem_cliente_nome).leads++;
   });
   var placaLista = Object.keys(placaStats).map(function(k) { return placaStats[k]; }).filter(function(p) { return p.intencaoCliente > 0 || p.intencaoCandidato > 0 || p.leads > 0; }).sort(function(a, b) { return (b.intencaoCliente + b.intencaoCandidato + b.leads) - (a.intencaoCliente + a.intencaoCandidato + a.leads); });
+  // ===== Secção "Portal do cliente": quem entrou, quantas vezes e a fazer o quê =====
+  function renderPortal() {
+    var h = React.createElement;
+    var agora = new Date();
+    var desde = periodoPortal === "mes" ? localDateStr(new Date(agora.getFullYear(), agora.getMonth(), 1)) : periodoPortal === "3m" ? localDateStr(new Date(agora.getFullYear(), agora.getMonth() - 2, 1)) : "0000-00-00";
+    var evs = portalEv.filter(function(e) { return (e.aberto_em || "").slice(0, 10) >= desde; });
+    var TABS = { home: "Início", upcoming: "Próximos serviços", history: "Histórico", fotos: "Fotos", notas: "Notas", extra: "Pedir extra", avaliar: "Avaliar" };
+    function quando(iso) {
+      if (!iso) return "—";
+      var d = new Date(iso); if (isNaN(d)) return "—";
+      var hm = d.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
+      if (localDateStr(d) === localDateStr(agora)) return "Hoje, " + hm;
+      return d.toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) + ", " + hm;
+    }
+    function frase(e) {
+      var quem = e.contacto || "Contacto";
+      if (e.tipo === "portal_login") return quem + " entrou";
+      if (e.tipo === "portal_ver") return quem + " viu " + (TABS[e.detalhe] || e.detalhe || "um separador");
+      if (e.tipo === "portal_avaliou") return quem + " avaliou" + (e.detalhe ? " (" + e.detalhe + ")" : "");
+      if (e.tipo === "portal_pedido_extra") return quem + " pediu um extra" + (e.detalhe ? " (" + e.detalhe + ")" : "");
+      return quem + " · " + e.tipo;
+    }
+    var porCli = {};
+    evs.forEach(function(e) {
+      var k = String(e.client_id || e.client_nome || "?");
+      if (!porCli[k]) porCli[k] = { id: k, nome: e.client_nome || "—", logins: 0, pessoas: {}, ultima: "", vistos: {}, aval: 0, extras: 0, evs: [] };
+      var c = porCli[k];
+      c.evs.push(e);
+      var pn = e.contacto || "Contacto";
+      if (!c.pessoas[pn]) c.pessoas[pn] = { nome: pn, logins: 0, ultima: "", aval: 0, extras: 0 };
+      var pp = c.pessoas[pn];
+      if (e.tipo === "portal_login") { c.logins++; pp.logins++; if ((e.aberto_em || "") > c.ultima) c.ultima = e.aberto_em; if ((e.aberto_em || "") > pp.ultima) pp.ultima = e.aberto_em; }
+      else if (e.tipo === "portal_ver") { if (e.detalhe) c.vistos[e.detalhe] = (c.vistos[e.detalhe] || 0) + 1; }
+      else if (e.tipo === "portal_avaliou") { c.aval++; pp.aval++; }
+      else if (e.tipo === "portal_pedido_extra") { c.extras++; pp.extras++; }
+    });
+    var lista = Object.keys(porCli).map(function(k) { return porCli[k]; }).sort(function(a, b) { return b.logins - a.logins || (b.ultima > a.ultima ? 1 : -1); });
+    function maisVisto(c) { var best = null; Object.keys(c.vistos).forEach(function(k) { if (k !== "home" && (!best || c.vistos[k] > c.vistos[best])) best = k; }); return best ? (TABS[best] || best) : "—"; }
+    function fez(o) { var p = []; if (o.aval) p.push(o.aval + (o.aval === 1 ? " avaliação" : " avaliações")); if (o.extras) p.push(o.extras + (o.extras === 1 ? " pedido extra" : " pedidos extra")); return p.length ? p.join(", ") : "Só consultou"; }
+    var temContacto = {}; contactosAud.forEach(function(c) { temContacto[String(c.client_id)] = true; });
+    var comPortal = clientesAud.filter(function(c) { return c.ativo !== false && temContacto[String(c.id)]; });
+    var entraram = lista.filter(function(c) { return c.logins > 0; });
+    var nunca = comPortal.filter(function(c) { return !(porCli[String(c.id)] && porCli[String(c.id)].logins > 0); }).sort(function(a, b) { return (a.name || "").localeCompare(b.name || ""); });
+    var totLogins = entraram.reduce(function(s2, c) { return s2 + c.logins; }, 0);
+    var pessoasSet = {}; evs.forEach(function(e) { if (e.tipo === "portal_login") pessoasSet[(e.client_id || "") + "|" + (e.contacto || "Contacto")] = 1; });
+    var totAval = lista.reduce(function(s2, c) { return s2 + c.aval; }, 0);
+    var totExtras = lista.reduce(function(s2, c) { return s2 + c.extras; }, 0);
+    var sel = clientePortalSel ? porCli[clientePortalSel] : null;
+    var th = { textAlign: "left", padding: "8px 10px", fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", borderBottom: "2px solid #E2EBF4" };
+    var td = { padding: "10px", fontSize: 13, borderBottom: "1px solid #F1F5F9", color: "#1A3A5C" };
+    function kpi(label, valor, sub) { return h("div", { style: Object.assign({}, card, { padding: 16 }) }, h("div", { style: { fontSize: 12, color: "#64748B", fontWeight: 600 } }, label), h("div", { style: { fontSize: 26, fontWeight: 900, color: "#1A3A5C", marginTop: 4 } }, valor), h("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, sub)); }
+    return h("div", null,
+      h("div", { style: { display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" } }, [["mes", "Este mês"], ["3m", "3 meses"], ["sempre", "Sempre"]].map(function(op) {
+        var at = periodoPortal === op[0];
+        return h("button", { key: op[0], onClick: function() { setPeriodoPortal(op[0]); }, style: { background: at ? "#1A3A5C" : "#fff", color: at ? "#fff" : "#1A3A5C", border: "1.5px solid " + (at ? "#1A3A5C" : "#E2EBF4"), borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" } }, op[1]);
+      })),
+      h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 16 } },
+        kpi("Clientes que entraram", entraram.length + " de " + comPortal.length, comPortal.length ? Math.round(entraram.length / comPortal.length * 100) + "% dos clientes com portal" : "sem clientes com contactos"),
+        kpi("Entradas", totLogins, "de " + Object.keys(pessoasSet).length + (Object.keys(pessoasSet).length === 1 ? " pessoa" : " pessoas")),
+        kpi("Avaliações feitas", totAval, "pelo portal"),
+        kpi("Pedidos extra", totExtras, "vindos do portal")
+      ),
+      h("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
+        h("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 10 } }, "Por empresa"),
+        lista.length === 0 ? h("div", { style: { fontSize: 13, color: "#64748B", padding: "8px 0" } }, "Ainda sem actividade registada neste período. O registo começa a contar a partir da publicação desta versão.") :
+        h("div", { style: { overflowX: "auto" } }, h("table", { style: { width: "100%", minWidth: 640, borderCollapse: "collapse" } },
+          h("thead", null, h("tr", null, h("th", { style: th }, "Cliente"), h("th", { style: Object.assign({}, th, { textAlign: "right" }) }, "Entradas"), h("th", { style: Object.assign({}, th, { textAlign: "right" }) }, "Pessoas"), h("th", { style: th }, "Última entrada"), h("th", { style: th }, "O que mais vê"), h("th", { style: th }, "O que fez"))),
+          h("tbody", null, lista.map(function(c) {
+            var ativo = clientePortalSel === c.id;
+            return h("tr", { key: c.id, onClick: function() { setClientePortalSel(ativo ? null : c.id); }, style: { cursor: "pointer", background: ativo ? "#EFF6FF" : "transparent" } },
+              h("td", { style: Object.assign({}, td, { fontWeight: 800 }) }, c.nome),
+              h("td", { style: Object.assign({}, td, { textAlign: "right", fontWeight: 800 }) }, c.logins),
+              h("td", { style: Object.assign({}, td, { textAlign: "right" }) }, Object.keys(c.pessoas).length),
+              h("td", { style: td }, quando(c.ultima)),
+              h("td", { style: td }, maisVisto(c)),
+              h("td", { style: td }, fez(c)));
+          }))
+        )),
+        lista.length > 0 ? h("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 8 } }, "Carrega numa empresa para ver por pessoa.") : null
+      ),
+      sel ? h("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
+        h("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 10 } }, sel.nome + " · por pessoa"),
+        h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 20 } },
+          h("div", null, Object.keys(sel.pessoas).map(function(k) { return sel.pessoas[k]; }).sort(function(a, b) { return b.logins - a.logins; }).map(function(pp) {
+            return h("div", { key: pp.nome, style: { display: "flex", justifyContent: "space-between", gap: 10, padding: "9px 0", borderTop: "1px solid #F1F5F9" } },
+              h("div", null, h("div", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, pp.nome), h("div", { style: { fontSize: 12, color: "#64748B" } }, "Última entrada: " + quando(pp.ultima))),
+              h("div", { style: { textAlign: "right" } }, h("div", { style: { fontSize: 13, fontWeight: 800, color: "#1A3A5C" } }, pp.logins + (pp.logins === 1 ? " entrada" : " entradas")), h("div", { style: { fontSize: 12, color: "#64748B" } }, fez(pp))));
+          })),
+          h("div", null,
+            h("div", { style: { fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 6 } }, "Últimas acções"),
+            sel.evs.slice().sort(function(a, b) { return (b.aberto_em || "") > (a.aberto_em || "") ? 1 : -1; }).slice(0, 15).map(function(e, i) {
+              return h("div", { key: i, style: { fontSize: 13, color: "#1A3A5C", padding: "4px 0" } }, h("span", { style: { color: "#64748B" } }, quando(e.aberto_em)), " · " + frase(e));
+            })
+          )
+        )
+      ) : null,
+      h("div", { style: card },
+        h("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 4 } }, "Ainda não entraram neste período"),
+        h("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 10 } }, nunca.length === 0 ? "Todos os clientes com portal entraram." : nunca.length + (nunca.length === 1 ? " cliente com contactos no portal e nenhuma entrada." : " clientes com contactos no portal e nenhuma entrada.")),
+        h("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } }, nunca.map(function(c) {
+          return h("span", { key: c.id, style: { fontSize: 12, fontWeight: 600, padding: "5px 11px", borderRadius: 999, background: "#F1F5F9", color: "#334155" } }, c.name);
+        }))
+      )
+    );
+  }
   return /* @__PURE__ */ React.createElement("div", null,
     /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 900, fontSize: 20, color: "#1A3A5C", marginBottom: 6 } }, "\uD83D\uDD0D Auditoria QR"),
     /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 18 } }, "Por cliente e por colaborador \u2014 quem acedeu ao qu\xEA."),
-    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 18 } }, [["clientes", "\uD83D\uDCCD Clientes"], ["colaboradores", "\uD83D\uDC65 Colaboradores"]].map(function(op) {
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 18 } }, [["clientes", "\uD83D\uDCCD Clientes"], ["colaboradores", "\uD83D\uDC65 Colaboradores"], ["portal", "\uD83D\uDCF1 Portal do cliente"]].map(function(op) {
       var ativa = secaoAud === op[0];
       return /* @__PURE__ */ React.createElement("button", { key: op[0], onClick: function() { setSecaoAud(op[0]); }, style: { background: ativa ? "#1A3A5C" : "#fff", color: ativa ? "#fff" : "#64748B", border: "1.5px solid " + (ativa ? "#1A3A5C" : "#E2EBF4"), borderRadius: 10, padding: "8px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer" } }, op[1]);
     })),
@@ -8820,6 +8936,7 @@ function AuditoriaQR() {
         }))
       );
     })(),
+    secaoAud === "portal" && renderPortal(),
     secaoAud === "clientes" && /* @__PURE__ */ React.createElement("div", null,
     /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, background: "#F5F3FF", border: "1px solid #DDD6FE" }) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#7C3AED", marginBottom: 6 } }, "Cliente: a que horas o link foi aberto vs entrada e sa\xEDda reais no servi\xE7o. Serve para detectar quando abriram o link muito antes ou depois de estarem no local."),
     /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { marginBottom: 20, background: "#F5F3FF", border: "1.5px solid #DDD6FE" }) },
@@ -14121,6 +14238,17 @@ function ClientPortal(props) {
       });
     }
   }, [clientId]);
+  // Regista a actividade do cliente no portal (entradas, separadores vistos, acções) para a auditoria.
+  // Nunca bloqueia o portal: se a base de dados recusar os campos novos, grava só o essencial.
+  function registarPortal(tipo, detalhe, nomeContacto) {
+    try {
+      if (!clientId) return;
+      var base = { client_id: clientId, client_nome: client ? client.name : null, tipo: tipo };
+      var cheio = Object.assign({}, base, { contacto: nomeContacto || (currentContact ? currentContact.name : null), detalhe: detalhe || null });
+      var enviar = function(d) { return fetch(SUPABASE_URL + "/rest/v1/rpc/portal_insert", { method: "POST", headers: dbHeaders(), body: JSON.stringify({ p_tabela: "qr_aberturas", p_dados: d }), keepalive: true }); };
+      enviar(cheio).then(function(r) { if (!r.ok) return enviar(base); }).catch(function() {});
+    } catch (e) {}
+  }
   function registarIntencao(tipo) {
     try {
       fetch(SUPABASE_URL + "/rest/v1/rpc/portal_insert", {
@@ -14164,6 +14292,7 @@ function ClientPortal(props) {
           } catch (e) { match = null; }
           if (match) {
             setCurrentContact(match);
+            registarPortal("portal_login", null, match.name);
             setPhase("client-portal");
             setPinErr(false);
             setPin("");
@@ -14282,6 +14411,11 @@ function ClientPortal(props) {
           await db.update("funcionarios", eid, { rating: Math.round(avg * 10) / 10 });
         }
       }
+      (function() {
+        var vals = (job.team || []).map(function(eid) { return ratings[eid]; }).filter(function(v) { return v > 0; });
+        var media = vals.length ? Math.round(vals.reduce(function(a, b) { return a + b; }, 0) / vals.length * 10) / 10 : null;
+        registarPortal("portal_avaliou", "serviço de " + (job.date || "") + (media ? ", " + media + " estrelas" : ""));
+      })();
       setRateDone(true);
       setTimeout(function() {
         setShowRate(null);
@@ -14309,6 +14443,7 @@ function ClientPortal(props) {
     } });
     if (inserted) {
       setMeusPedidosExtra(function(p) { return [inserted].concat(p); });
+      registarPortal("portal_pedido_extra", extraSel || null);
       setExtraSent(true);
       setTimeout(function() {
         setExtraSent(false);
@@ -14734,6 +14869,7 @@ function ClientPortal(props) {
   ))), tab === "fotos" && /* @__PURE__ */ React.createElement(ClientFotosTab, { clientId }), tab === "notas" && (temAvaliacoesPendentes ? blocoAvaliarPrimeiro() : /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 6 } }, "Deixar uma Nota"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 16, lineHeight: 1.6 } }, "As suas notas s\xE3o enviadas directamente ao gestor e ficam vis\xEDveis na ficha da sua empresa durante 30 dias."), /* @__PURE__ */ React.createElement(NotaForm, { clientId, currentContact })))), /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 500, background: "#fff", borderTop: "1px solid #E2EBF4", display: "flex", zIndex: 50 } }, tabs.map(function(t) {
     return /* @__PURE__ */ React.createElement("button", { key: t.k, onClick: function() {
       setTab(t.k);
+      registarPortal("portal_ver", t.k);
       if (t.k === "extra" && extraRespondidos > 0) {
         setExtraRespondidos(0);
         var idsParaMarcar = meusPedidosExtra.filter(function(p) { return p.status !== "pendente" && !p.visto_cliente; }).map(function(p) { return p.id; });
