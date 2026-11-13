@@ -36,13 +36,65 @@ let SC_AUTH_TOKEN = null;
 if (supabaseRT && supabaseRT.auth) {
   try {
     supabaseRT.auth.getSession().then(function (r) {
-      try { SC_AUTH_TOKEN = (r && r.data && r.data.session && r.data.session.access_token) || null; } catch (e) {}
+      try { SC_AUTH_TOKEN = (r && r.data && r.data.session && r.data.session.access_token) || null; if (SC_AUTH_TOKEN) SC_TINHA_SESSAO = true; } catch (e) {}
     });
     supabaseRT.auth.onAuthStateChange(function (_event, session) {
       SC_AUTH_TOKEN = (session && session.access_token) || null;
+      if (SC_AUTH_TOKEN) { SC_TINHA_SESSAO = true; __scBannerSessao(false); }
+      else if (SC_TINHA_SESSAO) { __scBannerSessao(true); }
     });
   } catch (e) {}
 }
+// --- Vigia da sessao de gestao (13/Nov) ---
+// Quando a sessao de gestao expira ou se perde, a Supabase NAO devolve erro nas tabelas
+// protegidas: devolve lista vazia. A app ficava a parecer sem dados (desapareceram os
+// fornecedores no Stock) e, pior, uma gravacao podia ser recusada sem aviso.
+// Esta vigia renova a sessao a cada dois minutos e quando se volta ao separador; se ja
+// nao houver sessao, poe uma faixa vermelha em vez de deixar ecras vazios sem explicacao.
+let SC_TINHA_SESSAO = false;
+function __scBannerSessao(mostrar) {
+  try {
+    var j = document.getElementById("sc-aviso-sessao");
+    if (!mostrar) { if (j) j.remove(); return; }
+    if (j) return;
+    var d = document.createElement("div");
+    d.id = "sc-aviso-sessao";
+    d.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:99999;background:#9C2A2A;color:#fff;padding:12px 16px;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;font:700 14px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.25)";
+    var t = document.createElement("span");
+    t.textContent = "A tua sessão expirou. A app deixou de ver parte dos teus dados — volta a entrar antes de gravares qualquer coisa.";
+    var b = document.createElement("button");
+    b.textContent = "Entrar outra vez";
+    b.style.cssText = "background:#fff;color:#9C2A2A;border:0;border-radius:8px;padding:8px 14px;font-weight:800;cursor:pointer";
+    b.onclick = function () {
+      try { if (supabaseRT && supabaseRT.auth) supabaseRT.auth.signOut(); } catch (e) {}
+      try { window.location.reload(); } catch (e) {}
+    };
+    d.appendChild(t); d.appendChild(b);
+    document.body.appendChild(d);
+  } catch (e) {}
+}
+async function __scVigiarSessao() {
+  try {
+    if (!supabaseRT || !supabaseRT.auth) return;
+    if (!SC_TINHA_SESSAO) return;
+    var r = await supabaseRT.auth.getSession();
+    var ses = r && r.data && r.data.session;
+    var tok = ses && ses.access_token;
+    if (tok) {
+      SC_AUTH_TOKEN = tok;
+      var expMs = ses.expires_at ? ses.expires_at * 1000 : 0;
+      __scBannerSessao(!!expMs && expMs <= Date.now());
+    } else {
+      SC_AUTH_TOKEN = null;
+      __scBannerSessao(true);
+    }
+  } catch (e) {}
+}
+try {
+  setInterval(__scVigiarSessao, 120000);
+  window.addEventListener("focus", __scVigiarSessao);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) __scVigiarSessao(); });
+} catch (e) {}
 function dbHeaders(extra) {
   const h = {
     "apikey": SUPABASE_KEY,
@@ -8672,6 +8724,52 @@ function StockAnalise(props) {
   );
 }
 
+// ===== Encolher fotos antes de carregar =====
+// As fotos vinham do telemovel em resolucao maxima: 164 fotos pesavam 464 MB (media 2,8 MB).
+// Isso enche o armazenamento, torna o portal do cliente lento em dados moveis e impede
+// qualquer copia de seguranca das imagens. Passam a 1600 pontos no lado maior, JPEG a 82%,
+// o que da ~300 KB e continua a mostrar perfeitamente se um canto ficou sujo.
+// Regra: se algo correr mal, devolve-se o ficheiro original. Nunca impedir o carregamento.
+const FOTO_LADO_MAX = 1600;
+const FOTO_QUALIDADE = 0.82;
+async function encolherFoto(file) {
+  try {
+    if (!file || !file.type || file.type.indexOf("image/") !== 0) return file;
+    if (file.type === "image/gif") return file;
+    if (file.size && file.size < 400 * 1024) return file;
+    var bmp = null;
+    try { bmp = await createImageBitmap(file, { imageOrientation: "from-image" }); }
+    catch (e1) { try { bmp = await createImageBitmap(file); } catch (e2) { bmp = null; } }
+    var w, h, fonte, urlTemp = null;
+    if (bmp) { w = bmp.width; h = bmp.height; fonte = bmp; }
+    else {
+      urlTemp = URL.createObjectURL(file);
+      fonte = await new Promise(function (ok, falha) {
+        var img = new Image();
+        img.onload = function () { ok(img); };
+        img.onerror = function () { falha(new Error("imagem ilegivel")); };
+        img.src = urlTemp;
+      });
+      w = fonte.naturalWidth; h = fonte.naturalHeight;
+    }
+    if (!w || !h) { if (bmp) bmp.close(); if (urlTemp) URL.revokeObjectURL(urlTemp); return file; }
+    var escala = Math.min(1, FOTO_LADO_MAX / Math.max(w, h));
+    if (escala >= 1 && file.size < 1200 * 1024) { if (bmp) bmp.close(); if (urlTemp) URL.revokeObjectURL(urlTemp); return file; }
+    var cv = document.createElement("canvas");
+    cv.width = Math.max(1, Math.round(w * escala));
+    cv.height = Math.max(1, Math.round(h * escala));
+    var ctx = cv.getContext("2d");
+    ctx.drawImage(fonte, 0, 0, cv.width, cv.height);
+    if (bmp) bmp.close();
+    if (urlTemp) URL.revokeObjectURL(urlTemp);
+    var blob = await new Promise(function (ok) { cv.toBlob(ok, "image/jpeg", FOTO_QUALIDADE); });
+    if (!blob || !blob.size || blob.size >= file.size) return file;
+    var nome = String(file.name || "foto").replace(/\.[^.]+$/, "") + ".jpg";
+    try { console.log("Foto encolhida:", Math.round(file.size / 1024) + " KB ->", Math.round(blob.size / 1024) + " KB"); } catch (e) {}
+    try { return new File([blob], nome, { type: "image/jpeg" }); }
+    catch (e) { try { blob.name = nome; } catch (e2) {} return blob; }
+  } catch (e) { return file; }
+}
 // ===== Copia de seguranca da base de dados =====
 // Le TODAS as tabelas, confere o numero de linhas contra o que a base diz ter, e so
 // depois diz que esta feita. Uma copia que falhe em silencio e pior do que nenhuma.
@@ -13775,7 +13873,7 @@ function Employee(props) {
         var novas = [];
         var falhas = 0;
         for (var fi = 0; fi < files.length; fi++) {
-          var file = files[fi];
+          var file = await encolherFoto(files[fi]);
           var ext = (file.name || "").split(".").pop() || "jpg";
           var fname = "svc_" + fotosJob.id + "_" + Date.now() + "_" + fi + "." + ext;
           try {
@@ -14078,9 +14176,10 @@ function ClientFotosTab(props) {
   const [uploading, setUploading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   async function handleUpload(e) {
-    const file = e.target.files[0];
-    if (!file) return;
+    const ficheiroOriginal = e.target.files[0];
+    if (!ficheiroOriginal) return;
     setUploading(true);
+    const file = await encolherFoto(ficheiroOriginal);
     const fname = "cli_" + clientId + "_" + Date.now() + ".jpg";
     const upRes = await fetch(SUPABASE_URL + "/storage/v1/object/fotos/" + fname, {
       method: "POST",
@@ -15132,6 +15231,8 @@ function ManagerLogin(props) {
       // definir o crachá PRIMEIRO, para a leitura do perfil ir ja autenticada
       // (assim podemos trancar a tabela gestores so para autenticados sem partir o login).
       SC_AUTH_TOKEN = __auth.data.session.access_token;
+      SC_TINHA_SESSAO = true;
+      __scBannerSessao(false);
       // email=ilike.<x> faz correspondencia sem ligar a maiusculas/minusculas.
       var __pr = await fetch(SUPABASE_URL + "/rest/v1/gestores?select=*&email=ilike." + encodeURIComponent(__em), { headers: dbHeaders() });
       rows = __pr.ok ? await __pr.json() : [];
@@ -15318,6 +15419,8 @@ function App() {
   if (mod === "manager") return /* @__PURE__ */ React.createElement(Manager, { gestor, onExit: function() {
     try { if (supabaseRT && supabaseRT.auth) { supabaseRT.auth.signOut(); } } catch (e) {}
     SC_AUTH_TOKEN = null;
+    SC_TINHA_SESSAO = false;
+    __scBannerSessao(false);
     setGestor(null);
     setMod("sel");
   } });
