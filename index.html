@@ -45,6 +45,103 @@ if (supabaseRT && supabaseRT.auth) {
     });
   } catch (e) {}
 }
+// --- Avisos de dados (13/Nov) ---
+// Ate aqui, uma leitura que falhasse devolvia lista vazia e uma gravacao que falhasse
+// nao dizia nada. Os ecras mostravam zeros como se fossem a verdade. Agora toda a falha
+// fica registada num so sitio e aparece numa faixa no topo: leituras em ambar (os numeros
+// podem estar incompletos), gravacoes em vermelho (pode nao ter ficado registado).
+// Quem chama nao muda nada: db.list continua a devolver sempre um array.
+const __SC_AVISOS = { leituras: new Map(), escritas: [] };
+function __scBarras() {
+  var c = document.getElementById("sc-barras");
+  if (!c) {
+    c = document.createElement("div");
+    c.id = "sc-barras";
+    c.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:99999;display:flex;flex-direction:column";
+    document.body.appendChild(c);
+  }
+  return c;
+}
+function __scTabelaDe(url) {
+  try {
+    var r = String(url).split("/rest/v1/")[1] || "";
+    if (r.indexOf("rpc/") === 0) return "função " + r.slice(4).split("?")[0];
+    return r.split("?")[0] || "base de dados";
+  } catch (e) { return "base de dados"; }
+}
+function __scRegistarFalhaLeitura(tabela, motivo) {
+  try {
+    var a = __SC_AVISOS.leituras.get(tabela) || { tabela: tabela, vezes: 0 };
+    a.vezes++; a.motivo = motivo; a.quando = new Date();
+    __SC_AVISOS.leituras.set(tabela, a);
+    console.warn("Leitura falhou:", tabela, motivo);
+    __scPintarAvisos();
+  } catch (e) {}
+}
+function __scLimparFalhaLeitura(tabela) {
+  try { if (__SC_AVISOS.leituras.delete(tabela)) __scPintarAvisos(); } catch (e) {}
+}
+function __scRegistarFalhaEscrita(tabela, motivo) {
+  try {
+    __SC_AVISOS.escritas.push({ tabela: tabela, motivo: motivo, quando: new Date() });
+    if (__SC_AVISOS.escritas.length > 20) __SC_AVISOS.escritas.shift();
+    console.error("Gravação falhou:", tabela, motivo);
+    __scPintarAvisos();
+  } catch (e) {}
+}
+function __scPintarAvisos() {
+  try {
+    var velho = document.getElementById("sc-aviso-dados");
+    if (velho) velho.remove();
+    var escritas = __SC_AVISOS.escritas;
+    var leituras = Array.from(__SC_AVISOS.leituras.values());
+    var mostrarLeituras = SC_TINHA_SESSAO && leituras.length > 0;
+    if (escritas.length === 0 && !mostrarLeituras) return;
+    var grave = escritas.length > 0;
+    var d = document.createElement("div");
+    d.id = "sc-aviso-dados";
+    d.style.cssText = "background:" + (grave ? "#9C2A2A" : "#8A6410") + ";color:#fff;padding:11px 16px;font:600 13px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.2)";
+    var topo = document.createElement("div");
+    topo.style.cssText = "display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap";
+    var t = document.createElement("span");
+    t.style.fontWeight = "800";
+    if (grave) {
+      t.textContent = escritas.length === 1
+        ? "Uma gravação não ficou registada. Confirma antes de seguires."
+        : escritas.length + " gravações não ficaram registadas. Confirma antes de seguires.";
+    } else {
+      t.textContent = leituras.length === 1
+        ? "Uma leitura falhou — os números nesta página podem estar incompletos."
+        : leituras.length + " leituras falharam — os números nesta página podem estar incompletos.";
+    }
+    topo.appendChild(t);
+    var bDet = document.createElement("button");
+    bDet.textContent = "Ver detalhe";
+    bDet.style.cssText = "background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer";
+    var det = document.createElement("div");
+    det.style.cssText = "display:none;max-width:900px;margin:10px auto 0;background:rgba(0,0,0,.18);border-radius:8px;padding:10px 12px;font-weight:600";
+    var itens = (grave ? escritas : leituras).slice(-6);
+    itens.forEach(function (x) {
+      var l = document.createElement("div");
+      var hora = "";
+      try { hora = x.quando.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }); } catch (e) {}
+      l.textContent = "· " + x.tabela + " — " + (x.motivo || "falhou") + (hora ? " · " + hora : "") + (x.vezes > 1 ? " · " + x.vezes + " vezes" : "");
+      det.appendChild(l);
+    });
+    bDet.onclick = function () { det.style.display = det.style.display === "none" ? "block" : "none"; };
+    topo.appendChild(bDet);
+    var bAcc = document.createElement("button");
+    bAcc.textContent = grave ? "Já vi" : "Tentar outra vez";
+    bAcc.style.cssText = "background:#fff;color:" + (grave ? "#9C2A2A" : "#8A6410") + ";border:0;border-radius:8px;padding:7px 14px;font-weight:800;cursor:pointer";
+    bAcc.onclick = function () {
+      if (grave) { __SC_AVISOS.escritas.length = 0; __scPintarAvisos(); }
+      else { try { __dbClearCache(); __dbInflight.clear(); } catch (e) {} try { window.location.reload(); } catch (e) {} }
+    };
+    topo.appendChild(bAcc);
+    d.appendChild(topo); d.appendChild(det);
+    __scBarras().appendChild(d);
+  } catch (e) {}
+}
 // --- Vigia da sessao de gestao (13/Nov) ---
 // Quando a sessao de gestao expira ou se perde, a Supabase NAO devolve erro nas tabelas
 // protegidas: devolve lista vazia. A app ficava a parecer sem dados (desapareceram os
@@ -59,7 +156,7 @@ function __scBannerSessao(mostrar) {
     if (j) return;
     var d = document.createElement("div");
     d.id = "sc-aviso-sessao";
-    d.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:99999;background:#9C2A2A;color:#fff;padding:12px 16px;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;font:700 14px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.25)";
+    d.style.cssText = "background:#9C2A2A;color:#fff;padding:12px 16px;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;font:700 14px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.25)";
     var t = document.createElement("span");
     t.textContent = "A tua sessão expirou. A app deixou de ver parte dos teus dados — volta a entrar antes de gravares qualquer coisa.";
     var b = document.createElement("button");
@@ -70,7 +167,7 @@ function __scBannerSessao(mostrar) {
       try { window.location.reload(); } catch (e) {}
     };
     d.appendChild(t); d.appendChild(b);
-    document.body.appendChild(d);
+    __scBarras().insertBefore(d, __scBarras().firstChild);
   } catch (e) {}
 }
 async function __scVigiarSessao() {
@@ -127,9 +224,23 @@ function __dbClearCache() { __dbCache.clear(); }
       const url = typeof input === "string" ? input : (input && input.url) || "";
       escrita = metodo !== "GET" && metodo !== "HEAD" && url.indexOf(SUPABASE_URL + "/rest/v1/") === 0;
     } catch (e) {}
-    if (!escrita) return __fetchOrig(input, init);
-    __dbClearCache(); __dbInflight.clear();
-    return __fetchOrig(input, init).then(function(r) { __dbClearCache(); __dbInflight.clear(); return r; });
+    let urlPedido = "", silencioso = false;
+    try {
+      urlPedido = typeof input === "string" ? input : (input && input.url) || "";
+      silencioso = !!(init && init.scSilencioso);
+    } catch (e) {}
+    if (escrita) { __dbClearCache(); __dbInflight.clear(); }
+    return __fetchOrig(input, init).then(function(r) {
+      try {
+        if (escrita) { __dbClearCache(); __dbInflight.clear(); }
+        if (r && r.status === 401 && String(urlPedido).indexOf(SUPABASE_URL) === 0) { __scVigiarSessao(); }
+        else if (escrita && r && !r.ok && !silencioso) { __scRegistarFalhaEscrita(__scTabelaDe(urlPedido), "o servidor respondeu " + r.status); }
+      } catch (e) {}
+      return r;
+    }, function(err) {
+      try { if (escrita && !silencioso) __scRegistarFalhaEscrita(__scTabelaDe(urlPedido), "sem liga\xE7\xE3o"); } catch (e) {}
+      throw err;
+    });
   };
 })();
 // --- Paginacao automatica ---
@@ -161,7 +272,7 @@ async function __dbPaginar(table, q, primeira) {
       var antes = todas.length;
       if (antes % __DB_PAGE !== 0) break;
       var pg = await __dbGetPage(table, base + "&offset=" + antes);
-      if (!pg) { console.warn("db.list: falhou um lote de", table, "- devolvidas", antes, "linhas"); break; }
+      if (!pg) { console.warn("db.list: falhou um lote de", table, "- devolvidas", antes, "linhas"); __scRegistarFalhaLeitura(table, "faltou um lote (tem mais do que " + antes + " linhas)"); break; }
       if (pg.length === 0) break;
       todas = todas.concat(pg);
       if (pg.length < __DB_PAGE) break;
@@ -180,14 +291,18 @@ const db = {
         const url = SUPABASE_URL + "/rest/v1/" + table + (query || "?select=*");
         const res = await fetch(url, { headers: dbHeaders() });
         if (!res.ok) {
-          console.error("db.list error", table, await res.text());
+          let __txt = ""; try { __txt = await res.text(); } catch (e) {}
+          console.error("db.list error", table, __txt);
+          if (res.status !== 401) __scRegistarFalhaLeitura(table, "o servidor respondeu " + res.status);
           return [];
         }
         const data = await __dbPaginar(table, query || "?select=*", await res.json());
         __dbCache.set(key, { t: Date.now(), data: data });
+        __scLimparFalhaLeitura(table);
         return data.slice();
       } catch (err) {
         console.error("db.list network error", table, err);
+        __scRegistarFalhaLeitura(table, "sem liga\xE7\xE3o");
         return [];
       } finally {
         __dbInflight.delete(key);
@@ -8792,7 +8907,7 @@ function CopiaSeguranca(props) {
   async function listarTabelas() {
     var porques = [];
     try {
-      var rr = await fetch(SUPABASE_URL + "/rest/v1/rpc/listar_tabelas", { method: "POST", headers: dbHeaders(), body: "{}" });
+      var rr = await fetch(SUPABASE_URL + "/rest/v1/rpc/listar_tabelas", { method: "POST", headers: dbHeaders(), body: "{}", scSilencioso: true });
       if (rr.ok) {
         var d = await rr.json();
         var ns = (Array.isArray(d) ? d : []).map(function(x) { return typeof x === "string" ? x : (x && (x.nome || x.relname)); }).filter(Boolean);
@@ -12101,7 +12216,7 @@ function QuadroEsquecimentos(props) {
   // Grava a anula\xE7\xE3o com o autor; se a base de dados recusar o campo, grava sem ele (nunca bloqueia a anula\xE7\xE3o).
   async function postAnulacao(body) {
     var h = Object.assign({}, dbHeaders(), { "Prefer": "resolution=merge-duplicates" });
-    var r = await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados", { method: "POST", headers: h, body: JSON.stringify(Object.assign({}, body, { anulado_por: nomeGestor })) });
+    var r = await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados", { method: "POST", headers: h, body: JSON.stringify(Object.assign({}, body, { anulado_por: nomeGestor })), scSilencioso: true });
     if (!r.ok) r = await fetch(SUPABASE_URL + "/rest/v1/esquecimentos_anulados", { method: "POST", headers: h, body: JSON.stringify(body) });
     return r;
   }
@@ -14544,7 +14659,7 @@ function ClientPortal(props) {
       if (!clientId) return;
       var base = { client_id: clientId, client_nome: client ? client.name : null, tipo: tipo };
       var cheio = Object.assign({}, base, { contacto: nomeContacto || (currentContact ? currentContact.name : null), detalhe: detalhe || null });
-      var enviar = function(d) { return fetch(SUPABASE_URL + "/rest/v1/rpc/portal_insert", { method: "POST", headers: dbHeaders(), body: JSON.stringify({ p_tabela: "qr_aberturas", p_dados: d }), keepalive: true }); };
+      var enviar = function(d) { return fetch(SUPABASE_URL + "/rest/v1/rpc/portal_insert", { method: "POST", headers: dbHeaders(), body: JSON.stringify({ p_tabela: "qr_aberturas", p_dados: d }), keepalive: true, scSilencioso: true }); };
       enviar(cheio).then(function(r) { if (!r.ok) return enviar(base); }).catch(function() {});
     } catch (e) {}
   }
