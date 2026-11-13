@@ -8688,18 +8688,33 @@ function CopiaSeguranca(props) {
     try { return JSON.parse(window.localStorage.getItem("sc_ultima_copia") || "null"); } catch (e) { return null; }
   });
 
+  // A lista de tabelas vem da base de dados, para uma tabela criada no futuro entrar
+  // sozinha na copia. Tres caminhos, do mais fiavel ao ultimo recurso; se cair no ultimo,
+  // diz-se porque (o motivo aparece no aviso amarelo).
   async function listarTabelas() {
+    var porques = [];
+    try {
+      var rr = await fetch(SUPABASE_URL + "/rest/v1/rpc/listar_tabelas", { method: "POST", headers: dbHeaders(), body: "{}" });
+      if (rr.ok) {
+        var d = await rr.json();
+        var ns = (Array.isArray(d) ? d : []).map(function(x) { return typeof x === "string" ? x : (x && (x.nome || x.relname)); }).filter(Boolean);
+        if (ns.length >= 10) return { nomes: ns.sort(), fonte: "base de dados", motivo: "" };
+        porques.push("a fun\xE7\xE3o listar_tabelas devolveu " + ns.length + " nomes");
+      } else { porques.push("a fun\xE7\xE3o listar_tabelas respondeu " + rr.status); }
+    } catch (e) { porques.push("a fun\xE7\xE3o listar_tabelas falhou (" + (e && e.message) + ")"); }
     try {
       var r = await fetch(SUPABASE_URL + "/rest/v1/", { headers: dbHeaders() });
-      if (!r.ok) return { nomes: COPIA_LISTA_FIXA, fonte: "lista fixa" };
-      var spec = await r.json();
-      var nomes = [];
-      if (spec && spec.definitions) nomes = Object.keys(spec.definitions);
-      else if (spec && spec.paths) nomes = Object.keys(spec.paths).filter(function(x) { return x.indexOf("/") === 0 && x.indexOf("/rpc/") !== 0 && x.length > 1; }).map(function(x) { return x.slice(1); });
-      nomes = nomes.filter(function(n) { return n && n.indexOf("(") < 0 && n.indexOf("/") < 0; });
-      if (nomes.length < 10) return { nomes: COPIA_LISTA_FIXA, fonte: "lista fixa" };
-      return { nomes: nomes.sort(), fonte: "base de dados" };
-    } catch (e) { return { nomes: COPIA_LISTA_FIXA, fonte: "lista fixa" }; }
+      if (r.ok) {
+        var spec = await r.json();
+        var nomes = [];
+        if (spec && spec.definitions) nomes = Object.keys(spec.definitions);
+        else if (spec && spec.paths) nomes = Object.keys(spec.paths).filter(function(x) { return x.indexOf("/") === 0 && x.indexOf("/rpc/") !== 0 && x.length > 1; }).map(function(x) { return x.slice(1); });
+        nomes = nomes.filter(function(n) { return n && n.indexOf("(") < 0 && n.indexOf("/") < 0; });
+        if (nomes.length >= 10) return { nomes: nomes.sort(), fonte: "base de dados", motivo: "" };
+        porques.push("a lista do servidor trouxe " + nomes.length + " nomes");
+      } else { porques.push("a lista do servidor respondeu " + r.status); }
+    } catch (e) { porques.push("a lista do servidor falhou (" + (e && e.message) + ")"); }
+    return { nomes: COPIA_LISTA_FIXA, fonte: "lista fixa", motivo: porques.join("; ") };
   }
   async function contar(t) {
     var h = dbHeaders({ "Prefer": "count=exact", "Range-Unit": "items", "Range": "0-0" });
@@ -8765,7 +8780,7 @@ function CopiaSeguranca(props) {
     var nome = "samorclean-copia-" + q.getFullYear() + "-" + dd(q.getMonth() + 1) + "-" + dd(q.getDate()) + "-" + dd(q.getHours()) + dd(q.getMinutes()) + ".json";
     var pacote = {
       app: "SamorClean", criado_em: q.toISOString(), criado_por: nomeGestor, origem: SUPABASE_URL,
-      fonte_da_lista: info.fonte, completo: falhas.length === 0,
+      fonte_da_lista: info.fonte, motivo_da_lista: info.motivo || "", completo: falhas.length === 0,
       tabelas: nomes.length, linhas_guardadas: totLinhas,
       nota_fotos: "As imagens guardadas fora da base de dados (fotos, documentos) NAO estao neste ficheiro; so os enderecos delas.",
       resumo: det, dados: dados
@@ -8780,7 +8795,7 @@ function CopiaSeguranca(props) {
       a.href = url; a.download = nome; a.click();
       setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
     } catch (e) { window.alert("N\xE3o foi poss\xEDvel descarregar o ficheiro: " + e.message); }
-    var r2 = { tabelas: nomes.length, linhas: totLinhas, completo: falhas.length === 0, falhas: falhas.length, mb: mb, ficheiro: nome, quando: q.toISOString(), fonte: info.fonte };
+    var r2 = { tabelas: nomes.length, linhas: totLinhas, completo: falhas.length === 0, falhas: falhas.length, mb: mb, ficheiro: nome, quando: q.toISOString(), fonte: info.fonte, motivo: info.motivo || "" };
     setRes(r2); setLinhas(det); setEstado("feito"); setUltima(r2);
     try { window.localStorage.setItem("sc_ultima_copia", JSON.stringify(r2)); } catch (e) {}
   }
@@ -8852,7 +8867,7 @@ function CopiaSeguranca(props) {
       ordenadas.length > 8 ? React.createElement("button", { onClick: function() { setVerTudo(!verTudo); }, style: Object.assign({}, btnX, { marginTop: 8, fontSize: 13 }) }, verTudo ? "Mostrar s\xF3 as primeiras" : "Ver as " + ordenadas.length + " tabelas") : null,
       React.createElement("div", { style: { fontSize: 12, color: "#64748B", background: "#F8FAFC", borderRadius: 8, padding: "11px 13px", marginTop: 14, lineHeight: 1.5 } },
         React.createElement("b", null, "As fotos e os documentos n\xE3o v\xE3o neste ficheiro."), " S\xE3o imagens guardadas fora da base de dados; o ficheiro leva os endere\xE7os delas, mas n\xE3o as imagens. Copiar as fotos \xE9 outro trabalho, e est\xE1 em lista.",
-        res.fonte === "lista fixa" ? React.createElement("div", { style: { marginTop: 8, color: "#8A6410", fontWeight: 700 } }, "Aten\xE7\xE3o: a lista de tabelas n\xE3o veio da base de dados, veio da lista gravada na app. Se houver tabelas criadas depois, podem n\xE3o estar nesta c\xF3pia.") : null)
+        res.fonte === "lista fixa" ? React.createElement("div", { style: { marginTop: 8, color: "#8A6410", fontWeight: 700 } }, "Aten\xE7\xE3o: a lista de tabelas n\xE3o veio da base de dados, veio da lista gravada na app (" + COPIA_LISTA_FIXA.length + " tabelas). Se houver tabelas criadas depois, podem n\xE3o estar nesta c\xF3pia." + (res.motivo ? " Porqu\xEA: " + res.motivo + "." : "")) : null)
     ) : null
   );
 }
