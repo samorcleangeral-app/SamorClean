@@ -1170,7 +1170,7 @@ function Finance() {
       db.list("ajuste_dias_recibo_verde", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
       db.list("premio_assiduidade_opcional", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
       db.list("historico_financeiro", "?select=ano,mes,despesas,faturado&ano=eq." + now.getFullYear() + "&order=mes.desc"),
-      db.list("stock_movimentos", "?select=created_at,quantidade,valor_unitario&tipo=eq.saida&created_at=gte." + monthStart + "&created_at=lt." + nextMonthStart),
+      db.list("stock_movimentos", "?select=created_at,quantidade,valor_unitario,tipo&tipo=in.(saida,ajuste)&created_at=gte." + monthStart + "&created_at=lt." + nextMonthStart),
       db.list("avaliacoes", "?select=stars,funcionario_id,servico_id,created_at&created_at=gte." + new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString()),
       db.list("avaliacoes_mensais", "?select=funcionario_id,mes,nota_final"),
       db.list("picagens_armazem", "?select=funcionario_id,tipo,created_at&created_at=gte." + monthStart + "&created_at=lt." + nextMonthStart)
@@ -1808,8 +1808,17 @@ function Finance() {
   })();
   // Material: a margem conta o CONSUMO do mês (regular), não a compra (às pancadas).
   // A compra fica como existência no stock. Regra alinhada com a margem por cliente.
-  var consumoMaterialMes = stockSaidas.filter(function(m) { return (m.created_at || "").slice(0, 7) === (now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0")); })
+  // Consumo = Compras + Existências iniciais - Existências finais. O acerto de contagem é
+  // o termo que fecha essa conta, e entra com o sinal CONTRÁRIO ao da sua quantidade:
+  // contei mais do que a app dizia -> consumi menos -> desconta ao custo. E vice-versa.
+  // Sem isto, um stock negativo lança custo de produto que nunca foi comprado.
+  var __mesCorrenteTxt = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+  var __movsMatMes = stockSaidas.filter(function(m) { return (m.created_at || "").slice(0, 7) === __mesCorrenteTxt; });
+  var consumoSaidasMes = __movsMatMes.filter(function(m) { return m.tipo !== "ajuste"; })
     .reduce(function(s, m) { return s + (parseFloat(m.quantidade) || 0) * (parseFloat(m.valor_unitario) || 0); }, 0);
+  var acertoInventarioMes = __movsMatMes.filter(function(m) { return m.tipo === "ajuste"; })
+    .reduce(function(s, m) { return s - (parseFloat(m.quantidade) || 0) * (parseFloat(m.valor_unitario) || 0); }, 0);
+  var consumoMaterialMes = consumoSaidasMes + acertoInventarioMes;
   const totalCustos = despesas.reduce(function(s, d) {
     return d.is_stock ? s : s + (parseFloat(d.valor) || 0);
   }, 0) + consumoMaterialMes;
@@ -9548,6 +9557,7 @@ function Stock(props) {
     setForm({ nome: "", quantidade: "", quantidade_minima: "", unidade: "unidade", preco_unitario: "", preco_embalagem: "", conteudo_embalagem: 1, unidade_consumo: "", fornecedor_id: "" });
   }
   async function apagarMovimentoStock(mov) {
+    if (mov.tipo === "ajuste") { window.alert("\u26A0 Um acerto de contagem n\xE3o se apaga.\n\nSe a contagem estava errada, faz uma contagem nova com o valor certo \u2014 fica o hist\xF3rico das duas."); return; }
     var sinal = mov.tipo === "saida" ? 1 : -1;
     if (!window.confirm("Apagar este movimento?\n\n" + mov.produto_nome + ": " + (mov.tipo === "saida" ? "saída" : "entrada") + " de " + mov.quantidade + "\n\nO stock será " + (sinal > 0 ? "reposto (+" : "corrigido (-") + Math.abs(mov.quantidade) + ").")) return;
     try {
@@ -9688,6 +9698,46 @@ function Stock(props) {
     setEntradaSaving(false);
     setEntradaAberta(false);
     window.alert("Entrada registada: stock actualizado e factura criada em " + (forn ? forn.nome : "fornecedor") + " (" + (entradaPago ? "paga" : "por pagar") + ").");
+  }
+  const [contagemProd, setContagemProd] = useState(null);
+  const [contagemValor, setContagemValor] = useState("");
+  const [contagemSaving, setContagemSaving] = useState(false);
+  function abrirContagem(prod) {
+    setContagemProd(prod);
+    setContagemValor(String(prod.quantidade == null ? 0 : prod.quantidade));
+  }
+  // Contagem fisica: dizes o que esta MESMO na prateleira e a app acerta.
+  // A diferenca fica gravada como movimento "ajuste", com sinal (real - teorico).
+  async function gravarContagem() {
+    var prod = contagemProd;
+    if (!prod || contagemSaving) return;
+    var real = parseFloat(String(contagemValor).replace(",", "."));
+    if (isNaN(real) || real < 0) { window.alert("Escreve quantos " + (prod.unidade || "unidades") + " est\xE3o mesmo na prateleira. Zero \xE9 um valor v\xE1lido."); return; }
+    var atual = parseFloat(prod.quantidade) || 0;
+    var dif = Math.round((real - atual) * 1000) / 1000;
+    if (dif === 0) { window.alert("A contagem bate certo com o que a app tem. N\xE3o h\xE1 nada a acertar."); setContagemProd(null); return; }
+    setContagemSaving(true);
+    var ok = await registarMovimentoStock({
+      produto_id: prod.id, produto_nome: prod.nome, tipo: "ajuste",
+      quantidade: dif, valor_unitario: parseFloat(prod.preco_unitario) || 0,
+      motivo: "Contagem f\xEDsica: " + atual + " \u2192 " + real
+    });
+    if (ok === true) {
+      var res = await fetch(SUPABASE_URL + "/rest/v1/stock_produtos?id=eq." + prod.id, {
+        method: "PATCH", headers: dbHeaders(), body: JSON.stringify({ quantidade: real })
+      });
+      if (res.ok) {
+        setProdutos(function(pp) { return pp.map(function(x) { return x.id === prod.id ? Object.assign({}, x, { quantidade: real }) : x; }); });
+        carregarMovimentos();
+        carregarAgregados();
+      } else {
+        window.alert("O acerto ficou registado mas a quantidade n\xE3o chegou a gravar. Volta a tentar.");
+      }
+    } else {
+      window.alert("N\xE3o foi poss\xEDvel gravar a contagem. Verifica a liga\xE7\xE3o e tenta outra vez.");
+    }
+    setContagemSaving(false);
+    setContagemProd(null);
   }
   async function ajustarQtd(prod, delta) {
     var nova = (parseFloat(prod.quantidade) || 0) + delta;
@@ -9855,8 +9905,12 @@ function Stock(props) {
       var valorTotal = (produtos || []).reduce(function(a, p2) { return a + (parseFloat(p2.quantidade) || 0) * custoUnitProd(p2); }, 0);
       var semPreco = (produtos || []).filter(function(p2) { return !(custoUnitProd(p2) > 0); });
       var mesAct = stockMes;
-      var custoMes = (movimentos || []).filter(function(m) { return m.tipo === "saida" && (m.created_at || "").slice(0, 7) === mesAct; })
+      var custoSaidasMes = (movimentos || []).filter(function(m) { return m.tipo === "saida" && (m.created_at || "").slice(0, 7) === mesAct; })
         .reduce(function(a, m) { return a + (parseFloat(m.quantidade) || 0) * (parseFloat(m.valor_unitario) || 0); }, 0);
+      // Mesma regra do Financeiro: o acerto de contagem entra com o sinal contrário.
+      var acertoMes = (movimentos || []).filter(function(m) { return m.tipo === "ajuste" && (m.created_at || "").slice(0, 7) === mesAct; })
+        .reduce(function(a, m) { return a - (parseFloat(m.quantidade) || 0) * (parseFloat(m.valor_unitario) || 0); }, 0);
+      var custoMes = custoSaidasMes + acertoMes;
       function mudarStockMes(delta) { var d = new Date(stockMes + "-01T12:00:00"); d.setMonth(d.getMonth() + delta); setStockMes(localDateStr(new Date(d.getFullYear(), d.getMonth(), 1)).slice(0, 7)); }
       var stockMesLabel = new Date(stockMes + "-01T12:00:00").toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
       var divergentes = (produtos || []).map(function(p2) {
@@ -10105,11 +10159,40 @@ function Stock(props) {
         }));
       })()
     ),
+    contagemProd ? /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", zIndex: 9000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }, onClick: function() { if (!contagemSaving) setContagemProd(null); } },
+      /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { maxWidth: 380, width: "100%", border: "2px solid #1A3A5C", marginBottom: 0 }), onClick: function(e) { e.stopPropagation(); } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 14 } }, "Contagem f\xEDsica \u00B7 " + contagemProd.nome),
+        /* @__PURE__ */ React.createElement("label", { style: { fontSize: 12, fontWeight: 700, color: "#64748B", display: "block", marginBottom: 5 } }, "Quantos " + (contagemProd.unidade || "unidades") + " est\xE3o mesmo na prateleira?"),
+        /* @__PURE__ */ React.createElement("input", { type: "text", inputMode: "decimal", autoFocus: true, value: contagemValor, onChange: function(e) { setContagemValor(e.target.value); },
+          onKeyDown: function(e) { if (e.key === "Enter") gravarContagem(); },
+          style: { width: "100%", border: "1.5px solid #E2EBF4", borderRadius: 8, padding: "11px 12px", fontSize: 19, fontWeight: 800, color: "#1A3A5C" } }),
+        (function() {
+          var atual = parseFloat(contagemProd.quantidade) || 0;
+          var real = parseFloat(String(contagemValor).replace(",", "."));
+          var valido = !isNaN(real) && real >= 0;
+          var dif = valido ? Math.round((real - atual) * 1000) / 1000 : null;
+          var preco = parseFloat(contagemProd.preco_unitario) || 0;
+          return /* @__PURE__ */ React.createElement("div", { style: { background: "#F8FAFC", borderRadius: 8, padding: "11px 13px", fontSize: 13, margin: "13px 0", lineHeight: 1.6, color: "#334155" } },
+            "A app tem ", /* @__PURE__ */ React.createElement("b", null, atual + " " + (contagemProd.unidade || "")), ".",
+            /* @__PURE__ */ React.createElement("br", null),
+            !valido ? "Escreve um n\xFAmero (zero \xE9 v\xE1lido)." : (dif === 0 ? "Bate certo \u2014 n\xE3o h\xE1 nada a acertar." : /* @__PURE__ */ React.createElement(React.Fragment, null,
+              "Diferen\xE7a: ", /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, color: dif > 0 ? "#1E6B2A" : "#9C2A2A" } }, (dif > 0 ? "+" : "") + dif + " " + (contagemProd.unidade || "")),
+              preco > 0 ? /* @__PURE__ */ React.createElement("span", null, " \u00B7 " + fmt(Math.abs(dif) * preco) + "\u20AC") : null,
+              /* @__PURE__ */ React.createElement("br", null),
+              /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B" } }, dif > 0
+                ? "Havia mais do que a app dizia, logo consumiste menos: isto desconta ao custo de material do m\xEAs."
+                : "Havia menos do que a app dizia: isto acrescenta ao custo de material do m\xEAs."))));
+        })(),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } },
+          /* @__PURE__ */ React.createElement("button", { onClick: gravarContagem, disabled: contagemSaving, style: { flex: 1, background: contagemSaving ? "#94A3B8" : "#1A3A5C", color: "#fff", border: 0, borderRadius: 9, padding: 11, fontWeight: 800, fontSize: 14, cursor: contagemSaving ? "default" : "pointer" } }, contagemSaving ? "A gravar\u2026" : "Acertar"),
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { if (!contagemSaving) setContagemProd(null); }, style: Object.assign({}, btnX, { fontSize: 14 }) }, "Cancelar"))
+      )) : null,
     vista === "stock" && /* @__PURE__ */ React.createElement("input", { style: Object.assign({}, inp, { maxWidth: 260, marginBottom: 14 }), placeholder: "Pesquisar produto...", value: q, onChange: function(e) { setQ(e.target.value); } }),
     vista === "stock" && (filtrados.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: Object.assign({}, card, { textAlign: "center", padding: 40, color: "#94A3B8" }) }, "Nenhum produto encontrado.") :
     /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 } }, filtrados.map(function(p) {
       var emBaixoP = p.quantidade <= p.quantidade_minima;
-      var cor = emBaixoP ? "#EF4444" : "#16A34A";
+      var negativoP = (parseFloat(p.quantidade) || 0) < 0;
+      var cor = negativoP ? "#8A6410" : (emBaixoP ? "#EF4444" : "#16A34A");
       return /* @__PURE__ */ React.createElement("div", { key: p.id, style: Object.assign({}, card, { padding: 14, borderLeft: "3px solid " + cor }) },
         /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "#1A3A5C", marginBottom: 2 } }, p.nome),
         /* @__PURE__ */ React.createElement("div", { style: { fontSize: 22, fontWeight: 900, color: emBaixoP ? "#EF4444" : "#1A3A5C" } }, p.quantidade, " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#94A3B8", fontWeight: 400 } }, p.unidade || "unidade")),
@@ -10117,6 +10200,10 @@ function Stock(props) {
         /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 6 } },
           /* @__PURE__ */ React.createElement("button", { onClick: function() { ajustarQtd(p, -1); }, style: Object.assign({}, btnO, { flex: 1, padding: "5px 0", fontSize: 15 }) }, "\u2212"),
           /* @__PURE__ */ React.createElement("button", { onClick: function() { ajustarQtd(p, 1); }, style: Object.assign({}, btnO, { flex: 1, padding: "5px 0", fontSize: 15 }) }, "+")
+        ),
+        negativoP ? /* @__PURE__ */ React.createElement("div", { style: { background: "#F9EEDA", color: "#8A6410", borderRadius: 6, padding: "5px 8px", fontSize: 10, fontWeight: 800, marginBottom: 6, lineHeight: 1.35 } }, "\u26A0 Saiu mais do que havia. Precisa de contagem.") : null,
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 6 } },
+          /* @__PURE__ */ React.createElement("button", { onClick: function() { abrirContagem(p); }, style: { flex: 1, background: "#2E6DA4", color: "#fff", border: "1.5px solid #2E6DA4", borderRadius: 8, padding: "6px 0", fontSize: 11, fontWeight: 800, cursor: "pointer" } }, "\uD83D\uDCCB Contagem")
         ),
         /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6 } },
           /* @__PURE__ */ React.createElement("button", { onClick: function() { setForm({ preco_embalagem: p.preco_embalagem || p.preco_unitario, conteudo_embalagem: p.conteudo_embalagem || 1, unidade_consumo: p.unidade_consumo || p.unidade, nome: p.nome, quantidade: p.quantidade, quantidade_minima: p.quantidade_minima, unidade: p.unidade || "unidade", preco_unitario: p.preco_unitario || "", fornecedor_id: p.fornecedor_id || "" }); setEditId(p.id); setShowForm(true); window.scrollTo({ top: 0, behavior: "smooth" }); }, style: Object.assign({}, btnO, { flex: 1, fontSize: 11, padding: "6px 0" }) }, "Editar"),
