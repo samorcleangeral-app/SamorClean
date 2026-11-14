@@ -9447,7 +9447,12 @@ function Stock(props) {
   // Lê TODOS os movimentos (sem limit) para o cálculo nunca ficar incompleto à medida que o histórico cresce.
   const [agregadosProd, setAgregadosProd] = useState({});
   function carregarMovimentos() {
-    db.list("stock_movimentos", "?select=*&order=created_at.desc&limit=200").then(function(r) { setMovimentos(r || []); });
+    // SEM limite de propósito. Este conjunto alimenta seis cálculos (custo do mês, acerto do
+    // mês, detector de divergências, consumo por mês e por colaborador, último preço de
+    // entrada). Com um tecto de 200 linhas, Agosto/2026 caía fora da janela e aparecia a 0 €,
+    // e o detector de divergências comparava o stock com a soma de apenas 200 movimentos.
+    // O db.list pagina sozinho, por isso traz o histórico todo sem cortar em silêncio.
+    db.list("stock_movimentos", "?select=*&order=created_at.desc").then(function(r) { setMovimentos(r || []); });
   }
   function carregarAgregados() {
     db.list("stock_movimentos", "?select=produto_id,produto_nome,tipo,quantidade,valor_unitario,funcionario_id,funcionario_nome,created_at&order=created_at.desc").then(function(r) {
