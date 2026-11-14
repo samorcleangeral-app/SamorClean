@@ -931,6 +931,21 @@ async function registarMovimentoStock(mov) {
     return true;
   } catch (e) { return false; }
 }
+// Custo de material por mes, a partir dos movimentos de stock. Regra unica da app:
+// o custo e o CONSUMO, nao a compra. A compra e existencia, fica na prateleira ate ser usada.
+// O acerto de contagem entra com o sinal contrario (contei mais -> consumi menos -> desconta).
+// Valores sem IVA, porque o IVA dedutivel e tratado a parte no Financeiro.
+function consumoMaterialPorMes(movs) {
+  var mapa = {};
+  (movs || []).forEach(function(x) {
+    var k = (x.created_at || "").slice(0, 7);
+    if (!k) return;
+    var v = (parseFloat(x.quantidade) || 0) * (parseFloat(x.valor_unitario) || 0);
+    if (mapa[k] === undefined) mapa[k] = 0;
+    mapa[k] += (x.tipo === "ajuste" ? -v : v);
+  });
+  return mapa;
+}
 function contaNoPeriodo(emp, jobsPeriodo) {
   // Activo conta sempre. Inactivo só conta no período em que realmente participou (histórico).
   if (emp.ativo !== false) return true;
@@ -1164,13 +1179,13 @@ function Finance() {
       db.list("cash_movimentos", "?select=*&order=data.desc"),
       db.list("metas_financeiras", "?select=*&order=created_at.desc"),
       db.list("servicos", "?select=*&date=gte." + monthStart + "&date=lte." + monthEnd),
-      db.list("despesas", "?select=data,valor&data=gte." + sixMonthsAgo),
+      db.list("despesas", "?select=data,valor,is_stock&data=gte." + sixMonthsAgo),
       db.list("servicos", "?select=*&status=eq.completed&paid=is.false"),
       db.list("ordenado_gerencia", "?select=*&order=ano.desc,mes.desc"),
       db.list("ajuste_dias_recibo_verde", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
       db.list("premio_assiduidade_opcional", "?select=*&ano=eq." + now.getFullYear() + "&mes=eq." + (now.getMonth() + 1)),
       db.list("historico_financeiro", "?select=ano,mes,despesas,faturado&ano=eq." + now.getFullYear() + "&order=mes.desc"),
-      db.list("stock_movimentos", "?select=created_at,quantidade,valor_unitario,tipo&tipo=in.(saida,ajuste)&created_at=gte." + monthStart + "&created_at=lt." + nextMonthStart),
+      db.list("stock_movimentos", "?select=created_at,quantidade,valor_unitario,tipo&tipo=in.(saida,ajuste)&created_at=gte." + sixMonthsAgo),
       db.list("avaliacoes", "?select=stars,funcionario_id,servico_id,created_at&created_at=gte." + new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString()),
       db.list("avaliacoes_mensais", "?select=funcionario_id,mes,nota_final"),
       db.list("picagens_armazem", "?select=funcionario_id,tipo,created_at&created_at=gte." + monthStart + "&created_at=lt." + nextMonthStart)
@@ -2018,10 +2033,14 @@ function Finance() {
         if (j.paid) buckets[key].rec += v;
       }
     });
+    // Compras de material ficam de fora: o custo do mes e o consumo (regra unica da app).
     despesas6Months.forEach(function(d) {
+      if (d.is_stock) return;
       const key = (d.data || "").slice(0, 7);
       if (buckets[key]) buckets[key].custo += d.valor || 0;
     });
+    var consumoMap6 = consumoMaterialPorMes(stockSaidas);
+    Object.keys(buckets).forEach(function(key) { buckets[key].custo += consumoMap6[key] || 0; });
     Object.keys(buckets).forEach(function(key) {
       var b = buckets[key];
       var jobsDoMes = last6Months.filter(function(j) { return j.date.slice(0, 7) === key; });
@@ -2037,6 +2056,7 @@ function Finance() {
   const histFinByKey = {};
   (histFin || []).forEach(function(h) { histFinByKey[h.ano + "-" + String(h.mes).padStart(2, "0")] = h; });
   const serieLonga = (function() {
+    var consumoMapLonga = consumoMaterialPorMes(stockSaidas);
     var arr = [];
     for (var i = 47; i >= 0; i--) {
       var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -2055,7 +2075,8 @@ function Finance() {
         var fatS = 0, recS = 0;
         jobsMes.forEach(function(j) { fatS += (j.val || 0); if (j.paid) recS += (j.val || 0); });
         var custoMat = 0;
-        despesas6Months.forEach(function(dd) { if ((dd.data || "").slice(0, 7) === key) custoMat += dd.valor || 0; });
+        despesas6Months.forEach(function(dd) { if (!dd.is_stock && (dd.data || "").slice(0, 7) === key) custoMat += dd.valor || 0; });
+        custoMat += consumoMapLonga[key] || 0;
         var moC = emps.filter(function(e) { return contaNoPeriodo(e, jobsMes); }).reduce(function(s, e) { return s + calcCustoColaboradorMes(e, rhData, absData6Months, jobsMes, b.refDate, undefined, undefined, undefined, anulServ, tolCli).total; }, 0);
         b.fatSemIva = fatS;
         b.despTotal = custoMat + moC;
@@ -2287,15 +2308,19 @@ function Finance() {
     var res = await Promise.all([
       db.list("servicos", "?select=date,val,iva_override,client_id&date=gte." + inicioAtual + "&date=lte." + fimAtual + "&status=eq.completed"),
       db.list("servicos", "?select=date,val,iva_override,client_id&date=gte." + inicioAnterior + "&date=lte." + fimAnterior + "&status=eq.completed"),
-      db.list("despesas", "?select=data,valor&data=gte." + inicioAtual + "&data=lte." + fimAtual),
-      db.list("despesas", "?select=data,valor&data=gte." + inicioAnterior + "&data=lte." + fimAnterior),
+      db.list("despesas", "?select=data,valor,is_stock&data=gte." + inicioAtual + "&data=lte." + fimAtual),
+      db.list("despesas", "?select=data,valor,is_stock&data=gte." + inicioAnterior + "&data=lte." + fimAnterior),
       db.list("historico_financeiro", "?select=*&ano=eq." + ano),
       db.list("historico_financeiro", "?select=*&ano=eq." + (ano - 1)),
       db.list("funcionarios", "?select=*"),
       db.list("funcionarios_rh", "?select=*"),
       db.list("ausencias", "?select=*&data_inicio=lte." + fimAtual + "&or=(data_fim.gte." + inicioAnterior + ",data_fim.is.null)"),
-      db.list("avaliacoes_mensais", "?select=funcionario_id,mes,nota_final")
+      db.list("avaliacoes_mensais", "?select=funcionario_id,mes,nota_final"),
+      db.list("stock_movimentos", "?select=created_at,quantidade,valor_unitario,tipo&tipo=in.(saida,ajuste)&created_at=gte." + inicioAtual + "&created_at=lt." + (ano + 1) + "-01-01"),
+      db.list("stock_movimentos", "?select=created_at,quantidade,valor_unitario,tipo&tipo=in.(saida,ajuste)&created_at=gte." + inicioAnterior + "&created_at=lt." + ano + "-01-01")
     ]);
+    var consumoMapAtual = consumoMaterialPorMes(res[10]);
+    var consumoMapAnterior = consumoMaterialPorMes(res[11]);
     var funcs = res[6] || [];
     var rhData = res[7] || [];
     var absData = res[8] || [];
@@ -2329,14 +2354,18 @@ function Finance() {
         return { mes: m, valor: buckets[m], semIva: bucketsSI[m], acumulado: acumulado };
       });
     }
-    function despesasPorMes(despAno, anoRef) {
+    function despesasPorMes(despAno, anoRef, consumoMap) {
       var buckets = {};
       for (var m = 0; m < 12; m++) buckets[m] = 0;
       (despAno || []).forEach(function(d) {
+        if (d.is_stock) return;   // compra de material e existencia, nao custo
         var mes = parseInt((d.data || "").slice(5, 7), 10) - 1;
         if (buckets[mes] !== undefined) buckets[mes] += (parseFloat(d.valor) || 0);
       });
-      for (var m2 = 0; m2 < 12; m2++) buckets[m2] += custoMOMes(anoRef, m2);
+      for (var m2 = 0; m2 < 12; m2++) {
+        var chaveMes = anoRef + "-" + String(m2 + 1).padStart(2, "0");
+        buckets[m2] += custoMOMes(anoRef, m2) + ((consumoMap && consumoMap[chaveMes]) || 0);
+      }
       var acumulado = 0;
       return Array.from({ length: 12 }, function(_, m) {
         acumulado += buckets[m];
@@ -2388,8 +2417,8 @@ function Finance() {
     }
     var atualBase = porMes(res[0]);
     var anteriorBase = porMes(res[1]);
-    var despAtualBase = despesasPorMes(res[2], ano);
-    var despAnteriorBase = despesasPorMes(res[3], ano - 1);
+    var despAtualBase = despesasPorMes(res[2], ano, consumoMapAtual);
+    var despAnteriorBase = despesasPorMes(res[3], ano - 1, consumoMapAnterior);
     var mergeAtual = aplicarHistorico(atualBase, despAtualBase, res[4]);
     var mergeAnterior = aplicarHistorico(anteriorBase, despAnteriorBase, res[5]);
     var margemAtual = construirMargem(atualBase, despAtualBase, res[4]);
