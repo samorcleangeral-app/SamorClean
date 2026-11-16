@@ -9091,6 +9091,179 @@ function LALFManual(props) {
     )
   );
 }
+function LALFGestao(props) {
+  var nomeGestor = props.nomeGestor || "";
+  var [seccoes, setSeccoes] = useState([]);
+  var [carregando, setCarregando] = useState(true);
+  var [edit, setEdit] = useState(null);
+  var [guardando, setGuardando] = useState(false);
+  var [aOrdenar, setAOrdenar] = useState(false);
+
+  function carregar() {
+    db.list("lalf_seccoes", "?select=*&order=ordem.asc").then(function (rows) {
+      setSeccoes(rows || []);
+      setCarregando(false);
+    });
+  }
+  useEffect(function () { carregar(); }, []);
+
+  function etiquetasDe(s) {
+    try { return Array.isArray(s.etiquetas) ? s.etiquetas : JSON.parse(s.etiquetas || "[]"); }
+    catch (e) { return []; }
+  }
+
+  function abrirNova() {
+    var maxOrdem = 0;
+    seccoes.forEach(function (s) { if ((s.ordem || 0) > maxOrdem) maxOrdem = s.ordem || 0; });
+    setEdit({ novo: true, id: null, ordem: maxOrdem + 10, grupo: "", titulo: "", corpo: "", etiquetasTexto: "", fixa: false });
+  }
+  function abrirEdicao(s) {
+    setEdit({ novo: false, id: s.id, ordem: s.ordem, grupo: s.grupo || "", titulo: s.titulo || "", corpo: s.corpo || "", etiquetasTexto: etiquetasDe(s).join(", "), fixa: !!s.fixa });
+  }
+
+  async function guardar() {
+    if (!edit.titulo.trim() || !edit.corpo.trim()) return;
+    setGuardando(true);
+    var etiquetas = edit.etiquetasTexto.split(",").map(function (x) { return x.trim(); }).filter(function (x) { return x.length > 0; });
+    var dados = {
+      ordem: parseInt(edit.ordem, 10) || 0,
+      grupo: edit.grupo.trim() || "Geral",
+      titulo: edit.titulo.trim(),
+      corpo: edit.corpo,
+      etiquetas: etiquetas,
+      fixa: !!edit.fixa,
+      actualizado_por: nomeGestor || "Gestão"
+    };
+    var ok;
+    if (edit.novo) { dados.activa = true; ok = await db.insert("lalf_seccoes", dados); }
+    else { ok = await db.update("lalf_seccoes", edit.id, dados); }
+    setGuardando(false);
+    if (ok) { setEdit(null); carregar(); }
+  }
+
+  async function alternarActiva(s) {
+    var acto = s.activa === false ? "voltar a pôr em circulação" : "tirar de circulação";
+    if (!window.confirm("Queres " + acto + " a secção \"" + s.titulo + "\"?\n\nO texto não se perde.")) return;
+    var ok = await db.update("lalf_seccoes", s.id, { activa: s.activa === false, actualizado_por: nomeGestor || "Gestão" });
+    if (ok) carregar();
+  }
+
+  async function mover(idx, direccao) {
+    var outro = idx + direccao;
+    if (outro < 0 || outro >= seccoes.length || aOrdenar) return;
+    setAOrdenar(true);
+    var a = seccoes[idx], b = seccoes[outro];
+    await db.update("lalf_seccoes", a.id, { ordem: b.ordem, actualizado_por: nomeGestor || "Gestão" });
+    await db.update("lalf_seccoes", b.id, { ordem: a.ordem, actualizado_por: nomeGestor || "Gestão" });
+    setAOrdenar(false);
+    carregar();
+  }
+
+  var caixa = { background: "#fff", borderRadius: 14, border: "1px solid #E2EBF4", boxShadow: "0 2px 10px rgba(26,58,92,0.07)" };
+  var campo = { width: "100%", padding: "10px 12px", borderRadius: 9, border: "1.5px solid #E2EBF4", fontSize: 13.5, color: "#1A3A5C", boxSizing: "border-box", fontFamily: "inherit" };
+  var rotulo = { fontSize: 11, fontWeight: 800, color: "#64748B", textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 5, display: "block" };
+  var botao = { border: "none", borderRadius: 9, padding: "10px 16px", fontSize: 13, fontWeight: 800, cursor: "pointer" };
+  var accao = { background: "none", border: "none", fontSize: 11.5, fontWeight: 800, color: "#2E6DA4", cursor: "pointer", marginLeft: 10, padding: 0 };
+
+  if (carregando) return React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar o LALF...");
+
+  if (edit) {
+    var gruposExistentes = [];
+    seccoes.forEach(function (s) { if (s.grupo && gruposExistentes.indexOf(s.grupo) === -1) gruposExistentes.push(s.grupo); });
+    return React.createElement("div", { style: { maxWidth: 820 } },
+      React.createElement("button", { onClick: function () { setEdit(null); }, style: { background: "none", border: "none", color: "#2E6DA4", fontWeight: 800, fontSize: 13, cursor: "pointer", padding: 0, marginBottom: 14 } }, "‹ Voltar à lista"),
+      React.createElement("div", { style: Object.assign({}, caixa, { padding: 18 }) },
+        React.createElement("div", { style: { fontSize: 16, fontWeight: 900, marginBottom: 16, color: "#1A3A5C" } }, edit.novo ? "Nova secção do LALF" : "Editar secção"),
+        React.createElement("div", { style: { marginBottom: 14 } },
+          React.createElement("label", { style: rotulo }, "Título"),
+          React.createElement("input", { value: edit.titulo, onChange: function (e) { setEdit(Object.assign({}, edit, { titulo: e.target.value })); }, style: Object.assign({}, campo, { fontWeight: 700 }) })
+        ),
+        React.createElement("div", { style: { display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" } },
+          React.createElement("div", { style: { flex: 1, minWidth: 190 } },
+            React.createElement("label", { style: rotulo }, "Grupo"),
+            React.createElement("input", { list: "lalf-grupos", value: edit.grupo, placeholder: "Ex: Panos e cores", onChange: function (e) { setEdit(Object.assign({}, edit, { grupo: e.target.value })); }, style: campo }),
+            React.createElement("datalist", { id: "lalf-grupos" }, gruposExistentes.map(function (g) { return React.createElement("option", { key: g, value: g }); }))
+          ),
+          React.createElement("div", { style: { flex: 1, minWidth: 190 } },
+            React.createElement("label", { style: rotulo }, "Zonas (separadas por vírgula)"),
+            React.createElement("input", { value: edit.etiquetasTexto, placeholder: "Ex: Casa de banho, Copa", onChange: function (e) { setEdit(Object.assign({}, edit, { etiquetasTexto: e.target.value })); }, style: campo })
+          )
+        ),
+        React.createElement("div", { style: { marginBottom: 14 } },
+          React.createElement("label", { style: rotulo }, "Texto"),
+          React.createElement("textarea", { value: edit.corpo, onChange: function (e) { setEdit(Object.assign({}, edit, { corpo: e.target.value })); }, style: Object.assign({}, campo, { minHeight: 340, lineHeight: 1.6, fontSize: 13, color: "#334155" }) })
+        ),
+        React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 9, marginBottom: 18, cursor: "pointer" } },
+          React.createElement("input", { type: "checkbox", checked: !!edit.fixa, onChange: function (e) { setEdit(Object.assign({}, edit, { fixa: e.target.checked })); }, style: { width: 16, height: 16 } }),
+          React.createElement("span", { style: { fontSize: 13, color: "#1A3A5C", fontWeight: 700 } }, "Fixar no topo, fora da lista"),
+          React.createElement("span", { style: { fontSize: 11.5, color: "#94A3B8" } }, "— para regras de segurança")
+        ),
+        React.createElement("div", { style: { display: "flex", gap: 9 } },
+          React.createElement("button", { onClick: guardar, disabled: guardando || !edit.titulo.trim() || !edit.corpo.trim(), style: Object.assign({}, botao, { background: "#1A3A5C", color: "#fff", opacity: guardando || !edit.titulo.trim() || !edit.corpo.trim() ? 0.5 : 1 }) }, guardando ? "A guardar..." : (edit.novo ? "Criar secção" : "Guardar alteração")),
+          React.createElement("button", { onClick: function () { setEdit(null); }, style: Object.assign({}, botao, { background: "#fff", color: "#1A3A5C", border: "1.5px solid #E2EBF4" }) }, "Cancelar"),
+          (!edit.titulo.trim() || !edit.corpo.trim()) && React.createElement("span", { style: { fontSize: 11.5, color: "#94A3B8", alignSelf: "center" } }, "Falta o título ou o texto.")
+        )
+      )
+    );
+  }
+
+  var activas = seccoes.filter(function (s) { return s.activa !== false; }).length;
+  var ultima = null;
+  seccoes.forEach(function (s) { if (s.actualizado_em && (!ultima || s.actualizado_em > ultima)) ultima = s.actualizado_em; });
+
+  return React.createElement("div", null,
+    React.createElement("div", { style: caixa },
+      React.createElement("div", { style: { padding: "14px 16px", borderBottom: "1px solid #F1F5F9", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 } },
+        React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 15, fontWeight: 900, color: "#1A3A5C" } }, "📘 LALF"),
+          React.createElement("div", { style: { fontSize: 11.5, color: "#64748B", marginTop: 2 } }, activas + (activas === 1 ? " secção activa" : " secções activas") + (ultima ? " · última alteração a " + new Date(ultima).toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) + " às " + new Date(ultima).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }) : ""))
+        ),
+        React.createElement("button", { onClick: abrirNova, style: Object.assign({}, botao, { background: "#1A3A5C", color: "#fff", fontSize: 12, padding: "8px 14px" }) }, "+ Nova secção")
+      ),
+      seccoes.length === 0 ? React.createElement("div", { style: { padding: 44, textAlign: "center", color: "#94A3B8", fontSize: 13 } }, "Ainda não há secções.") :
+      React.createElement("div", { style: { overflowX: "auto" } },
+        React.createElement("table", { style: { width: "100%", borderCollapse: "collapse" } },
+          React.createElement("thead", null, React.createElement("tr", null,
+            ["", "Secção", "Grupo", "Zonas", "Última alteração", ""].map(function (h, i) {
+              return React.createElement("th", { key: i, style: { textAlign: i === 5 ? "right" : "left", fontSize: 10, color: "#94A3B8", textTransform: "uppercase", padding: "9px 14px", borderBottom: "1px solid #E2EBF4", fontWeight: 800, letterSpacing: 0.3, whiteSpace: "nowrap" } }, h);
+            })
+          )),
+          React.createElement("tbody", null, seccoes.map(function (s, idx) {
+            var inactiva = s.activa === false;
+            var ets = etiquetasDe(s);
+            return React.createElement("tr", { key: s.id, style: { background: s.fixa ? "#FDF8F8" : "transparent", opacity: inactiva ? 0.45 : 1 } },
+              React.createElement("td", { style: { padding: "8px 6px 8px 14px", borderBottom: "1px solid #F6F9FC", whiteSpace: "nowrap" } },
+                React.createElement("button", { onClick: function () { mover(idx, -1); }, disabled: idx === 0 || aOrdenar, style: { background: "none", border: "none", color: idx === 0 ? "#E2EBF4" : "#94A3B8", cursor: idx === 0 ? "default" : "pointer", fontSize: 13, fontWeight: 900, padding: "0 2px" } }, "↑"),
+                React.createElement("button", { onClick: function () { mover(idx, 1); }, disabled: idx === seccoes.length - 1 || aOrdenar, style: { background: "none", border: "none", color: idx === seccoes.length - 1 ? "#E2EBF4" : "#94A3B8", cursor: idx === seccoes.length - 1 ? "default" : "pointer", fontSize: 13, fontWeight: 900, padding: "0 2px" } }, "↓")
+              ),
+              React.createElement("td", { style: { padding: "10px 14px", borderBottom: "1px solid #F6F9FC", fontSize: 12.5 } },
+                React.createElement("span", { style: { fontWeight: 800, color: s.fixa ? "#9C2A2A" : "#1A3A5C" } }, s.titulo),
+                s.fixa && React.createElement("span", { style: { fontSize: 10, fontWeight: 800, color: "#9C2A2A", background: "#FBEBEB", padding: "2px 7px", borderRadius: 99, marginLeft: 7 } }, "FIXA NO TOPO"),
+                inactiva && React.createElement("span", { style: { fontSize: 10, fontWeight: 800, color: "#64748B", background: "#F1F5F9", padding: "2px 7px", borderRadius: 99, marginLeft: 7 } }, "FORA DE CIRCULAÇÃO")
+              ),
+              React.createElement("td", { style: { padding: "10px 14px", borderBottom: "1px solid #F6F9FC" } },
+                React.createElement("span", { style: { fontSize: 10.5, fontWeight: 800, color: "#2E6DA4", background: "#EFF6FF", padding: "2px 8px", borderRadius: 99, whiteSpace: "nowrap" } }, s.grupo || "Geral")
+              ),
+              React.createElement("td", { style: { padding: "10px 14px", borderBottom: "1px solid #F6F9FC" } },
+                ets.length === 0 ? React.createElement("span", { style: { color: "#CBD5E1", fontSize: 12 } }, "—") : ets.map(function (et) {
+                  return React.createElement("span", { key: et, style: { display: "inline-block", fontSize: 10, fontWeight: 700, background: "#F1F5F9", color: "#64748B", padding: "2px 7px", borderRadius: 99, marginRight: 4 } }, et);
+                })
+              ),
+              React.createElement("td", { style: { padding: "10px 14px", borderBottom: "1px solid #F6F9FC", fontSize: 11, color: "#94A3B8", whiteSpace: "nowrap" } },
+                (s.actualizado_por ? s.actualizado_por + " · " : "") + (s.actualizado_em ? new Date(s.actualizado_em).toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) : "")
+              ),
+              React.createElement("td", { style: { padding: "10px 14px", borderBottom: "1px solid #F6F9FC", textAlign: "right", whiteSpace: "nowrap" } },
+                React.createElement("button", { onClick: function () { abrirEdicao(s); }, style: accao }, "Editar"),
+                React.createElement("button", { onClick: function () { alternarActiva(s); }, style: Object.assign({}, accao, { color: "#94A3B8" }) }, inactiva ? "Repor" : "Desactivar")
+              )
+            );
+          }))
+        )
+      )
+    ),
+    React.createElement("div", { style: { fontSize: 11.5, color: "#94A3B8", marginTop: 12, lineHeight: 1.6, maxWidth: 760 } }, "As colaboradoras vêem estas secções no separador LALF do portal delas, por esta ordem, e sem botões de edição. Desactivar tira de circulação sem apagar o texto. As zonas são o que liga cada secção ao checklist.")
+  );
+}
 function CopiaSeguranca(props) {
   var nomeGestor = (props.gestor && (props.gestor.nome || props.gestor.email)) || "gest\xE3o";
   const [estado, setEstado] = useState("pronto");
@@ -13512,7 +13685,7 @@ function Manager(props) {
     return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: i === 0 ? "#F59E0B" : i === 1 ? "#94A3B8" : "#CD7C54", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 11, flexShrink: 0 } }, i + 1), /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 30, color: ["#2E6DA4", "#0F766E", "#7C3AED", "#C2410C"][i] || "#64748B" }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, e.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, e.role)), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right" } }, rankingModo === "mes" ? (rMes ? /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end" } }, /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 900, fontSize: 15, color: "#2E6DA4" } }, rMes.media), /* @__PURE__ */ React.createElement("span", { style: { color: "#F59E0B" } }, "\u2605"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: "#94A3B8" } }, "(", rMes.count, ")")) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#CBD5E1", fontWeight: 700 } }, "Sem avalia\xE7\xF5es este m\xEAs")) : (rHist != null ? /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end" } }, /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 900, fontSize: 15, color: "#2E6DA4" } }, rHist), /* @__PURE__ */ React.createElement("span", { style: { color: "#F59E0B" } }, "\u2605")), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 2 } }, /* @__PURE__ */ React.createElement(Stars, { r: rHist }))) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#CBD5E1", fontWeight: 700 } }, "Sem avalia\xE7\xF5es"))));
   })))) : null, view === "quadro_op" ? /* @__PURE__ */ React.createElement(QuadroOperacional, null) : null, view === "notas_op" ? /* @__PURE__ */ React.createElement(NotasOperacionais, null) : null, view === "esquecimentos" ? /* @__PURE__ */ React.createElement(QuadroEsquecimentos, { gestor: gestor, mode: "full", onVoltar: function() { setView("home"); } }) : null, view === "finance" ? /* @__PURE__ */ React.createElement(Finance, null) : null, view === "routes" ? /* @__PURE__ */ React.createElement(Routes, null) : null, view === "clients" ? /* @__PURE__ */ React.createElement(Clients, { onIrParaFinance: function() { setView("finance"); } }) : null, view === "fornecedores" ? /* @__PURE__ */ React.createElement(Fornecedores, null) : null, view === "pedidos_colab" ? /* @__PURE__ */ React.createElement(PedidosColab, { onUpdate: function(n) {
     setPedidosColabPendentes(n);
-  } }) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "leads" ? /* @__PURE__ */ React.createElement(Leads, null) : null, view === "recrutamento" ? /* @__PURE__ */ React.createElement(Recrutamento, null) : null, view === "avaliacoes" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "formacao" ? /* @__PURE__ */ React.createElement(Formacao, null) : null, view === "relatorio" ? /* @__PURE__ */ React.createElement(RelatorioMensal, null) : null, view === "gestores" ? /* @__PURE__ */ React.createElement(GestoresAdmin, null) : null, view === "armazem_qr" ? /* @__PURE__ */ React.createElement(QRArmazem, null) : null, view === "auditoria_qr" ? /* @__PURE__ */ React.createElement(AuditoriaQR, null) : null, view === "copia" ? /* @__PURE__ */ React.createElement(CopiaSeguranca, { gestor: gestor }) : null, view === "lalf" ? /* @__PURE__ */ React.createElement(LALFManual, { podeEditar: isDirector, nomeGestor: gestor ? (gestor.nome || gestor.name || "") : "" }) : null, view === "stock" ? /* @__PURE__ */ React.createElement(Stock, { onIrParaFornecedores: function() { setView("fornecedores"); } }) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, { onIrCategorias: function() { setView("categorias"); } }) : null, view === "categorias" ? /* @__PURE__ */ React.createElement(GestaoCategorias, { onBack: function() { setView("employees"); } }) : null));
+  } }) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "leads" ? /* @__PURE__ */ React.createElement(Leads, null) : null, view === "recrutamento" ? /* @__PURE__ */ React.createElement(Recrutamento, null) : null, view === "avaliacoes" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "formacao" ? /* @__PURE__ */ React.createElement(Formacao, null) : null, view === "relatorio" ? /* @__PURE__ */ React.createElement(RelatorioMensal, null) : null, view === "gestores" ? /* @__PURE__ */ React.createElement(GestoresAdmin, null) : null, view === "armazem_qr" ? /* @__PURE__ */ React.createElement(QRArmazem, null) : null, view === "auditoria_qr" ? /* @__PURE__ */ React.createElement(AuditoriaQR, null) : null, view === "copia" ? /* @__PURE__ */ React.createElement(CopiaSeguranca, { gestor: gestor }) : null, view === "lalf" ? /* @__PURE__ */ React.createElement(LALFGestao, { nomeGestor: gestor ? (gestor.nome || gestor.name || "") : "" }) : null, view === "stock" ? /* @__PURE__ */ React.createElement(Stock, { onIrParaFornecedores: function() { setView("fornecedores"); } }) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, { onIrCategorias: function() { setView("categorias"); } }) : null, view === "categorias" ? /* @__PURE__ */ React.createElement(GestaoCategorias, { onBack: function() { setView("employees"); } }) : null));
 }
 function EmpPedidos(props) {
   const empId = props.empId;
