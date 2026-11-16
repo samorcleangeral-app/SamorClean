@@ -149,10 +149,15 @@ function __scPintarAvisos() {
 // Esta vigia renova a sessao a cada dois minutos e quando se volta ao separador; se ja
 // nao houver sessao, poe uma faixa vermelha em vez de deixar ecras vazios sem explicacao.
 let SC_TINHA_SESSAO = false;
+// SC_NA_GESTAO diz se o ecra da gestao esta aberto. A faixa de sessao expirada so faz
+// sentido la: nos portais (colaborador e cliente) nao ha sessao de gestao nenhuma e
+// nada depende dela, por isso o aviso era um falso alarme (encontrado a 16/Nov, ao
+// entrar no portal da Filipa com uma sessao de gestao velha guardada no navegador).
+let SC_NA_GESTAO = false;
 function __scBannerSessao(mostrar) {
   try {
     var j = document.getElementById("sc-aviso-sessao");
-    if (!mostrar) { if (j) j.remove(); return; }
+    if (!mostrar || !SC_NA_GESTAO) { if (j) j.remove(); return; }
     if (j) return;
     var d = document.createElement("div");
     d.id = "sc-aviso-sessao";
@@ -13079,6 +13084,11 @@ function e_av(init, cor) {
   return /* @__PURE__ */ React.createElement("div", { style: { width: 30, height: 30, borderRadius: "50%", background: (cor || "#2E6DA4") + "22", color: cor || "#2E6DA4", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12, flexShrink: 0 } }, init || "?");
 }
 function Manager(props) {
+  useEffect(function () {
+    SC_NA_GESTAO = true;
+    __scVigiarSessao();
+    return function () { SC_NA_GESTAO = false; __scBannerSessao(false); };
+  }, []);
   const onExit = props.onExit;
   const gestor = props.gestor || { nivel: "director", menus: ["home", "finance", "routes", "clients", "pedidos", "avaliacoes", "formacao", "relatorio", "employees"] };
   const isDirector = gestor.nivel === "director";
