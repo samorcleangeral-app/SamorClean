@@ -9986,9 +9986,9 @@ function Stock(props) {
             /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20, fontWeight: 900, color: custoMes < 0 ? "#1E6B2A" : "#DC2626" } }, fmt(custoMes)),
             Math.abs(acertoMes) > 0.005
               ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 4, lineHeight: 1.45 } },
-                  "consumo " + fmt(custoSaidasMes) + "\u20AC",
+                  "consumo " + fmt(custoSaidasMes),
                   /* @__PURE__ */ React.createElement("br", null),
-                  "acerto de invent\xE1rio " + (acertoMes < 0 ? "\u2212" : "+") + fmt(Math.abs(acertoMes)) + "\u20AC")
+                  "acerto de invent\xE1rio " + (acertoMes < 0 ? "\u2212" : "+") + fmt(Math.abs(acertoMes)))
               : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: "#94A3B8", marginTop: 4 } }, "ao pre\xE7o da data de sa\xEDda")
           )
         ),
@@ -10231,7 +10231,7 @@ function Stock(props) {
             /* @__PURE__ */ React.createElement("br", null),
             !valido ? "Escreve um n\xFAmero (zero \xE9 v\xE1lido)." : (dif === 0 ? "Bate certo \u2014 n\xE3o h\xE1 nada a acertar." : /* @__PURE__ */ React.createElement(React.Fragment, null,
               "Diferen\xE7a: ", /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 800, color: dif > 0 ? "#1E6B2A" : "#9C2A2A" } }, (dif > 0 ? "+" : "") + dif + " " + (contagemProd.unidade || "")),
-              preco > 0 ? /* @__PURE__ */ React.createElement("span", null, " \u00B7 " + fmt(Math.abs(dif) * preco) + "\u20AC") : null,
+              preco > 0 ? /* @__PURE__ */ React.createElement("span", null, " \u00B7 " + fmt(Math.abs(dif) * preco)) : null,
               /* @__PURE__ */ React.createElement("br", null),
               /* @__PURE__ */ React.createElement("span", { style: { color: "#64748B" } }, dif > 0
                 ? "Havia mais do que a app dizia, logo consumiste menos: isto desconta ao custo de material do m\xEAs."
