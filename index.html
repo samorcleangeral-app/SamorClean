@@ -8938,6 +8938,159 @@ async function encolherFoto(file) {
 // Le TODAS as tabelas, confere o numero de linhas contra o que a base diz ter, e so
 // depois diz que esta feita. Uma copia que falhe em silencio e pior do que nenhuma.
 const COPIA_LISTA_FIXA = ["ajuste_dias_recibo_verde","alertas_dispensados","alertas_rota","ausencias","ausencias_confirmacao","avaliacoes","avaliacoes_internas","avaliacoes_mensais","cash_config","cash_movimentos","categorias_colaborador","checklist_lalf_marcacoes","client_contacts","client_notes","clientes","config","despesas","entradas_dashboard","esquecimentos_anulados","esquecimentos_confirmados","fardamento","financeiro","formacao_docs","fornecedores","fotos_cliente","funcionarios","funcionarios_docs","funcionarios_rh","gestores","historico_financeiro","leads","leads_recrutamento","metas_financeiras","notas_colaborador","notas_operacionais","notas_servico","obras","ordenado_gerencia","pagamentos_movimentos","partilhas_vistas","pedidos_colaboradores","pedidos_extra","picagens_armazem","premio_assiduidade_opcional","price_list","produtos","qr_aberturas","servicos","servicos_ocasionais","stock_movimentos","stock_produtos","voltas_fixas"];
+var SC_LALF_CACHE = "SC_LALF_CACHE_V1";
+function lalfSemAcentos(t) {
+  try { return (t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""); }
+  catch (e) { return (t || "").toLowerCase(); }
+}
+function lalfExcerto(corpo, termo) {
+  var texto = (corpo || "").replace(/\n+/g, " ");
+  var alvo = lalfSemAcentos(texto);
+  var i = alvo.indexOf(lalfSemAcentos(termo));
+  if (i === -1) return texto.slice(0, 130) + (texto.length > 130 ? "..." : "");
+  var ini = Math.max(0, i - 55);
+  var fim = Math.min(texto.length, i + termo.length + 95);
+  return (ini > 0 ? "..." : "") + texto.slice(ini, fim) + (fim < texto.length ? "..." : "");
+}
+function LALFManual(props) {
+  var podeEditar = !!props.podeEditar;
+  var nomeGestor = props.nomeGestor || "";
+  var [seccoes, setSeccoes] = useState([]);
+  var [carregando, setCarregando] = useState(true);
+  var [busca, setBusca] = useState("");
+  var [aberta, setAberta] = useState(null);
+  var [editando, setEditando] = useState(false);
+  var [rascunho, setRascunho] = useState({ titulo: "", corpo: "" });
+  var [guardando, setGuardando] = useState(false);
+  var [daCache, setDaCache] = useState(false);
+
+  function carregar() {
+    db.list("lalf_seccoes", "?select=*&activa=is.true&order=ordem.asc").then(function (rows) {
+      if (rows && rows.length) {
+        setSeccoes(rows);
+        setDaCache(false);
+        try { localStorage.setItem(SC_LALF_CACHE, JSON.stringify(rows)); } catch (e) {}
+      }
+      setCarregando(false);
+    });
+  }
+  useEffect(function () {
+    try {
+      var guardado = localStorage.getItem(SC_LALF_CACHE);
+      if (guardado) {
+        var lista = JSON.parse(guardado);
+        if (lista && lista.length) { setSeccoes(lista); setCarregando(false); setDaCache(true); }
+      }
+    } catch (e) {}
+    carregar();
+  }, []);
+
+  async function guardarSeccao() {
+    if (!rascunho.titulo.trim() || !rascunho.corpo.trim()) return;
+    setGuardando(true);
+    var ok = await db.update("lalf_seccoes", aberta.id, {
+      titulo: rascunho.titulo.trim(),
+      corpo: rascunho.corpo,
+      actualizado_por: nomeGestor || "Gestão"
+    });
+    setGuardando(false);
+    if (ok) {
+      setEditando(false);
+      setAberta(null);
+      try { localStorage.removeItem(SC_LALF_CACHE); } catch (e) {}
+      carregar();
+    }
+  }
+
+  var termo = busca.trim();
+  var resultados = termo.length >= 2 ? seccoes.filter(function (s) {
+    var t = lalfSemAcentos(termo);
+    return lalfSemAcentos(s.titulo).indexOf(t) !== -1 || lalfSemAcentos(s.corpo).indexOf(t) !== -1;
+  }) : null;
+
+  var cartao = { background: "#fff", borderRadius: 12, border: "1px solid #E2EBF4", padding: "12px 14px", marginBottom: 8, cursor: "pointer" };
+  var txtBotao = { border: "none", borderRadius: 10, padding: "11px 16px", fontSize: 13, fontWeight: 800, cursor: "pointer" };
+
+  if (carregando) {
+    return React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#94A3B8" } }, "A carregar o LALF...");
+  }
+
+  if (aberta) {
+    var dataAlt = aberta.actualizado_em ? new Date(aberta.actualizado_em).toLocaleDateString("pt-PT", { day: "numeric", month: "long" }) : "";
+    var etiquetas = [];
+    try { etiquetas = Array.isArray(aberta.etiquetas) ? aberta.etiquetas : JSON.parse(aberta.etiquetas || "[]"); } catch (e) { etiquetas = []; }
+    return React.createElement("div", { style: { maxWidth: 760, margin: "0 auto" } },
+      React.createElement("button", { onClick: function () { setAberta(null); setEditando(false); }, style: { background: "none", border: "none", color: "#2E6DA4", fontWeight: 800, fontSize: 13, cursor: "pointer", padding: 0, marginBottom: 14 } }, "‹ Voltar ao LALF"),
+      editando ? React.createElement("div", { style: { background: "#fff", borderRadius: 14, border: "1px solid #E2EBF4", padding: 16 } },
+        React.createElement("div", { style: { fontSize: 11, fontWeight: 800, color: "#64748B", textTransform: "uppercase", marginBottom: 5 } }, "Título"),
+        React.createElement("input", { value: rascunho.titulo, onChange: function (e) { setRascunho(Object.assign({}, rascunho, { titulo: e.target.value })); }, style: { width: "100%", padding: "10px 12px", borderRadius: 9, border: "1.5px solid #E2EBF4", fontSize: 14, fontWeight: 700, color: "#1A3A5C", marginBottom: 14, boxSizing: "border-box" } }),
+        React.createElement("div", { style: { fontSize: 11, fontWeight: 800, color: "#64748B", textTransform: "uppercase", marginBottom: 5 } }, "Texto"),
+        React.createElement("textarea", { value: rascunho.corpo, onChange: function (e) { setRascunho(Object.assign({}, rascunho, { corpo: e.target.value })); }, style: { width: "100%", minHeight: 320, padding: "11px 12px", borderRadius: 9, border: "1.5px solid #E2EBF4", fontSize: 13, lineHeight: 1.6, color: "#334155", fontFamily: "inherit", boxSizing: "border-box", marginBottom: 14 } }),
+        React.createElement("div", { style: { display: "flex", gap: 8 } },
+          React.createElement("button", { onClick: guardarSeccao, disabled: guardando || !rascunho.titulo.trim() || !rascunho.corpo.trim(), style: Object.assign({}, txtBotao, { background: "#1A3A5C", color: "#fff", flex: 2, opacity: guardando || !rascunho.titulo.trim() || !rascunho.corpo.trim() ? 0.5 : 1 }) }, guardando ? "A guardar..." : "Guardar alteração"),
+          React.createElement("button", { onClick: function () { setEditando(false); }, style: Object.assign({}, txtBotao, { background: "#fff", color: "#1A3A5C", border: "1.5px solid #E2EBF4", flex: 1 }) }, "Cancelar")
+        ),
+        React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 12, lineHeight: 1.5 } }, "As colaboradoras passam a ver esta versão assim que abrirem o separador. Fica registado quem alterou e quando.")
+      ) : React.createElement("div", { style: { background: "#fff", borderRadius: 14, border: "1px solid " + (aberta.fixa ? "#E8B4B4" : "#E2EBF4"), padding: 18 } },
+        React.createElement("div", { style: { fontSize: 18, fontWeight: 900, color: aberta.fixa ? "#9C2A2A" : "#1A3A5C", marginBottom: 12, lineHeight: 1.3 } }, (aberta.fixa ? "⚠ " : "") + aberta.titulo),
+        React.createElement("div", { style: { fontSize: 13.5, lineHeight: 1.7, color: "#334155", whiteSpace: "pre-wrap" } }, aberta.corpo),
+        etiquetas.length > 0 && React.createElement("div", { style: { marginTop: 14 } }, etiquetas.map(function (et) {
+          return React.createElement("span", { key: et, style: { display: "inline-block", fontSize: 10.5, fontWeight: 800, background: "#EFF6FF", color: "#2E6DA4", padding: "3px 9px", borderRadius: 99, marginRight: 5 } }, et);
+        })),
+        React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", borderTop: "1px solid #F1F5F9", paddingTop: 10, marginTop: 14 } }, aberta.actualizado_por ? "Alterado por " + aberta.actualizado_por + (dataAlt ? " · " + dataAlt : "") : (dataAlt ? "Actualizado a " + dataAlt : "")),
+        podeEditar && React.createElement("button", { onClick: function () { setRascunho({ titulo: aberta.titulo, corpo: aberta.corpo }); setEditando(true); }, style: Object.assign({}, txtBotao, { background: "#fff", color: "#1A3A5C", border: "1.5px solid #E2EBF4", marginTop: 14 }) }, "✏️ Editar secção")
+      )
+    );
+  }
+
+  var fixas = seccoes.filter(function (s) { return s.fixa; });
+  var grupos = [];
+  seccoes.filter(function (s) { return !s.fixa; }).forEach(function (s) {
+    if (grupos.indexOf(s.grupo) === -1) grupos.push(s.grupo);
+  });
+
+  return React.createElement("div", { style: { maxWidth: 760, margin: "0 auto" } },
+    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 } },
+      React.createElement("div", null,
+        React.createElement("div", { style: { fontSize: 16, fontWeight: 900, color: "#1A3A5C" } }, "📘 LALF"),
+        React.createElement("div", { style: { fontSize: 12, color: "#64748B", marginTop: 1 } }, "Método de limpeza · " + seccoes.length + " secções")
+      ),
+      daCache && React.createElement("span", { style: { fontSize: 10.5, fontWeight: 800, color: "#1E6B2A", background: "#E5F4E4", padding: "4px 10px", borderRadius: 99 } }, "✓ guardado no telemóvel")
+    ),
+    React.createElement("input", { value: busca, onChange: function (e) { setBusca(e.target.value); }, placeholder: "🔍 Procurar no LALF...", style: { width: "100%", padding: "11px 13px", borderRadius: 10, border: "1.5px solid " + (termo ? "#1A3A5C" : "#E2EBF4"), background: termo ? "#fff" : "#F1F5F9", fontSize: 13.5, color: "#1A3A5C", marginBottom: 14, boxSizing: "border-box", fontFamily: "inherit" } }),
+
+    resultados ? React.createElement("div", null,
+      React.createElement("div", { style: { fontSize: 11.5, color: "#64748B", marginBottom: 10 } }, resultados.length === 0 ? "Nada encontrado." : resultados.length + (resultados.length === 1 ? " secção encontrada" : " secções encontradas")),
+      resultados.map(function (s) {
+        return React.createElement("div", { key: s.id, onClick: function () { setAberta(s); }, style: Object.assign({}, cartao, { borderLeft: "3px solid #2E6DA4", background: "#F7FAFE" }) },
+          React.createElement("div", { style: { fontSize: 13.5, fontWeight: 800, color: "#1A3A5C" } }, s.titulo),
+          React.createElement("div", { style: { fontSize: 11.5, color: "#64748B", marginTop: 3, lineHeight: 1.5 } }, lalfExcerto(s.corpo, termo))
+        );
+      })
+    ) : React.createElement("div", null,
+      fixas.map(function (s) {
+        return React.createElement("div", { key: s.id, onClick: function () { setAberta(s); }, style: { border: "1.5px solid #E8B4B4", background: "#FDF4F4", borderRadius: 12, padding: "12px 14px", marginBottom: 14, cursor: "pointer" } },
+          React.createElement("div", { style: { fontSize: 13.5, fontWeight: 900, color: "#9C2A2A" } }, "⚠ " + s.titulo),
+          React.createElement("div", { style: { fontSize: 11.5, color: "#7F3A3A", marginTop: 3 } }, "A regra que nunca se esquece. Toca para ler.")
+        );
+      }),
+      grupos.map(function (g) {
+        return React.createElement("div", { key: g },
+          React.createElement("div", { style: { fontSize: 10.5, fontWeight: 800, color: "#94A3B8", textTransform: "uppercase", letterSpacing: 0.4, margin: "14px 0 7px" } }, g),
+          seccoes.filter(function (s) { return !s.fixa && s.grupo === g; }).map(function (s) {
+            return React.createElement("div", { key: s.id, onClick: function () { setAberta(s); }, style: cartao },
+              React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 } },
+                React.createElement("div", { style: { fontSize: 13.5, fontWeight: 800, color: "#1A3A5C" } }, s.titulo),
+                React.createElement("span", { style: { color: "#94A3B8", fontWeight: 900 } }, "›")
+              ),
+              React.createElement("div", { style: { fontSize: 11.5, color: "#64748B", marginTop: 3, lineHeight: 1.5 } }, (s.corpo || "").replace(/\n+/g, " ").slice(0, 95) + "...")
+            );
+          })
+        );
+      })
+    )
+  );
+}
 function CopiaSeguranca(props) {
   var nomeGestor = (props.gestor && (props.gestor.nome || props.gestor.email)) || "gest\xE3o";
   const [estado, setEstado] = useState("pronto");
@@ -12946,6 +13099,7 @@ function Manager(props) {
     { k: "gestores", l: "\u2699 Utilizadores" },
     { k: "armazem_qr", l: "\u{1F4E6} QR Armaz\xE9m" },
     { k: "auditoria_qr", l: "\uD83D\uDD0D Auditoria QR" },
+    { k: "lalf", l: "\uD83D\uDCD8 LALF" },
     { k: "copia", l: "\uD83D\uDCBE C\xF3pia de seguran\xE7a" }
   ];
   const navItems = allNavItems.filter(function(i) {
@@ -13358,7 +13512,7 @@ function Manager(props) {
     return /* @__PURE__ */ React.createElement("div", { key: e.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: i === 0 ? "#F59E0B" : i === 1 ? "#94A3B8" : "#CD7C54", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 11, flexShrink: 0 } }, i + 1), /* @__PURE__ */ React.createElement(Av, { init: e.av, size: 30, color: ["#2E6DA4", "#0F766E", "#7C3AED", "#C2410C"][i] || "#64748B" }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#334155" } }, e.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8" } }, e.role)), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right" } }, rankingModo === "mes" ? (rMes ? /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end" } }, /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 900, fontSize: 15, color: "#2E6DA4" } }, rMes.media), /* @__PURE__ */ React.createElement("span", { style: { color: "#F59E0B" } }, "\u2605"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: "#94A3B8" } }, "(", rMes.count, ")")) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#CBD5E1", fontWeight: 700 } }, "Sem avalia\xE7\xF5es este m\xEAs")) : (rHist != null ? /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end" } }, /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 900, fontSize: 15, color: "#2E6DA4" } }, rHist), /* @__PURE__ */ React.createElement("span", { style: { color: "#F59E0B" } }, "\u2605")), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 2 } }, /* @__PURE__ */ React.createElement(Stars, { r: rHist }))) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#CBD5E1", fontWeight: 700 } }, "Sem avalia\xE7\xF5es"))));
   })))) : null, view === "quadro_op" ? /* @__PURE__ */ React.createElement(QuadroOperacional, null) : null, view === "notas_op" ? /* @__PURE__ */ React.createElement(NotasOperacionais, null) : null, view === "esquecimentos" ? /* @__PURE__ */ React.createElement(QuadroEsquecimentos, { gestor: gestor, mode: "full", onVoltar: function() { setView("home"); } }) : null, view === "finance" ? /* @__PURE__ */ React.createElement(Finance, null) : null, view === "routes" ? /* @__PURE__ */ React.createElement(Routes, null) : null, view === "clients" ? /* @__PURE__ */ React.createElement(Clients, { onIrParaFinance: function() { setView("finance"); } }) : null, view === "fornecedores" ? /* @__PURE__ */ React.createElement(Fornecedores, null) : null, view === "pedidos_colab" ? /* @__PURE__ */ React.createElement(PedidosColab, { onUpdate: function(n) {
     setPedidosColabPendentes(n);
-  } }) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "leads" ? /* @__PURE__ */ React.createElement(Leads, null) : null, view === "recrutamento" ? /* @__PURE__ */ React.createElement(Recrutamento, null) : null, view === "avaliacoes" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "formacao" ? /* @__PURE__ */ React.createElement(Formacao, null) : null, view === "relatorio" ? /* @__PURE__ */ React.createElement(RelatorioMensal, null) : null, view === "gestores" ? /* @__PURE__ */ React.createElement(GestoresAdmin, null) : null, view === "armazem_qr" ? /* @__PURE__ */ React.createElement(QRArmazem, null) : null, view === "auditoria_qr" ? /* @__PURE__ */ React.createElement(AuditoriaQR, null) : null, view === "copia" ? /* @__PURE__ */ React.createElement(CopiaSeguranca, { gestor: gestor }) : null, view === "stock" ? /* @__PURE__ */ React.createElement(Stock, { onIrParaFornecedores: function() { setView("fornecedores"); } }) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, { onIrCategorias: function() { setView("categorias"); } }) : null, view === "categorias" ? /* @__PURE__ */ React.createElement(GestaoCategorias, { onBack: function() { setView("employees"); } }) : null));
+  } }) : null, view === "pedidos" ? /* @__PURE__ */ React.createElement(PedidosExtra, null) : null, view === "leads" ? /* @__PURE__ */ React.createElement(Leads, null) : null, view === "recrutamento" ? /* @__PURE__ */ React.createElement(Recrutamento, null) : null, view === "avaliacoes" ? /* @__PURE__ */ React.createElement(Avaliacoes, null) : null, view === "formacao" ? /* @__PURE__ */ React.createElement(Formacao, null) : null, view === "relatorio" ? /* @__PURE__ */ React.createElement(RelatorioMensal, null) : null, view === "gestores" ? /* @__PURE__ */ React.createElement(GestoresAdmin, null) : null, view === "armazem_qr" ? /* @__PURE__ */ React.createElement(QRArmazem, null) : null, view === "auditoria_qr" ? /* @__PURE__ */ React.createElement(AuditoriaQR, null) : null, view === "copia" ? /* @__PURE__ */ React.createElement(CopiaSeguranca, { gestor: gestor }) : null, view === "lalf" ? /* @__PURE__ */ React.createElement(LALFManual, { podeEditar: isDirector, nomeGestor: gestor ? (gestor.nome || gestor.name || "") : "" }) : null, view === "stock" ? /* @__PURE__ */ React.createElement(Stock, { onIrParaFornecedores: function() { setView("fornecedores"); } }) : null, view === "employees" ? /* @__PURE__ */ React.createElement(Employees, { onIrCategorias: function() { setView("categorias"); } }) : null, view === "categorias" ? /* @__PURE__ */ React.createElement(GestaoCategorias, { onBack: function() { setView("employees"); } }) : null));
 }
 function EmpPedidos(props) {
   const empId = props.empId;
@@ -14205,8 +14359,8 @@ function Employee(props) {
     { l: "Avalia\xE7\xE3o (m\xEAs)", v: ratingMesEmp ? ratingMesEmp + "\u2605" : "--" }
   ].map(function(s) {
     return /* @__PURE__ */ React.createElement("div", { key: s.l, style: { background: "rgba(255,255,255,0.08)", borderRadius: 10, padding: "10px 8px", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontWeight: 800, fontSize: 18 } }, s.v), /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(255,255,255,0.4)", fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginTop: 2 } }, s.l));
-  }))), /* @__PURE__ */ React.createElement("div", { style: { padding: "16px 16px 32px" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" } }, ["hoje", "hist\xF3rico", "semana", "notas", "assiduidade", "picagens", "formacao", "pedidos"].map(function(t) {
-    const labels = { hoje: "Hoje", "hist\xF3rico": "Hist\xF3rico", semana: "Semana", notas: "\uD83D\uDCCB Notas", assiduidade: "Assiduidade", picagens: "Picagens", formacao: "Documentos RH", pedidos: "Pedidos" };
+  }))), /* @__PURE__ */ React.createElement("div", { style: { padding: "16px 16px 32px" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" } }, ["hoje", "hist\xF3rico", "semana", "notas", "assiduidade", "picagens", "lalf", "formacao", "pedidos"].map(function(t) {
+    const labels = { hoje: "Hoje", "hist\xF3rico": "Hist\xF3rico", semana: "Semana", notas: "\uD83D\uDCCB Notas", assiduidade: "Assiduidade", picagens: "Picagens", lalf: "\uD83D\uDCD8 LALF", formacao: "Documentos RH", pedidos: "Pedidos" };
     const badgeCount = t === "pedidos" && pedidosRespondidos > 0 ? pedidosRespondidos : t === "hoje" && alertasRota.length > 0 ? alertasRota.length : t === "notas" && notasPartilhadasNaoVistas > 0 ? notasPartilhadasNaoVistas : 0;
     return /* @__PURE__ */ React.createElement("button", { key: t, onClick: function() {
       setDashTab(t);
@@ -14456,7 +14610,7 @@ function Employee(props) {
     /* @__PURE__ */ React.createElement("div", { style: { background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#1E40AF", fontWeight: 600, marginBottom: 14, lineHeight: 1.5 } }, "ℹ Qualquer atraso ou picagem em falta deve ser reportado \xE0 gest\xE3o."),
     (absStats.atrasosLista && absStats.atrasosLista.length > 0) && /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 12 } }, "Os teus atrasos este m\xEAs"), absStats.atrasosLista.slice().sort(function(a, b) { return (a.date || "") < (b.date || "") ? 1 : -1; }).map(function(a, i) { return /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, a.cn), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#94A3B8", marginLeft: 6 } }, new Date(a.date + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "short" }), " · ", a.t1)), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 800, color: "#DC2626", background: "#FEF2F2", borderRadius: 7, padding: "3px 9px" } }, "+", a.min, " min")); })),
     /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Resumo (\xFAltimos 7 dias)"), [{ l: "Servi\xE7os escalados", v: absStats.total, c: "#1A3A5C" }, { l: "Faltas totais", v: absStats.faltas, c: "#EF4444" }, { l: "Faltas parciais", v: absStats.parciais, c: "#F59E0B" }].map(function(r) { return /* @__PURE__ */ React.createElement("div", { key: r.l, style: { display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: "#64748B" } }, r.l), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 15, fontWeight: 800, color: r.c } }, r.v)); }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#94A3B8", marginTop: 12, lineHeight: 1.6 } }, "Falta total = 1 ponto. Falta parcial (sa\xEDda antecipada) = 0.5 pontos.")),
-    ausenciasEmp.length > 0 && /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Aus\xEAncias registadas"), ausenciasEmp.map(function(a) { var corTipo = (a.tipo || "").toLowerCase() === "f\xe9rias" ? "#16A34A" : a.tipo === "Baixa M\xe9dica" ? "#EF4444" : "#F59E0B"; return /* @__PURE__ */ React.createElement("div", { key: a.id, style: { display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("span", { style: { background: corTipo + "20", color: corTipo, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700, flexShrink: 0 } }, a.tipo), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 600, color: "#1A3A5C" } }, a.data_inicio, a.data_fim && a.data_fim !== a.data_inicio ? " \u2192 " + a.data_fim : ""), a.descricao && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 2 } }, a.descricao))); }))), dashTab === "picagens" && picagensArmazem.length > 0 && /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 16 } }, "Hist\xF3rico de Picagens \u2014 Armaz\xe9m"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 } }, (function() { var byDay = {}; picagensArmazem.forEach(function(p) { var dia = (p.hora || p.created_at || "").slice(0, 10); if (!byDay[dia]) byDay[dia] = { entradas: 0, saidas: 0 }; if (p.tipo === "entrada") byDay[dia].entradas++; else byDay[dia].saidas++; }); return Object.keys(byDay).sort().reverse().slice(0, 7).map(function(dia) { var r = byDay[dia]; return /* @__PURE__ */ React.createElement("div", { key: dia, style: { background: "#F0FDF4", borderRadius: 8, padding: "8px 12px", border: "1px solid #86EFAC" } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 11, color: "#15803D" } }, new Date(dia + "T12:00:00").toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 2 } }, "\uD83D\uDFE2 ", r.entradas, "  \uD83D\uDD34 ", r.saidas)); }); })()), /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { background: "#F8FAFC" } }, /* @__PURE__ */ React.createElement("th", { style: { padding: "8px 10px", textAlign: "left", color: "#64748B", fontWeight: 700, fontSize: 11 } }, "Data"), /* @__PURE__ */ React.createElement("th", { style: { padding: "8px 10px", textAlign: "left", color: "#64748B", fontWeight: 700, fontSize: 11 } }, "Hora"), /* @__PURE__ */ React.createElement("th", { style: { padding: "8px 10px", textAlign: "left", color: "#64748B", fontWeight: 700, fontSize: 11 } }, "Tipo"))), /* @__PURE__ */ React.createElement("tbody", null, picagensArmazem.slice(0, 30).map(function(p, i) { var dt = new Date(p.hora || p.created_at); var tipo = p.tipo || "entrada"; return /* @__PURE__ */ React.createElement("tr", { key: p.id || i, style: { borderBottom: "1px solid #F1F5F9", background: i % 2 === 0 ? "#fff" : "#F8FAFC" } }, /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", color: "#334155" } }, dt.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" })), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", fontWeight: 700, color: "#1A3A5C" } }, dt.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px" } }, /* @__PURE__ */ React.createElement("span", { style: { background: tipo === "entrada" ? "#DCFCE7" : "#FEE2E2", color: tipo === "entrada" ? "#15803D" : "#DC2626", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, tipo === "entrada" ? "\u2192 Entrada" : "\u2190 Sa\xEDda"))); })))), dashTab === "formacao" && /* @__PURE__ */ React.createElement(EmpFormacao, { empRole: emp ? emp.role : "", empId: emp ? emp.id : "" }), dashTab === "pedidos" && emp && /* @__PURE__ */ React.createElement(EmpPedidos, { empId: emp.id, empName: emp.name })));
+    ausenciasEmp.length > 0 && /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 14 } }, "Aus\xEAncias registadas"), ausenciasEmp.map(function(a) { var corTipo = (a.tipo || "").toLowerCase() === "f\xe9rias" ? "#16A34A" : a.tipo === "Baixa M\xe9dica" ? "#EF4444" : "#F59E0B"; return /* @__PURE__ */ React.createElement("div", { key: a.id, style: { display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 0", borderBottom: "1px solid #F1F5F9" } }, /* @__PURE__ */ React.createElement("span", { style: { background: corTipo + "20", color: corTipo, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700, flexShrink: 0 } }, a.tipo), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 600, color: "#1A3A5C" } }, a.data_inicio, a.data_fim && a.data_fim !== a.data_inicio ? " \u2192 " + a.data_fim : ""), a.descricao && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 2 } }, a.descricao))); }))), dashTab === "picagens" && picagensArmazem.length > 0 && /* @__PURE__ */ React.createElement("div", { style: card }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: "#1A3A5C", marginBottom: 16 } }, "Hist\xF3rico de Picagens \u2014 Armaz\xe9m"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 } }, (function() { var byDay = {}; picagensArmazem.forEach(function(p) { var dia = (p.hora || p.created_at || "").slice(0, 10); if (!byDay[dia]) byDay[dia] = { entradas: 0, saidas: 0 }; if (p.tipo === "entrada") byDay[dia].entradas++; else byDay[dia].saidas++; }); return Object.keys(byDay).sort().reverse().slice(0, 7).map(function(dia) { var r = byDay[dia]; return /* @__PURE__ */ React.createElement("div", { key: dia, style: { background: "#F0FDF4", borderRadius: 8, padding: "8px 12px", border: "1px solid #86EFAC" } }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, fontSize: 11, color: "#15803D" } }, new Date(dia + "T12:00:00").toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#64748B", marginTop: 2 } }, "\uD83D\uDFE2 ", r.entradas, "  \uD83D\uDD34 ", r.saidas)); }); })()), /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { style: { background: "#F8FAFC" } }, /* @__PURE__ */ React.createElement("th", { style: { padding: "8px 10px", textAlign: "left", color: "#64748B", fontWeight: 700, fontSize: 11 } }, "Data"), /* @__PURE__ */ React.createElement("th", { style: { padding: "8px 10px", textAlign: "left", color: "#64748B", fontWeight: 700, fontSize: 11 } }, "Hora"), /* @__PURE__ */ React.createElement("th", { style: { padding: "8px 10px", textAlign: "left", color: "#64748B", fontWeight: 700, fontSize: 11 } }, "Tipo"))), /* @__PURE__ */ React.createElement("tbody", null, picagensArmazem.slice(0, 30).map(function(p, i) { var dt = new Date(p.hora || p.created_at); var tipo = p.tipo || "entrada"; return /* @__PURE__ */ React.createElement("tr", { key: p.id || i, style: { borderBottom: "1px solid #F1F5F9", background: i % 2 === 0 ? "#fff" : "#F8FAFC" } }, /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", color: "#334155" } }, dt.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "short" })), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px", fontWeight: 700, color: "#1A3A5C" } }, dt.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })), /* @__PURE__ */ React.createElement("td", { style: { padding: "8px 10px" } }, /* @__PURE__ */ React.createElement("span", { style: { background: tipo === "entrada" ? "#DCFCE7" : "#FEE2E2", color: tipo === "entrada" ? "#15803D" : "#DC2626", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 } }, tipo === "entrada" ? "\u2192 Entrada" : "\u2190 Sa\xEDda"))); })))), dashTab === "lalf" && /* @__PURE__ */ React.createElement(LALFManual, { podeEditar: false }), dashTab === "formacao" && /* @__PURE__ */ React.createElement(EmpFormacao, { empRole: emp ? emp.role : "", empId: emp ? emp.id : "" }), dashTab === "pedidos" && emp && /* @__PURE__ */ React.createElement(EmpPedidos, { empId: emp.id, empName: emp.name })));
 }
 function ClientFotosTab(props) {
   const clientId = props.clientId;
