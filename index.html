@@ -205,6 +205,17 @@ function dbHeaders(extra) {
   }
   return h;
 }
+// Cabecalhos para ficheiros (Storage). Mesma regra do dbHeaders: usa o token da
+// sessao de gestao quando existe, e so cai na chave anonima nos portais (fotos).
+// Sem Content-Type fixo, porque aqui vai um ficheiro e nao JSON.
+function storageHeaders(tipoConteudo) {
+  const h = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": "Bearer " + (SC_AUTH_TOKEN || SUPABASE_KEY)
+  };
+  if (tipoConteudo) h["Content-Type"] = tipoConteudo;
+  return h;
+}
 // --- memoria curta + dedup, para cortar a enxurrada de pedidos (velocidade) ---
 // Guarda o resultado de cada leitura por poucos segundos e reaproveita-o entre modulos.
 // Qualquer gravacao limpa esta memoria na hora, por isso os numeros estao sempre certos.
@@ -7917,7 +7928,7 @@ function Formacao() {
     const fname = Date.now() + "_" + file.name.replace(/\s+/g, "_");
     const upRes = await fetch(SUPABASE_URL + "/storage/v1/object/formacao/" + fname, {
       method: "POST",
-      headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": file.type },
+      headers: storageHeaders(file.type),
       body: file
     });
     if (!upRes.ok) {
@@ -7950,7 +7961,7 @@ function Formacao() {
     const fname = doc.file_url.split("/formacao/").pop();
     await fetch(SUPABASE_URL + "/storage/v1/object/formacao/" + fname, {
       method: "DELETE",
-      headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
+      headers: storageHeaders()
     });
     await db.remove("formacao_docs", doc.id);
     setDocs(function(p) {
