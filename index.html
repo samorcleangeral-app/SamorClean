@@ -154,6 +154,11 @@ let SC_TINHA_SESSAO = false;
 // nada depende dela, por isso o aviso era um falso alarme (encontrado a 16/Nov, ao
 // entrar no portal da Filipa com uma sessao de gestao velha guardada no navegador).
 let SC_NA_GESTAO = false;
+// Um contador a correr no terreno (os 5 minutos do SDF, no checklist LALF) e trabalho,
+// nao e inactividade. Quem arranca um contador chama scSuspenderInactividade(ms) e a
+// vigia do portal do colaborador deixa de contar ate esse instante. (22/Nov)
+let SC_CONTADOR_ATE = 0;
+function scSuspenderInactividade(ms) { SC_CONTADOR_ATE = Date.now() + (parseInt(ms, 10) || 0); }
 function __scBannerSessao(mostrar) {
   try {
     var j = document.getElementById("sc-aviso-sessao");
@@ -14008,18 +14013,29 @@ function Employee(props) {
   const [checklistLalfMap, setChecklistLalfMap] = useState({});
   const [empsMapTeam, setEmpsMapTeam] = useState({});
   const lastActivityRef = React.useRef(Date.now());
-  const EMP_TIMEOUT = 5 * 60 * 1000; // 5 min
+  const EMP_TIMEOUT = 30 * 60 * 1000; // 30 min. Eram 5, e 5 min e menos que uma casa de banho.
+  const [bloqueado, setBloqueado] = useState(false);
+  const [pinBloq, setPinBloq] = useState("");
+  const [erroBloq, setErroBloq] = useState(false);
+  const [aDesbloquear, setADesbloquear] = useState(false);
+  // A vigia passa a correr em todas as fases, nao so no painel. Antes os ouvintes de
+  // actividade eram tambem so do painel: quem passasse 20 min dentro de um servico voltava
+  // ao painel e era expulsa nos 30 s seguintes, porque o relogio tinha ficado parado --
+  // exactamente no momento em que acabara de trabalhar. (encontrado a 22/Nov)
+  // E ao fim do tempo bloqueia DENTRO da app, com PIN, em vez de despejar para a pagina
+  // estatica: assim nao se perde o servico aberto nem o que ja estava marcado.
   useEffect(function() {
-    if (phase !== "dash") return;
+    if (phase === "login") return;
     var timer = setInterval(function() {
-      if (Date.now() - lastActivityRef.current > EMP_TIMEOUT) {
-        window.location.href = "https://samorcleangeral-app.github.io/SamorClean/sessao-terminada.html";
-      }
+      if (bloqueado) return;
+      if (SC_CONTADOR_ATE && Date.now() < SC_CONTADOR_ATE) return;
+      if (Date.now() - lastActivityRef.current > EMP_TIMEOUT) setBloqueado(true);
     }, 30000);
     return function() { clearInterval(timer); };
-  }, [phase]);
+  }, [phase, bloqueado]);
+  useEffect(function() { lastActivityRef.current = Date.now(); }, [phase]);
   useEffect(function() {
-    if (phase !== "dash") return;
+    if (phase === "login") return;
     function resetTimer() { lastActivityRef.current = Date.now(); }
     window.addEventListener("click", resetTimer);
     window.addEventListener("touchstart", resetTimer);
@@ -14415,6 +14431,69 @@ function Employee(props) {
     return emps.find(function(e) {
       return e.id === mateId;
     }) || null;
+  }
+  async function desbloquear(n) {
+    if (!emp) return;
+    setADesbloquear(true);
+    var ok = false;
+    try {
+      const res = await fetch(SUPABASE_URL + "/rest/v1/rpc/login_funcionario", {
+        method: "POST",
+        headers: dbHeaders(),
+        body: JSON.stringify({ p_id: emp.id, p_pin: n })
+      });
+      const rows = res.ok ? await res.json() : [];
+      ok = !!(rows && rows.length > 0);
+    } catch (e) { ok = false; }
+    setADesbloquear(false);
+    if (ok) {
+      lastActivityRef.current = Date.now();
+      setBloqueado(false);
+      setPinBloq("");
+      setErroBloq(false);
+    } else {
+      setErroBloq(true);
+      setPinBloq("");
+    }
+  }
+  function digitoBloq(d) {
+    if (aDesbloquear || pinBloq.length >= 6) return;
+    var n = pinBloq + d;
+    setPinBloq(n);
+    setErroBloq(false);
+    if (n.length === 6) setTimeout(function() { desbloquear(n); }, 150);
+  }
+  if (bloqueado && emp) {
+    var primeiro = String(emp.name || "").split(" ")[0];
+    var teclaEstilo = { background: "rgba(255,255,255,0.12)", border: "1.5px solid rgba(255,255,255,0.22)", borderRadius: 12, color: "#fff", fontSize: 22, fontWeight: 800, padding: "14px 0", cursor: "pointer" };
+    return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#1A3A5C", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 } },
+      /* @__PURE__ */ React.createElement("div", { style: { width: "100%", maxWidth: 330, textAlign: "center" } },
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 34, marginBottom: 12 } }, "🔒"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 19, fontWeight: 900, color: "#fff", marginBottom: 6 } }, "Sessão bloqueada"),
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, color: "rgba(255,255,255,0.8)", lineHeight: 1.55, marginBottom: 20 } }, (primeiro ? "Olá " + primeiro + ". B" : "B") + "loqueámos por segurança depois de 30 minutos sem uso."),
+        /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 9, justifyContent: "center", marginBottom: 16 } },
+          [0, 1, 2, 3, 4, 5].map(function(i) {
+            return /* @__PURE__ */ React.createElement("div", { key: i, style: { width: 32, height: 40, borderRadius: 9, background: "rgba(255,255,255,0.14)", border: "1.5px solid " + (erroBloq ? "#F08A8A" : "rgba(255,255,255,0.3)"), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 900, color: "#fff" } }, pinBloq.length > i ? "•" : "");
+          })
+        ),
+        erroBloq ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#F08A8A", fontWeight: 700, marginBottom: 14 } }, "PIN errado. Tenta outra vez.") : null,
+        aDesbloquear ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "rgba(255,255,255,0.7)", marginBottom: 14 } }, "A confirmar...") : null,
+        /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 9, marginBottom: 18 } },
+          ["1", "2", "3", "4", "5", "6", "7", "8", "9"].map(function(d) {
+            return /* @__PURE__ */ React.createElement("button", { key: d, onClick: function() { digitoBloq(d); }, style: teclaEstilo }, d);
+          }).concat([
+            /* @__PURE__ */ React.createElement("div", { key: "vazio" }),
+            /* @__PURE__ */ React.createElement("button", { key: "0", onClick: function() { digitoBloq("0"); }, style: teclaEstilo }, "0"),
+            /* @__PURE__ */ React.createElement("button", { key: "apagar", onClick: function() { if (!aDesbloquear) { setPinBloq(pinBloq.slice(0, -1)); setErroBloq(false); } }, style: Object.assign({}, teclaEstilo, { fontSize: 17 }) }, "⌫")
+          ])
+        ),
+        /* @__PURE__ */ React.createElement("div", { style: { background: "rgba(255,255,255,0.1)", borderRadius: 10, padding: "11px 13px", fontSize: 11.5, color: "rgba(255,255,255,0.92)", lineHeight: 1.55, textAlign: "left" } },
+          /* @__PURE__ */ React.createElement("b", null, "Nada se perdeu."),
+          " O serviço que tinhas aberto continua aberto e tudo o que marcaste está guardado. Escreve o PIN e voltas ao mesmo sítio."
+        ),
+        /* @__PURE__ */ React.createElement("button", { onClick: function() { if (onExit) onExit(); }, style: { background: "none", border: "none", color: "rgba(255,255,255,0.55)", fontSize: 12, fontWeight: 700, marginTop: 16, cursor: "pointer", textDecoration: "underline" } }, "Sair e voltar ao início")
+      )
+    );
   }
   if (phase === "team-confirm") {
     var today2 = localDateStr();
