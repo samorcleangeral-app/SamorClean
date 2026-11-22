@@ -14013,7 +14013,7 @@ function Employee(props) {
   const [checklistLalfMap, setChecklistLalfMap] = useState({});
   const [empsMapTeam, setEmpsMapTeam] = useState({});
   const lastActivityRef = React.useRef(Date.now());
-  const EMP_TIMEOUT = 1 * 60 * 1000; // TESTE-1MIN -- repor 30 * 60 * 1000
+  const EMP_TIMEOUT = 30 * 60 * 1000; // 30 min. Eram 5, e 5 min e menos que uma casa de banho.
   const [bloqueado, setBloqueado] = useState(false);
   const [pinBloq, setPinBloq] = useState("");
   const [erroBloq, setErroBloq] = useState(false);
@@ -14030,7 +14030,7 @@ function Employee(props) {
       if (bloqueado) return;
       if (SC_CONTADOR_ATE && Date.now() < SC_CONTADOR_ATE) return;
       if (Date.now() - lastActivityRef.current > EMP_TIMEOUT) setBloqueado(true);
-    }, 5000); // TESTE-1MIN -- repor 30000
+    }, 30000);
     return function() { clearInterval(timer); };
   }, [phase, bloqueado]);
   useEffect(function() { lastActivityRef.current = Date.now(); }, [phase]);
