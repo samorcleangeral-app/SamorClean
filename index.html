@@ -9619,6 +9619,15 @@ function AuditoriaQR() {
     garantir(l.origem_cliente_nome).leads++;
   });
   var placaLista = Object.keys(placaStats).map(function(k) { return placaStats[k]; }).filter(function(p) { return p.intencaoCliente > 0 || p.intencaoCandidato > 0 || p.leads > 0; }).sort(function(a, b) { return (b.intencaoCliente + b.intencaoCandidato + b.leads) - (a.intencaoCliente + a.intencaoCandidato + a.leads); });
+  var SC_EST = { ok: { background: "#E5F4E4", color: "#166534" }, meio: { background: "#F9EEDA", color: "#92400E" }, mau: { background: "#FBEBEB", color: "#991B1B" } };
+  function pastilhaEstado(texto, estado, chave) {
+    var ce = SC_EST[estado] || SC_EST.meio;
+    return React.createElement("span", { key: chave, style: { display: "inline-block", fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: ce.background, color: ce.color, whiteSpace: "nowrap" } }, texto);
+  }
+  function pastilhaVermelha(texto, chave) {
+    return React.createElement("span", { key: chave, style: { display: "inline-block", fontSize: 12, fontWeight: 600, padding: "5px 11px", borderRadius: 999, background: "#FBEBEB", color: "#991B1B" } }, texto);
+  }
+  var CARTAO_ALERTA = { background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 14, padding: 18, boxShadow: "0 1px 3px rgba(26,58,92,.05)" };
   // ===== Secção "Colaboradores": quem entrou, o que viu e o que leu =====
   function renderColaboradores() {
     var h = React.createElement;
@@ -9634,7 +9643,9 @@ function AuditoriaQR() {
       return d.toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) + ", " + hm;
     }
     var activos = (funcsAud || []).filter(function(f) { return f.ativo !== false; });
-    var nomePorId = {}; activos.forEach(function(f) { nomePorId[String(f.id)] = f.name; });
+    var nomePorId = {}, funcPorId = {}; activos.forEach(function(f) { nomePorId[String(f.id)] = f.name; funcPorId[String(f.id)] = f; });
+    var fixas = (lalfAud || []).filter(function(x) { return x.fixa; });
+    function docsDe(f) { return (docsAud || []).filter(function(d) { return d.emp_id ? String(d.emp_id) === String(f.id) : (d.role === "Todos" || d.role === f.role); }); }
     var ent = (entradasDash || []).filter(function(e) { return noPeriodo(e.created_at); });
     var lei = (leituras || []).filter(function(l) { return noPeriodo(l.aberto_em); });
     var por = {};
@@ -9667,12 +9678,20 @@ function AuditoriaQR() {
     (partVistas || []).forEach(function(v) { var k = String(v.funcionario_id); if (!vistasPor[k]) vistasPor[k] = {}; vistasPor[k][v.tipo + "|" + v.item_id] = 1; });
     function porVer(id) { var mapa = vistasPor[String(id)] || {}; var n = 0; partilhadas.forEach(function(k) { if (!mapa[k]) n++; }); return n; }
     function maisVistoC(c) { var best = null; Object.keys(c.vistos).forEach(function(k) { if (k !== "hoje" && (!best || c.vistos[k] > c.vistos[best])) best = k; }); return best ? (TABSC[best] || best) : "—"; }
-    function fezC(c) {
-      var p = [];
-      var nl = Object.keys(c.lalf).length, nd = Object.keys(c.docs).length;
-      if (nl) p.push(nl + (nl === 1 ? " secção do LALF" : " secções do LALF"));
-      if (nd) p.push(nd + (nd === 1 ? " documento" : " documentos"));
-      return p.length ? p.join(", ") : "Só consultou";
+    function celulaLalf(c) {
+      var abertas = Object.keys(c.lalf).length;
+      if (abertas === 0) return pastilhaEstado("nunca", "mau", c.id + "-l");
+      var texto = abertas + (abertas === 1 ? " secção" : " secções");
+      var fx = fixas.filter(function(x) { return c.lalf[String(x.id)]; }).length;
+      var completo = fixas.length > 0 && fx >= fixas.length;
+      return pastilhaEstado(texto, completo ? "ok" : "meio", c.id + "-l");
+    }
+    function celulaDocs(c) {
+      var f = funcPorId[c.id];
+      var ds = f ? docsDe(f) : (docsAud || []).filter(function(d) { return !d.emp_id && d.role === "Todos"; });
+      if (ds.length === 0) return "—";
+      var n = ds.filter(function(d) { return c.docs[String(d.id)]; }).length;
+      return pastilhaEstado(n + " de " + ds.length, n === 0 ? "mau" : (n >= ds.length ? "ok" : "meio"), c.id + "-d");
     }
     function fraseC(e) {
       if (e.tipo === "entrada") return "entrou no painel" + (e.n > 1 ? " (" + e.n + "\u00D7 nesse dia)" : "");
@@ -9706,7 +9725,7 @@ function AuditoriaQR() {
     var nunca = activos.filter(function(f) { return !(por[String(f.id)] && por[String(f.id)].entradas > 0); }).sort(function(a, b) { return (a.name || "").localeCompare(b.name || ""); });
     var th = { textAlign: "left", padding: "8px 10px", fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", borderBottom: "2px solid #E2EBF4" };
     var td = { padding: "10px", fontSize: 13, borderBottom: "1px solid #F1F5F9", color: "#1A3A5C" };
-    function kpi(label, valor, sub) { return h("div", { style: Object.assign({}, card, { padding: 16 }) }, h("div", { style: { fontSize: 12, color: "#64748B", fontWeight: 600 } }, label), h("div", { style: { fontSize: 26, fontWeight: 900, color: "#1A3A5C", marginTop: 4 } }, valor), h("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, sub)); }
+    function kpi(label, valor, sub, alerta) { return h("div", { style: Object.assign({}, card, { padding: 16 }) }, h("div", { style: { fontSize: 12, color: "#64748B", fontWeight: 600 } }, label), h("div", { style: { fontSize: 26, fontWeight: 900, color: alerta ? "#B45309" : "#1A3A5C", marginTop: 4 } }, valor), h("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, sub)); }
     function pastilha(texto, chave) { return h("span", { key: chave, style: { fontSize: 12, fontWeight: 600, padding: "5px 11px", borderRadius: 999, background: "#F1F5F9", color: "#334155" } }, texto); }
     return h("div", null,
       h("div", { style: { display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" } }, [["mes", "Este mês"], ["3m", "3 meses"], ["sempre", "Sempre"]].map(function(op) {
@@ -9719,8 +9738,14 @@ function AuditoriaQR() {
       h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 16 } },
         kpi("Colaboradores que entraram", entraram.length + " de " + activos.length, activos.length ? Math.round(entraram.length / activos.length * 100) + "% da equipa activa" : "sem colaboradores activos"),
         kpi("Entradas", totEnt, "de " + entraram.length + (entraram.length === 1 ? " pessoa" : " pessoas")),
-        kpi("Secções do LALF abertas", Object.keys(paresLalf).length, "por " + Object.keys(pessoasLalf).length + (Object.keys(pessoasLalf).length === 1 ? " pessoa" : " pessoas")),
-        kpi("Documentos abertos", Object.keys(paresDoc).length, "por " + Object.keys(pessoasDoc).length + (Object.keys(pessoasDoc).length === 1 ? " pessoa" : " pessoas"))
+        (function() {
+          var nL = Object.keys(pessoasLalf).length, aL = Object.keys(paresLalf).length;
+          return kpi("Abriram o LALF", nL + " de " + activos.length, aL + (aL === 1 ? " secção aberta ao todo" : " secções abertas ao todo"), nL < activos.length);
+        })(),
+        (function() {
+          var nD = Object.keys(pessoasDoc).length, aD = Object.keys(paresDoc).length;
+          return kpi("Abriram documentos", nD + " de " + activos.length, aD + (aD === 1 ? " documento aberto ao todo" : " documentos abertos ao todo"), nD < activos.length);
+        })()
       ),
       h("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
         h("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 10 } }, "Por colaborador"),
@@ -9731,7 +9756,8 @@ function AuditoriaQR() {
             h("th", { style: Object.assign({}, th, { textAlign: "right" }) }, "Entradas"),
             h("th", { style: th }, "Última entrada"),
             h("th", { style: th }, "O que mais vê"),
-            h("th", { style: th }, "O que fez"),
+            h("th", { style: th }, "LALF"),
+            h("th", { style: th }, "Documentos"),
             h("th", { style: Object.assign({}, th, { textAlign: "right" }) }, "Partilhas por ver"))),
           h("tbody", null, lista.map(function(c) {
             var ativo = colabDetalhe === c.id;
@@ -9740,7 +9766,8 @@ function AuditoriaQR() {
               h("td", { style: Object.assign({}, td, { textAlign: "right", fontWeight: 800 }) }, c.entradas),
               h("td", { style: td }, quando(c.ultima)),
               h("td", { style: td }, maisVistoC(c)),
-              h("td", { style: td }, fezC(c)),
+              h("td", { style: td }, celulaLalf(c)),
+              h("td", { style: td }, celulaDocs(c)),
               h("td", { style: Object.assign({}, td, { textAlign: "right" }) }, porVer(c.id)));
             if (!ativo) return linha;
             var brutos = c.evs.slice().sort(function(a, b) { return (b.t || "") > (a.t || "") ? 1 : -1; });
@@ -9753,7 +9780,7 @@ function AuditoriaQR() {
               evs.push({ t: e.t, tipo: "entrada", n: 1 });
             });
             evs = evs.slice(0, 15);
-            var det = h("tr", { key: c.id + "-det" }, h("td", { colSpan: 6, style: { padding: 0 } },
+            var det = h("tr", { key: c.id + "-det" }, h("td", { colSpan: 7, style: { padding: 0 } },
               h("div", { style: { borderTop: "1px solid #F1F5F9", background: "#F8FAFC", padding: "14px 16px" } },
                 h("div", { style: { fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 8 } }, "Últimos registos"),
                 evs.length === 0 ? h("div", { style: { fontSize: 12, color: "#94A3B8" } }, "Sem registos neste período.") :
@@ -9765,14 +9792,14 @@ function AuditoriaQR() {
           }))
         ))
       ),
-      h("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
+      h("div", { style: Object.assign({}, CARTAO_ALERTA, { marginBottom: 16 }) },
         h("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 4 } }, "Quem ainda não abriu"),
         h("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 10 } }, "Por documento e por secção fixa do LALF, dentro do período escolhido."),
         naoAbriu.length === 0 ? h("div", { style: { fontSize: 13, color: "#64748B" } }, "Todos abriram tudo o que lhes está destinado.") :
         naoAbriu.map(function(d, i) {
           return h("div", { key: d.k, style: { padding: "10px 0", borderBottom: i === naoAbriu.length - 1 ? "none" : "1px solid #F1F5F9" } },
             h("div", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C", marginBottom: 7 } }, d.titulo, d.sub ? h("span", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 400 } }, " · " + d.sub) : null),
-            h("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } }, d.quem.map(function(f) { return pastilha(f.name, String(f.id)); })));
+            h("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } }, d.quem.map(function(f) { return pastilhaVermelha(f.name, String(f.id)); })));
         })
       ),
       h("div", { style: card },
@@ -9821,6 +9848,19 @@ function AuditoriaQR() {
     var lista = Object.keys(porCli).map(function(k) { return porCli[k]; }).sort(function(a, b) { return b.logins - a.logins || (b.ultima > a.ultima ? 1 : -1); });
     function maisVisto(c) { var best = null; Object.keys(c.vistos).forEach(function(k) { if (k !== "home" && (!best || c.vistos[k] > c.vistos[best])) best = k; }); return best ? (TABS[best] || best) : "—"; }
     function fez(o) { var p = []; if (o.aval) p.push(o.aval + (o.aval === 1 ? " avaliação" : " avaliações")); if (o.extras) p.push(o.extras + (o.extras === 1 ? " pedido extra" : " pedidos extra")); return p.length ? p.join(", ") : "Só consultou"; }
+    var avaliados = {}; (avaliacoesAud || []).forEach(function(a) { if (a.servico_id) avaliados[String(a.servico_id)] = 1; });
+    var servPorCli = {}, avalPorCli = {}, totSemAvalG = 0, feitosG = 0;
+    (servicosDia || []).forEach(function(sv) {
+      if (!sv.date || sv.date < desde || !sv.check_out) return;
+      var k = String(sv.client_id);
+      servPorCli[k] = (servPorCli[k] || 0) + 1; feitosG++;
+      if (avaliados[String(sv.id)]) avalPorCli[k] = (avalPorCli[k] || 0) + 1; else totSemAvalG++;
+    });
+    function celulaAval(c) {
+      var tot = servPorCli[String(c.id)] || 0, fe = avalPorCli[String(c.id)] || 0;
+      if (tot === 0) return "—";
+      return pastilhaEstado(fe + " de " + tot, fe === 0 ? "mau" : (fe >= tot ? "ok" : "meio"), String(c.id) + "-a");
+    }
     var temContacto = {}; contactosAud.forEach(function(c) { temContacto[String(c.client_id)] = true; });
     var comPortal = clientesAud.filter(function(c) { return c.ativo !== false && temContacto[String(c.id)]; });
     var entraram = lista.filter(function(c) { return c.logins > 0; });
@@ -9832,7 +9872,7 @@ function AuditoriaQR() {
     var sel = clientePortalSel ? porCli[clientePortalSel] : null;
     var th = { textAlign: "left", padding: "8px 10px", fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", borderBottom: "2px solid #E2EBF4" };
     var td = { padding: "10px", fontSize: 13, borderBottom: "1px solid #F1F5F9", color: "#1A3A5C" };
-    function kpi(label, valor, sub) { return h("div", { style: Object.assign({}, card, { padding: 16 }) }, h("div", { style: { fontSize: 12, color: "#64748B", fontWeight: 600 } }, label), h("div", { style: { fontSize: 26, fontWeight: 900, color: "#1A3A5C", marginTop: 4 } }, valor), h("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, sub)); }
+    function kpi(label, valor, sub, alerta) { return h("div", { style: Object.assign({}, card, { padding: 16 }) }, h("div", { style: { fontSize: 12, color: "#64748B", fontWeight: 600 } }, label), h("div", { style: { fontSize: 26, fontWeight: 900, color: alerta ? "#B45309" : "#1A3A5C", marginTop: 4 } }, valor), h("div", { style: { fontSize: 12, color: "#64748B", marginTop: 2 } }, sub)); }
     return h("div", null,
       h("div", { style: { display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" } }, [["mes", "Este mês"], ["3m", "3 meses"], ["sempre", "Sempre"]].map(function(op) {
         var at = periodoPortal === op[0];
@@ -9841,14 +9881,14 @@ function AuditoriaQR() {
       h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 16 } },
         kpi("Clientes que entraram", entraram.length + " de " + comPortal.length, comPortal.length ? Math.round(entraram.length / comPortal.length * 100) + "% dos clientes com portal" : "sem clientes com contactos"),
         kpi("Entradas", totLogins, "de " + Object.keys(pessoasSet).length + (Object.keys(pessoasSet).length === 1 ? " pessoa" : " pessoas")),
-        kpi("Avaliações feitas", totAval, "pelo portal"),
+        kpi("Avaliações pelo portal", totAval, totSemAvalG > 0 ? totSemAvalG + (totSemAvalG === 1 ? " serviço por avaliar" : " serviços por avaliar") : "pelo portal", totSemAvalG > 0),
         kpi("Pedidos extra", totExtras, "vindos do portal")
       ),
       h("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
         h("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 10 } }, "Por empresa"),
         lista.length === 0 ? h("div", { style: { fontSize: 13, color: "#64748B", padding: "8px 0" } }, "Ainda sem actividade registada neste período. O registo começa a contar a partir da publicação desta versão.") :
         h("div", { style: { overflowX: "auto" } }, h("table", { style: { width: "100%", minWidth: 640, borderCollapse: "collapse" } },
-          h("thead", null, h("tr", null, h("th", { style: th }, "Cliente"), h("th", { style: Object.assign({}, th, { textAlign: "right" }) }, "Entradas"), h("th", { style: Object.assign({}, th, { textAlign: "right" }) }, "Pessoas"), h("th", { style: th }, "Última entrada"), h("th", { style: th }, "O que mais vê"), h("th", { style: th }, "O que fez"))),
+          h("thead", null, h("tr", null, h("th", { style: th }, "Cliente"), h("th", { style: Object.assign({}, th, { textAlign: "right" }) }, "Entradas"), h("th", { style: Object.assign({}, th, { textAlign: "right" }) }, "Pessoas"), h("th", { style: th }, "Última entrada"), h("th", { style: th }, "O que mais vê"), h("th", { style: th }, "Serviços avaliados"), h("th", { style: Object.assign({}, th, { textAlign: "right" }) }, "Pedidos"))),
           h("tbody", null, lista.map(function(c) {
             var ativo = clientePortalSel === c.id;
             var linha = h("tr", { key: c.id, onClick: function() { setClientePortalSel(ativo ? null : c.id); }, style: { cursor: "pointer", background: ativo ? "#EFF6FF" : "transparent" } },
@@ -9857,7 +9897,8 @@ function AuditoriaQR() {
               h("td", { style: Object.assign({}, td, { textAlign: "right" }) }, Object.keys(c.pessoas).length),
               h("td", { style: td }, quando(c.ultima)),
               h("td", { style: td }, maisVisto(c)),
-              h("td", { style: td }, fez(c)));
+              h("td", { style: td }, celulaAval(c)),
+              h("td", { style: Object.assign({}, td, { textAlign: "right" }) }, c.extras || 0));
             if (!ativo) return linha;
             var pes = Object.keys(c.pessoas).map(function(k) { return c.pessoas[k]; }).sort(function(a, b) { return b.logins - a.logins; });
             var crus = c.evs.slice().sort(function(a, b) { return (b.aberto_em || "") > (a.aberto_em || "") ? 1 : -1; });
@@ -9870,7 +9911,7 @@ function AuditoriaQR() {
               acc.push({ aberto_em: e.aberto_em, tipo: e.tipo, contacto: e.contacto, detalhe: e.detalhe, __n: 1 });
             });
             acc = acc.slice(0, 15);
-            var det = h("tr", { key: c.id + "-det" }, h("td", { colSpan: 6, style: { padding: 0 } },
+            var det = h("tr", { key: c.id + "-det" }, h("td", { colSpan: 7, style: { padding: 0 } },
               h("div", { style: { borderTop: "1px solid #F1F5F9", background: "#F8FAFC", padding: "14px 16px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 24 } },
                 h("div", null,
                   h("div", { style: { fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", marginBottom: 8 } }, "Por pessoa"),
@@ -9891,7 +9932,7 @@ function AuditoriaQR() {
           }))
         ))
       ),
-      h("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
+      h("div", { style: Object.assign({}, CARTAO_ALERTA, { marginBottom: 16 }) },
         h("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 4 } }, "Quem ainda n\u00E3o avaliou"),
         h("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 10 } }, "Pessoas que entraram no portal neste per\u00EDodo e n\u00E3o deixaram nenhuma avalia\u00E7\u00E3o."),
         (function() {
@@ -9914,7 +9955,7 @@ function AuditoriaQR() {
           var feitosNoPeriodo = (servicosDia || []).filter(function(sv) { return sv.date && sv.date >= desde && sv.check_out; }).length;
           var semAval = Object.keys(porCliSemAval).map(function(n) { return { nome: n, n: porCliSemAval[n] }; }).sort(function(a, b) { return b.n - a.n; }).slice(0, 12);
           var totSemAval = Object.keys(porCliSemAval).reduce(function(a, n) { return a + porCliSemAval[n]; }, 0);
-          function past(txt, chave) { return h("span", { key: chave, style: { fontSize: 12, fontWeight: 600, padding: "5px 11px", borderRadius: 999, background: "#F1F5F9", color: "#334155" } }, txt); }
+          function past(txt, chave) { return pastilhaVermelha(txt, chave); }
           return h("div", null,
             h("div", { style: { padding: "10px 0", borderBottom: "1px solid #F1F5F9" } },
               h("div", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C", marginBottom: 7 } }, "Entraram e s\u00F3 consultaram", h("span", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 400 } }, " \u00B7 " + soConsultou.length + (soConsultou.length === 1 ? " pessoa" : " pessoas"))),
