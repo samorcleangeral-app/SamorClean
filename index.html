@@ -9651,7 +9651,7 @@ function AuditoriaQR() {
     var por = {};
     function garante(id, nome) {
       var k = String(id || "?");
-      if (!por[k]) por[k] = { id: k, nome: nomePorId[k] || nome || k, entradas: 0, ultima: "", vistos: {}, lalf: {}, docs: {}, evs: [] };
+      if (!por[k]) por[k] = { id: k, nome: nomePorId[k] || nome || k, entradas: 0, ultima: "", vistos: {}, lalf: {}, docs: {}, nLalf: 0, evs: [] };
       if (nomePorId[k]) por[k].nome = nomePorId[k];
       return por[k];
     }
@@ -9664,7 +9664,7 @@ function AuditoriaQR() {
     lei.forEach(function(l) {
       var c = garante(l.funcionario_id, l.funcionario_nome);
       if (l.tipo === "separador") { if (l.item_id) c.vistos[l.item_id] = (c.vistos[l.item_id] || 0) + 1; }
-      else if (l.tipo === "lalf") c.lalf[String(l.item_id)] = 1;
+      else if (l.tipo === "lalf") { c.lalf[String(l.item_id)] = 1; c.nLalf++; }
       else if (l.tipo === "doc") c.docs[String(l.item_id)] = 1;
       c.evs.push({ t: l.aberto_em, tipo: l.tipo, titulo: l.titulo, item: l.item_id });
     });
@@ -9678,14 +9678,7 @@ function AuditoriaQR() {
     (partVistas || []).forEach(function(v) { var k = String(v.funcionario_id); if (!vistasPor[k]) vistasPor[k] = {}; vistasPor[k][v.tipo + "|" + v.item_id] = 1; });
     function porVer(id) { var mapa = vistasPor[String(id)] || {}; var n = 0; partilhadas.forEach(function(k) { if (!mapa[k]) n++; }); return n; }
     function maisVistoC(c) { var best = null; Object.keys(c.vistos).forEach(function(k) { if (k !== "hoje" && (!best || c.vistos[k] > c.vistos[best])) best = k; }); return best ? (TABSC[best] || best) : "—"; }
-    function celulaLalf(c) {
-      var abertas = Object.keys(c.lalf).length;
-      if (abertas === 0) return pastilhaEstado("nunca", "mau", c.id + "-l");
-      var texto = abertas + (abertas === 1 ? " secção" : " secções");
-      var fx = fixas.filter(function(x) { return c.lalf[String(x.id)]; }).length;
-      var completo = fixas.length > 0 && fx >= fixas.length;
-      return pastilhaEstado(texto, completo ? "ok" : "meio", c.id + "-l");
-    }
+    function celulaLalf(c) { return c.nLalf > 0 ? c.nLalf : "—"; }
     function celulaDocs(c) {
       var f = funcPorId[c.id];
       var ds = f ? docsDe(f) : (docsAud || []).filter(function(d) { return !d.emp_id && d.role === "Todos"; });
@@ -9711,10 +9704,19 @@ function AuditoriaQR() {
       var faltam = aud.filter(function(f) { return !abriu(f.id, "doc", d.id); });
       if (aud.length && faltam.length) naoAbriu.push({ k: "doc-" + d.id, titulo: d.name || "Documento", sub: d.created_at ? "no portal desde " + new Date(d.created_at).toLocaleDateString("pt-PT", { day: "numeric", month: "short" }) : "", quem: faltam });
     });
-    (lalfAud || []).filter(function(x) { return x.fixa; }).forEach(function(x) {
-      var faltam = activos.filter(function(f) { return !abriu(f.id, "lalf", x.id); });
-      if (faltam.length) naoAbriu.push({ k: "lalf-" + x.id, titulo: "LALF — " + (x.titulo || ""), sub: "secção fixa", quem: faltam });
+    // O LALF é uma estante, não uma dívida: quem não consulta não deve nada. Só os documentos entram aqui.
+    var consultas = {};
+    lei.forEach(function(l) {
+      if (l.tipo !== "lalf") return;
+      var k = String(l.item_id);
+      if (!consultas[k]) consultas[k] = { k: k, titulo: l.titulo || "", n: 0, pessoas: {} };
+      consultas[k].n++; consultas[k].pessoas[l.funcionario_id] = 1;
+      if (l.titulo) consultas[k].titulo = l.titulo;
     });
+    (lalfAud || []).forEach(function(x) { if (consultas[String(x.id)]) consultas[String(x.id)].titulo = x.titulo || consultas[String(x.id)].titulo; });
+    var duvidas = Object.keys(consultas).map(function(k) { return consultas[k]; }).sort(function(a, b) { return b.n - a.n; });
+    var maxD = duvidas.length ? duvidas[0].n : 0;
+    var semConsulta = (lalfAud || []).filter(function(x) { return !consultas[String(x.id)]; });
     var entraram = lista.filter(function(c) { return c.entradas > 0; });
     var totEnt = entraram.reduce(function(a, c) { return a + c.entradas; }, 0);
     var paresLalf = {}, paresDoc = {}, pessoasLalf = {}, pessoasDoc = {};
@@ -9739,8 +9741,9 @@ function AuditoriaQR() {
         kpi("Colaboradores que entraram", entraram.length + " de " + activos.length, activos.length ? Math.round(entraram.length / activos.length * 100) + "% da equipa activa" : "sem colaboradores activos"),
         kpi("Entradas", totEnt, "de " + entraram.length + (entraram.length === 1 ? " pessoa" : " pessoas")),
         (function() {
-          var nL = Object.keys(pessoasLalf).length, aL = Object.keys(paresLalf).length;
-          return kpi("Abriram o LALF", nL + " de " + activos.length, aL + (aL === 1 ? " secção aberta ao todo" : " secções abertas ao todo"), nL < activos.length);
+          var nL = Object.keys(pessoasLalf).length;
+          var totC = lista.reduce(function(a, c) { return a + c.nLalf; }, 0);
+          return kpi("Consultas ao LALF", totC, "por " + nL + (nL === 1 ? " pessoa" : " pessoas"));
         })(),
         (function() {
           var nD = Object.keys(pessoasDoc).length, aD = Object.keys(paresDoc).length;
@@ -9756,7 +9759,7 @@ function AuditoriaQR() {
             h("th", { style: Object.assign({}, th, { textAlign: "right" }) }, "Entradas"),
             h("th", { style: th }, "Última entrada"),
             h("th", { style: th }, "O que mais vê"),
-            h("th", { style: th }, "LALF"),
+            h("th", { style: Object.assign({}, th, { textAlign: "right" }) }, "Consultas ao LALF"),
             h("th", { style: th }, "Documentos"),
             h("th", { style: Object.assign({}, th, { textAlign: "right" }) }, "Partilhas por ver"))),
           h("tbody", null, lista.map(function(c) {
@@ -9766,7 +9769,7 @@ function AuditoriaQR() {
               h("td", { style: Object.assign({}, td, { textAlign: "right", fontWeight: 800 }) }, c.entradas),
               h("td", { style: td }, quando(c.ultima)),
               h("td", { style: td }, maisVistoC(c)),
-              h("td", { style: td }, celulaLalf(c)),
+              h("td", { style: Object.assign({}, td, { textAlign: "right" }) }, celulaLalf(c)),
               h("td", { style: td }, celulaDocs(c)),
               h("td", { style: Object.assign({}, td, { textAlign: "right" }) }, porVer(c.id)));
             if (!ativo) return linha;
@@ -9793,14 +9796,34 @@ function AuditoriaQR() {
         ))
       ),
       h("div", { style: Object.assign({}, CARTAO_ALERTA, { marginBottom: 16 }) },
-        h("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 4 } }, "Quem ainda não abriu"),
-        h("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 10 } }, "Por documento e por secção fixa do LALF, dentro do período escolhido."),
-        naoAbriu.length === 0 ? h("div", { style: { fontSize: 13, color: "#64748B" } }, "Todos abriram tudo o que lhes está destinado.") :
+        h("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 4 } }, "Documentos por abrir"),
+        h("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 10 } }, "Avisos que publicaste à espera de serem lidos. O LALF não entra aqui — é consulta livre."),
+        naoAbriu.length === 0 ? h("div", { style: { fontSize: 13, color: "#64748B" } }, "Todos abriram os documentos que lhes estão destinados.") :
         naoAbriu.map(function(d, i) {
           return h("div", { key: d.k, style: { padding: "10px 0", borderBottom: i === naoAbriu.length - 1 ? "none" : "1px solid #F1F5F9" } },
             h("div", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C", marginBottom: 7 } }, d.titulo, d.sub ? h("span", { style: { fontSize: 11, color: "#94A3B8", fontWeight: 400 } }, " · " + d.sub) : null),
             h("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } }, d.quem.map(function(f) { return pastilhaVermelha(f.name, String(f.id)); })));
         })
+      ),
+      h("div", { style: Object.assign({}, card, { marginBottom: 16 }) },
+        h("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 4 } }, "Onde estão as dúvidas"),
+        h("div", { style: { fontSize: 13, color: "#64748B", marginBottom: 12 } }, "Secções do LALF que a equipa foi procurar por iniciativa própria. A mais consultada é onde a equipa hesita — é a tua lista de temas para a próxima formação."),
+        duvidas.length === 0 ? h("div", { style: { fontSize: 13, color: "#64748B" } }, "Sem consultas ao manual neste período.") :
+        h("div", null, duvidas.map(function(d) {
+          var np = Object.keys(d.pessoas).length;
+          return h("div", { key: d.k, style: { marginBottom: 10 } },
+            h("div", { style: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline", marginBottom: 4 } },
+              h("div", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C" } }, d.titulo || "Secção"),
+              h("div", { style: { fontSize: 12, color: "#64748B", whiteSpace: "nowrap" } }, d.n + (d.n === 1 ? " consulta" : " consultas") + " · " + np + (np === 1 ? " pessoa" : " pessoas"))),
+            h("div", { style: { height: 8, background: "#F1F5F9", borderRadius: 999, overflow: "hidden" } },
+              h("div", { style: { height: 8, width: (maxD ? Math.round(d.n / maxD * 100) : 0) + "%", background: "#2E6DA4", borderRadius: 999 } })));
+        })),
+        semConsulta.length > 0 ? h("div", { style: { marginTop: 14, paddingTop: 12, borderTop: "1px solid #F1F5F9" } },
+          h("div", { style: { fontSize: 13, fontWeight: 700, color: "#1A3A5C", marginBottom: 4 } }, "Nunca consultadas"),
+          h("div", { style: { fontSize: 12, color: "#64748B", marginBottom: 8 } }, "Pode ser que já ninguém tenha dúvidas, ou que esteja mal escrita ou mal arrumada. É uma pergunta sobre o manual, não sobre a equipa."),
+          h("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } }, semConsulta.map(function(x) {
+            return h("span", { key: String(x.id), style: { fontSize: 12, fontWeight: 600, padding: "5px 11px", borderRadius: 999, background: "#F1F5F9", color: "#334155" } }, x.titulo || "Secção");
+          }))) : null
       ),
       h("div", { style: card },
         h("div", { style: { fontWeight: 800, fontSize: 15, color: "#1A3A5C", marginBottom: 4 } }, "Ainda não entraram neste período"),
